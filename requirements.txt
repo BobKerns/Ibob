@@ -1,0 +1,2 @@
+ipython
+prompt_toolkit
