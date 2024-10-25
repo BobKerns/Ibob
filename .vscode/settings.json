@@ -6,8 +6,14 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
-        "**/*.crswap": true,
-        "**/.ruby-lsp": true
+        "**/.ruby-lsp": true,
+        "**/*.crswap": true
     },
-    "hide-files.files": []
+    "hide-files.files": [],
+    "cSpell.words": [
+        "blist",
+        "bset",
+        "bstring"
+    ],
+    "svg.preview.background": "dark-transparent"
 }
