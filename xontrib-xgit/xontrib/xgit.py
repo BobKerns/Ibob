@@ -14,7 +14,7 @@ In addition, it extends the displayhook to provide the following variables:
 """
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Literal, Optional, Sequence, cast, Any
+from typing import Literal, Mapping, Optional, Sequence, cast, Any
 from collections import defaultdict
 from collections.abc import Callable
 import builtins
@@ -36,18 +36,21 @@ events.doc('xgit_on_predisplay', 'Runs before displaying the result of a command
 events.doc('xgit_on_postdisplay', 'Runs after displaying the result of a command. Receives C the value displayed.')
 
 # Good start! Get more documentation -> https://xon.sh/contents.html#guides,
-type Undefined = tuple[Literal['UNDEFINED']]
-_UNDEFINED: Undefined = ('UNDEFINED',)
 
-_aliases: dict[str, Any|Undefined] = {}
+type CleanupAction = Callable[[], None]
 """
-Dictionary of aliases defined here to be unloaded if this is unloaded.
+An action to be taken when the xontrib is unloaded.
+"""
+_unload_actions: list[CleanupAction] = []
+
+_aliases: dict[str, Callable] = {}
+"""
+Dictionary of aliases defined on loading this xontrib.
 """
 
-_exports: dict[str: Any|Undefined] = {}
+_exports: dict[str, Any] = {}
 """
-Dictionary of functions or other values defined here to be unloaded if this is unloaded.
-This maps from name to prior value (or None).
+Dictionary of functions or other values defined here to loaded into the xonsh context.
 """
 
 def _export(cmd: Any|str, name: Optional[str]=None) -> Callable:
@@ -64,26 +67,19 @@ def _export(cmd: Any|str, name: Optional[str]=None) -> Callable:
         cmd = globals()[cmd]
     if name is None:
         name = cmd.__name__
-    _exports[name] = XSH.ctx.get(name, _UNDEFINED)
-    XSH.ctx[name] = cmd
+    _exports[name] = cmd
     return cmd
 
-def _unload(env: dict[str, Any], name: str, value = None):
+def _do_unload_actions():
     """
     Unload a value supplied by the xontrib.
     """
-    try:
-        if value is _UNDEFINED:
-            if name in env:
-                del env[name]
-        else:
-            env[name] = value
-    except Exception as ex:
-        print(f'Error unloading {name}: {ex}', file=sys.stderr)
-    
-def _unload_exports(env: dict[str, Any], exports: dict[str, Callable]):
-    for k,v in exports.items():
-        _unload(env, k, v)
+    for action in _unload_actions:
+        try:
+            action()
+        except Exception as ex:
+            from traceback import print_exc
+            print_exc()
 
 def command(cmd: Optional[Callable]=None,
             flags: set=set(),
@@ -205,7 +201,7 @@ def command(cmd: Optional[Callable]=None,
         try:
             val = cmd(*n_args, **n_kwargs)
             if for_value:
-                XSH.ctx['_+'] = val
+                XSH.ctx['_XGIT_RETURN'] = val
         except Exception as ex:
             print(f'Error running {alias}: {ex}', file=stderr)
         return ()
@@ -214,11 +210,7 @@ def command(cmd: Optional[Callable]=None,
     wrapper.__qualname__ = cmd.__qualname__
     wrapper.__doc__ = cmd.__doc__
     wrapper.__module__ = cmd.__module__
-    if alias in XSH.aliases:
-        _aliases[alias] = XSH.aliases.get(alias)
-    else:
-        _aliases[alias] = _UNDEFINED
-    XSH.aliases[alias] = wrapper
+    _aliases[alias] = wrapper
     if export:
         _export(cmd)
     return cmd
@@ -522,6 +514,7 @@ class GitObject(GitId):
         super().__init__(hash)
         self.mode = mode
         self.type = type
+        self._lazy_loader = loader
         
     def __format__(self, fmt: str):
         return f'{self.type} {super().__format__(fmt)}'
@@ -547,6 +540,8 @@ def git_entry(name: str, mode: str, type: str, hash: str, size: str,
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
+    if XSH.env.get('XGIT_TRACE_OBJECTS'):
+        print(f'git_entry({name=}, {mode=}, {type=}, {hash=}, {size=}, {context=}, {parent=})')
     entry = XGIT_OBJECTS.get(hash)
     if entry is not None:
         return name, entry
@@ -724,18 +719,18 @@ def git_ls(path: Path|str = '.', stderr=sys.stderr):
     """
     if XGIT is None:
         raise ValueError('Not in a git repository')
-    path = XGIT.worktree / XGIT.git_path / path
-    path = path.resolve().relative_to(XGIT.worktree)
+    path = Path(path) 
     with chdir(XGIT.worktree or XGIT.repository):
         parent: GitTree|None = None
         if path == Path('.'):
             tree = XSH.subproc_captured_stdout(['git', 'log', '--format=%T', '-n', '1', 'HEAD'])
         else:
-            parent = git_ls(path.parent)
-            tree = parent[path.name].hash
-        dir = cast(GitTree, git_entry(path, '0400', 'tree', tree, '-', XGIT, parent))
-        XSH.ctx['_+'] = dir
-        return dir
+            path_parent = path.parent
+            if path_parent != path:
+                parent = git_ls(path.parent)
+                tree = parent[path.name].hash
+        _, dir = git_entry(path, '0400', 'tree', tree, '-', XGIT, parent)
+        return cast(GitTree, dir)
 
 _xonsh_displayhook = sys.displayhook
 def _xgit_displayhook(value: Any):
@@ -745,7 +740,7 @@ def _xgit_displayhook(value: Any):
     """
     ovalue = value
     if isinstance(value, HiddenCommandPipeline) or True:
-        value = XSH.ctx.get('_+', value)
+        value = XSH.ctx.get('_XGIT_RETURN', value)
     if XSH.env.get('XGIT_TRACE_DISPLAY') and ovalue is not value:
         sys.stdout.flush()
         print(f'DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}')
@@ -803,7 +798,7 @@ def _on_precommand(cmd: str):
     updating those values.
     """
     if '_+' in XSH.ctx:
-        del XSH.ctx['_+']
+        del XSH.ctx['_XGIT_RETURN']
     XSH.ctx['-'] = cmd.strip()
     XSH.ctx['+'] = builtins._
     XSH.ctx['++'] = XSH.ctx.get('__')
@@ -831,7 +826,6 @@ def update_git_context(olddir, newdir):
         
 # Export the functions and values we want to make available.
 
-_export('XGIT')
 _export('XGIT_CONTEXTS')
 _export('XGIT_OBJECTS')
 _export('XGIT_REFERENCES')
@@ -841,7 +835,7 @@ _export(None, '+++')
 _export(None, '-')
 _export(None, '__')
 _export(None, '___')
-
+	
 def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
     this function will be called when loading/reloading the xontrib.
@@ -857,11 +851,40 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     XSH.env['XGIT_TRACE_LOAD'] = XSH.env.get('XGIT_TRACE_LOAD', False)
     # Set the initial context on loading.
     _set_xgit(_git_context())
+    _export('XGIT')
+    if '_XGIT_RETURN' in XSH.ctx:
+        del XSH.ctx['_XGIT_RETURN']
     
     # Install our displayhook
     global _xonsh_displayhook
-    _xonsh_displayhook = sys.displayhook
+    hook = _xonsh_displayhook
+    xsh = XSH
+    def unhook_display():
+        sys.displayhook = hook
+    _unload_actions.append(unhook_display)
+    _xonsh_displayhook = hook
     sys.displayhook = _xgit_displayhook
+    
+    def set_unload(ns: Mapping[str, Any], name: str, value = None,):
+        old_value = None
+        if name in ns:
+            old_value = ns[name]
+            def restore_item():
+                ns[name] = old_value
+            _unload_actions.append(restore_item)
+        else:
+            def del_item():
+                try:
+                    del ns[name]
+                except KeyError:
+                    pass
+            _unload_actions.append(del_item)
+
+    for name, value in _exports.items():
+        set_unload(xsh.ctx, name, value)
+    for name, value in _aliases.items():
+        set_unload(xsh.aliases, name, value)
+        xsh.aliases[name] = value
     
     if 'XGIT_ENABLE_NOTEBOOK_HISTORY' not in XSH.env:
         XSH.env['XGIT_ENABLE_NOTEBOOK_HISTORY'] = True
@@ -874,10 +897,10 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """Clean up on unload."""
     if XSH.env.get('XGIT_TRACE_LOAD'):
         print("Unloading xontrib-xgit", file=sys.stderr)
-    _unload_exports(xsh.ctx, _exports)
-    _unload_exports(xsh.aliases, _aliases)
-    for key in _exports:
-        _unload(XSH.ctx, key)
+    _do_unload_actions()
+    
+    if '_XGIT_RETURN' in XSH.ctx:
+        del XSH.ctx['_XGIT_RETURN']
     
     sys.displayhook = _xonsh_displayhook
     def remove(event: str, func: Callable):
@@ -892,7 +915,7 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     remove('xgit_on_predisplay', _xgit_on_predisplay)
     remove('xgit_on_postdisplay', _xgit_on_postdisplay)
     # Remember this across reloads.
-    XSH.ctx['_#'] = _xgit_counter
+    XSH.ctx['_xgit_counter'] = _xgit_counter
     if XSH.env.get('XGIT_TRACE_LOAD'):
         print("Unloaded xontrib-xgit", file=sys.stderr)
     
