@@ -9,7 +9,6 @@
         "**/*.crswap": true,
         "**/.ruby-lsp": true
     },
-    "hide-files.files": [],
     "cSpell.words": [
         "argcnt",
         "autoupdate",
