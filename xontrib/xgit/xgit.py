@@ -740,7 +740,10 @@ def _xgit_displayhook(value: Any):
     """
     ovalue = value
     if isinstance(value, HiddenCommandPipeline) or True:
-        value = XSH.ctx.get('_XGIT_RETURN', value)
+        if '_XGIT_RETURN' in XSH.ctx:
+            value = XSH.ctx.get('_XGIT_RETURN') or value
+            del XSH.ctx['_XGIT_RETURN']
+        
     if XSH.env.get('XGIT_TRACE_DISPLAY') and ovalue is not value:
         sys.stdout.flush()
         print(f'DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}')
