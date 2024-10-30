@@ -217,6 +217,34 @@ def command(cmd: Optional[Callable]=None,
 
 type ContextKey = tuple[Path, Path, str, str]
 
+type GitLoader = Callable[[], None]
+"""
+A function that loads the contents of a git object.
+"""
+
+type GitEntryMode = Literal[
+    '040000', #directory
+    '100755', #executable
+    '100644', #normal file
+    '160000', #submodule
+    '20000', # symlink
+    ]
+"""
+The valid modes for a git tree entry.
+"""
+
+type GitObjectType = Literal['blob', 'tree', 'commit', 'tag']
+"""
+Valid types for a git object.
+"""
+
+type GitHash = str
+"""
+A git hash. Defined as a string to make the code more self-documenting.
+"""
+
+x: GitHash = '0123456789abcdef'
+
 @dataclass
 class GitRepository:
     """
@@ -471,11 +499,6 @@ def git_pwd():
         return
     return XGIT
 
-type GitLoader = Callable[[], None]
-"""
-A function that loads the contents of a git object.
-"""
-
 class GitId:
     """
     Anything that has a hash in a git repository.
@@ -517,6 +540,7 @@ class GitId:
 
 class GitObject(GitId):
 
+    git_type: GitObjectType
     def __init__(self, mode: str, type: str, hash: str, /,
                  loader: Optional[GitLoader]= None,
                  context: GitContext=XGIT,
@@ -570,6 +594,7 @@ class GitTree(GitObject, dict[str, GitObject]):
 
     Updates would make no sense, as this would invalidate the hash.
     """
+    git_type: Literal['tree'] = 'tree'
 
     def __init__(self, tree: str, /, *,
                  context: GitContext=XGIT,
@@ -667,6 +692,8 @@ class GitBlob(GitObject):
     """
     A file ("blob") stored in a git repository.
     """
+    git_type: Literal['blob'] = 'blob'
+
     size: int
     "Size in bytes of the file."
 
@@ -712,6 +739,8 @@ class GitCommit(GitId):
     """
     A commit in a git repository.
     """
+    git_type: Literal['commit'] = 'commit'
+
     def __init__(self, hash: str, /, *,
                  context: GitContext=XGIT):
         super().__init__(hash)
@@ -729,6 +758,8 @@ class GitTagObject(GitId):
     """
     A tag in a git repository. This is an actual signed tag object, not just a reference.
     """
+    git_type: Literal['tag'] = 'tag'
+
     def __init__(self, hash: str, /, *,
                  context: GitContext=XGIT):
         super().__init__(hash)
@@ -751,6 +782,39 @@ type GitObjectReference = tuple[ContextKey, GitObject|None]
 """
 A reference to a git object in a tree in a repository.
 """
+
+
+class GitTreeEntry:
+    """
+    An entry in a git tree.
+    """
+    object: GitObject
+    _mode: GitEntryMode
+
+    @property
+    def git_type(self):
+        return self.object.type
+
+    @property
+    def hash(self):
+        return self.object.hash
+
+    @property
+    def mode(self):
+        return self._mode
+
+    def __init__(self, name: str, object: GitObject):
+        self.name = name
+        self.object = object
+
+    def __str__(self):
+        return f'{self.entry} {self.name}'
+
+    def __repr__(self):
+        return f'GitTreeEntry({self.name!r}, {self.entry!r})'
+
+    def __format__(self, fmt: str):
+        return f'{self.entry.__format__(fmt)} {self.name}'
 
 XGIT_REFERENCES: dict[str, set[GitObjectReference]] = defaultdict(set)
 """
