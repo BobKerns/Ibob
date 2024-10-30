@@ -11,6 +11,7 @@
     },
     "hide-files.files": [],
     "cSpell.words": [
+        "argcnt",
         "blist",
         "bset",
         "bstring",
@@ -33,6 +34,7 @@
         "sorteddict",
         "subproc",
         "unloadable",
+        "Worktree",
         "xonfig",
         "xonsh",
         "xontrib"

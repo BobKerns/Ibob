@@ -15,10 +15,13 @@ In addition, it extends the displayhook to provide the following variables:
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, cast, Any
-from collections import defaultdict, Counter
+from collections import defaultdict
 from collections.abc import Callable
 import builtins
 import sys
+import io
+from inspect import signature, Signature
+from functools import wraps
 
 from xonsh.built_ins import XSH, XonshSession
 from xonsh.events import events
@@ -28,6 +31,151 @@ from xonsh.procs.pipelines import HiddenCommandPipeline
 __all__ = ()
 
 # Good start! Get more documentation -> https://xon.sh/contents.html#guides
+
+_aliases: dict[str: Any] = {}
+"""
+Dictionary of aliases defined here to be unloaded if this is unloaded.
+"""
+_exports: dict[str: Callable] = {}
+"""
+Dictionary of functions defined here to be unloaded if this is unloaded.
+"""
+
+def command(cmd: Optional[Callable]=None,
+            flags: set=set(),
+            for_value: bool=False,
+            alias: Optional[str] = None,
+            export: bool=False,
+            ) -> Callable:
+    """
+    Decorator/decorator factory to make a function a command. Command-line
+    flags and arguments are passed to the function as keyword arguments.
+    
+    - `flags` is a set of strings that are considered flags. Flags do not
+    take arguments. If a flag is present, the value is True.
+    
+    - If `for_value` is True, the function's return value is used as the
+    return value of the command. Otherwise, the return value will be
+    a hidden command pipeline.
+    
+    - `alias` gives an alternate name for the command. Otherwise a name is
+    constructed from the function name.
+    
+    - `export` makes the function available from python as well as a command.
+    
+    EXAMPLES:
+    
+    @command
+    def my_command(args, stdin, stdout, stderr):
+        ...
+    
+    @command(flags={'a', 'b'})
+    def my_command(args, stdin, stdout, stderr):
+        ...
+    
+    @command(for_value=True)
+    def my_command(*args, **kwargs):
+        ...
+    """
+    if cmd is None:
+        return lambda cmd: command(cmd,
+                                   flags=flags,
+                                   for_value=for_value,
+                                   alias=alias,
+                                   export=export,
+                                   ) 
+    if alias is None:
+        alias = cmd.__name__.replace('_', '-')
+    def wrapper(args,
+                stdin: io.TextIOBase=sys.stdin,
+                stdout: io.TextIOBase=sys.stdout,
+                stderr: io.TextIOBase=sys.stderr,
+                **kwargs):
+        if '--help' in args:
+            print(getattr(cmd, '__doc__', ''), file=stderr)
+            return
+        while len(args) > 0:
+            if args[0] == '--':
+                args.pop(0)
+                break
+            if args[0].startswith('--'):
+                if '=' in args[0]:
+                    k, v = args.pop(0).split('=', 1)
+                    kwargs[k[2:]] = v
+                else:
+                    if args[0] in flags:
+                        kwargs[args.pop(0)[2:]] = True
+                    else:
+                        kwargs[args.pop(0)[2:]] = args.pop(0)
+            else:
+                break
+            
+        sig: Signature = signature(cmd)
+        n_args = []
+        n_kwargs = {}
+        for p in sig.parameters.values():
+            def add_arg(value: Any):
+                match p.kind:
+                    case p.POSITIONAL_ONLY:
+                            n_args.append(value)
+                    case p.POSITIONAL_OR_KEYWORD:
+                        positional = len(args) > 0
+                        if value == p.empty:
+                            if positional:
+                                value = args.pop(0)
+                            elif p.name in kwargs:
+                                value = kwargs.pop(p.name)
+                            else:
+                                value = p.default
+                        if value == p.empty:
+                            raise ValueError(f'Missing value for {p.name}')
+                        if positional:
+                            n_args.append(value)
+                        else:
+                            n_kwargs[p.name] = value
+                    case p.KEYWORD_ONLY:
+                        if value == p.empty:
+                            if p.name in kwargs:
+                                value = kwargs.pop(p.name)
+                            else:
+                                value = p.default
+                        if value == p.empty:
+                            raise ValueError(f'Missing value for {p.name}')
+                        n_kwargs[p.name] = value
+                    case p.VAR_POSITIONAL:
+                        if len(args) > 0:
+                            n_args.extend(args)
+                            args.clear()
+                    case p.VAR_KEYWORD:
+                        n_args.update({
+                            "stdin": stdin, 
+                            "stdout": stdout,
+                            "stderr": stderr
+                        })
+            match p.name:
+                case 'stdin': add_arg(stdin)
+                case 'stdout': add_arg(stdout)
+                case 'stderr': add_arg(stderr)
+                case 'args': add_arg(args)
+                case _: add_arg(kwargs.get(p.name, p.empty))
+        try:
+            val = cmd(*n_args, **n_kwargs)
+            if for_value:
+                XSH.ctx['_+'] = val
+        except Exception as ex:
+            print(f'Error running {alias}: {ex}', file=stderr)
+        return ()
+    # @wrap(cmd) copies the signature, which we don't want.
+    wrapper.__name__ = cmd.__name__
+    wrapper.__qualname__ = cmd.__qualname__
+    wrapper.__doc__ = cmd.__doc__
+    wrapper.__module__ = cmd.__module__
+    _aliases[alias] = XSH.aliases.get(alias)
+    XSH.aliases[alias] = wrapper
+    if export:
+        _exports[cmd.__name__] = XSH.ctx.get(cmd.__name__)
+        XSH.ctx[cmd.__name__] = cmd
+    return cmd
 
 type ContextKey = tuple[Path, Path, str, str]
 @dataclass
@@ -74,7 +222,8 @@ def _set_git_context():
 
 GIT_CONTEXT = _set_git_context()
 
-def _git_cd(path: str = '') -> None:
+@command(export=True)
+def git_cd(path: str = '', stderr=sys.stderr) -> None:
     """
     Change the current working directory to the path provided.
     If no path is provided, change the current working directory to the git repository root.
@@ -93,14 +242,8 @@ def _git_cd(path: str = '') -> None:
     fpath = GIT_CONTEXT.repo_path / GIT_CONTEXT.git_path
     try:
         XSH.execer.exec(f'cd {fpath}')
-    except:
-        print(f'Could not change to {fpath}')
-
-def git_cd(args, stdin, stdout, stderr):
-    if '--help' in args:
-        print(getattr(_git_cd, '__doc__', ''))
-        return
-    _git_cd(*args)
+    except Exception as ex:
+        print(f'Could not change to {fpath}: {ex}', file=stderr)
     
 def relative_to_home(path: Path) -> Path:
     """
@@ -121,9 +264,6 @@ def git_pwd(args=None, stdin=None, stdout=None, stderr=None):
     """
     Print the current working directory and git context information if available.
     """
-    if args and '--help' in args:
-        print(getattr(git_pwd, '__doc__', ''), file=stderr)
-        return
     if GIT_CONTEXT is None:
         print(f'cwd: {relative_to_home(Path.cwd())}', file=stdout)
         print('Not in a git repository', file=stdout)
@@ -221,6 +361,9 @@ class GitDir(GitEntry, dict[str, GitEntry]):
         return super().__reversed__()
     
     def __str__(self):
+        import traceback
+        traceback.print_stack(file=sys.stderr)
+        sys.stderr.flush()
         return f'D {self.hash} {len(self):>8d}'
     
     def __format__(self, fmt: str):
@@ -310,20 +453,14 @@ GIT_REFERENCES: dict[str, set[GitObjectReference]] = defaultdict(set)
 """
 A map to where an object is referenced.
 """
-    
-def git_ls(args=['.'], stdin=None, stdout=None, stderr=None):
+
+@command(for_value=True,
+         export=True)
+def git_ls(path: Path|str = '.', stderr=sys.stderr):
     """
     List the contents of the current directory or the directory provided.
     """
-    if args and '--help' in args:
-        print(getattr(git_ls, '__doc__', ''), file=stderr)
-        return
-    if GIT_CONTEXT is None:
-        print('Not in a git repository', file=stderr)
-        return
-    if len(args) > 1:
-        raise ValueError('Too many arguments')
-    path = GIT_CONTEXT.repo_path / GIT_CONTEXT.git_path / Path(*args)
+    path = GIT_CONTEXT.repo_path / GIT_CONTEXT.git_path / path
     path = path.resolve().relative_to(GIT_CONTEXT.repo_path)
     try:
         with chdir(GIT_CONTEXT.repo_path):
@@ -331,7 +468,7 @@ def git_ls(args=['.'], stdin=None, stdout=None, stderr=None):
             if path == Path('.'):
                 tree = XSH.subproc_captured_stdout(['git', 'log', '--format=%T', '-n', '1', 'HEAD'])
             else:
-                parent = git_ls([path.parent])
+                parent = git_ls(path.parent)
                 print(f'{path.name=} {path.parent=} {parent=}')
                 tree = parent[path.name].hash
             dir = cast(GitDir, GIT_ENTRIES.get(tree))
@@ -352,10 +489,22 @@ events.doc('ibob_on_postdisplay', 'Runs after displaying the result of a command
 
 _xonsh_displayhook = sys.displayhook
 def _ibob_displayhook(value: Any):
-    events.ibob_on_predisplay.fire(value=value)
-    sys.stdout.flush()
-    _xonsh_displayhook(value)
-    events.ibob_on_postdisplay.fire(value=value)
+    """
+    Add handling for value-returning commands, pre- and post-display events,
+    and exception protection.
+    """
+    ovalue = value
+    if isinstance(value, HiddenCommandPipeline):
+        value = XSH.ctx.get('_+', value)
+    sys.stderr.flush()
+    try:
+        events.ibob_on_predisplay.fire(value=value)
+        sys.stdout.flush()
+        _xonsh_displayhook(value)
+        events.ibob_on_postdisplay.fire(value=value)
+    except Exception as ex:
+        print(ex, file=sys.stderr)
+        sys.stderr.flush()
 
 sys.displayhook = _ibob_displayhook
 
@@ -376,14 +525,13 @@ def _ibob_on_predisplay(value: Any):
 
 @events.ibob_on_postdisplay
 def _ibob_on_postdisplay(value: Any):
-    value = XSH.ctx.get('_+', value)
     if value is not None and not isinstance(value, HiddenCommandPipeline):
         builtins._ =  value
         XSH.ctx['__'] = XSH.ctx['+']
         XSH.ctx['___'] = XSH.ctx['++']
 
 @events.on_precommand
-def pre_update_vars(cmd: str):
+def _on_precommand(cmd: str):
     if '_+' in XSH.ctx:
         del XSH.ctx['_+']
     XSH.ctx['-'] = cmd.strip()
@@ -417,7 +565,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
     xsh.aliases['git-cd'] = git_cd
     xsh.aliases['git-pwd'] = git_pwd
-    xsh.aliases['git-ls'] = git_ls
     xsh.ctx['+'] = None
     xsh.ctx['++'] = None
     xsh.ctx['+++'] = None
@@ -431,10 +578,34 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         'GIT_ENTRIES': GIT_ENTRIES,
         'GIT_REFERENCES': GIT_REFERENCES,
     }
+    
+def unload(env: dict[str, Any], name: str, value = None):
+    """
+    Unload a value supplied by the xontrib.
+    """
+    try:
+        if value is None:
+            if name in env:
+                del env[name]
+        else:
+            env[name] = value
+    except Exception as ex:
+        print(f'Error unloading {name}: {ex}', file=sys.stderr)
+    
+def unload_exports(env: dict[str, Any], exports: dict[str, Callable]):
+    for k,v in exports.items():
+        unload(env, k, v)
 
 def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """Clean up on unload."""
     print("Unloading xontrib-ibob", file=sys.stderr)
+    unload_exports(xsh.ctx, _exports)
+    unload_exports(xsh.aliases, _aliases)
+    unload(XSH.ctx, 'GIT_CONTEXT')
+    unload(XSH.ctx, 'GIT_CONTEXTS')
+    unload(XSH.ctx, 'GIT_ENTRIES')
+    unload(XSH.ctx, 'GIT_REFERENCES')
+    
     sys.displayhook = _xonsh_displayhook
     def remove(event: str, func: Callable):
         try:
@@ -443,7 +614,7 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
             pass
         except KeyError:
             pass
-    remove('on_precommand', pre_update_vars)
+    remove('on_precommand', _on_precommand)
     remove('on_chdir', update_git_context)
     remove('ibob_on_predisplay', _ibob_on_predisplay)
     remove('ibob_on_postdisplay', _ibob_on_postdisplay)
