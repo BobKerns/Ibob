@@ -35,5 +35,5 @@ jobs:
       run: poetry install
     - name: Run tests
       run: |
-        xonsh -c "xontrib load ibob"
+        xonsh -c "xontrib load xgit"
         poetry run pytest

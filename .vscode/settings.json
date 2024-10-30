@@ -12,6 +12,7 @@
     "hide-files.files": [],
     "cSpell.words": [
         "argcnt",
+        "autoupdate",
         "blist",
         "bset",
         "bstring",
@@ -19,9 +20,10 @@
         "dpath",
         "execer",
         "frozendict",
-        "ibob",
+        "Gitter",
         "itercheck",
         "ivar",
+        "myxontrib",
         "newdir",
         "newpath",
         "olddir",
@@ -33,6 +35,7 @@
         "precommand",
         "predisplay",
         "procs",
+        "PYPI",
         "pythonic",
         "sorteddict",
         "subproc",
@@ -42,6 +45,8 @@
         "XGIT",
         "xonfig",
         "xonsh",
-        "xontrib"
+        "xontrib",
+        "xontribs",
+        "xpip"
     ]
 }

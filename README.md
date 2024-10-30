@@ -47,7 +47,7 @@ _3: GitTree(c000f7a0a713b405fe0de6531fdbdfff3ff65d38)[7]
     D 46b57ab337456176669e75513dbe0f5eeca38a22        1 .vscode
     - a3990ed1209000756420fae0ee6386e051204a60     1066 LICENSE
     - 505d8917cd9697185e30bb79238be4d84d02693e       50 README.md
-    D 6f0c75cd8b53eeb83198dd5c6caea5361a240e20        2 iBob
+    D 6f0c75cd8b53eeb83198dd5c6caea5361a240e20        2 bstring
     - 16494e4075e5cc44c5a928c7a325b8bc7bf552d5       23 requirements.txt
     D 05433255eddde7d3261f07a45b857374e6087278       10 xontrib-xgit
 >>> _['README.md']

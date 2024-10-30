@@ -1,2 +1,2 @@
 def test_it_loads(load_xontrib):
-    load_xontrib("ibob")
+    load_xontrib("xgit")
