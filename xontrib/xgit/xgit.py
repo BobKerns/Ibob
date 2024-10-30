@@ -58,11 +58,11 @@ def _export(cmd: Any|str, name: Optional[str]=None) -> Callable:
     Decorator to mark a function or value for export.
     This makes it available from the xonsh context, and is undone
     when the xontrib is unloaded.
-    
+
     If a string is supplied, it is looked up in this module's globals.
     For other, non-function values, supply the name as the second argument.
     """
-    if name is None and isinstance(cmd, str): 
+    if name is None and isinstance(cmd, str):
         name = cmd
         cmd = globals()[cmd]
     if name is None:
@@ -90,29 +90,29 @@ def command(cmd: Optional[Callable]=None,
     """
     Decorator/decorator factory to make a function a command. Command-line
     flags and arguments are passed to the function as keyword arguments.
-    
+
     - `flags` is a set of strings that are considered flags. Flags do not
     take arguments. If a flag is present, the value is True.
-    
+
     - If `for_value` is True, the function's return value is used as the
     return value of the command. Otherwise, the return value will be
     a hidden command pipeline.
-    
+
     - `alias` gives an alternate name for the command. Otherwise a name is
     constructed from the function name.
-    
+
     - `export` makes the function available from python as well as a command.
-    
+
     EXAMPLES:
-    
+
     @command
     def my_command(args, stdin, stdout, stderr):
         ...
-    
+
     @command(flags={'a', 'b'})
     def my_command(args, stdin, stdout, stderr):
         ...
-    
+
     @command(for_value=True)
     def my_command(*args, **kwargs):
         ...
@@ -123,7 +123,7 @@ def command(cmd: Optional[Callable]=None,
                                    for_value=for_value,
                                    alias=alias,
                                    export=export,
-                                   ) 
+                                   )
     if alias is None:
         alias = cmd.__name__.replace('_', '-')
     def wrapper(args,
@@ -149,7 +149,7 @@ def command(cmd: Optional[Callable]=None,
                         kwargs[args.pop(0)[2:]] = args.pop(0)
             else:
                 break
-            
+
         sig: Signature = signature(cmd)
         n_args = []
         n_kwargs = {}
@@ -188,7 +188,7 @@ def command(cmd: Optional[Callable]=None,
                             args.clear()
                     case p.VAR_KEYWORD:
                         n_args.update({
-                            "stdin": stdin, 
+                            "stdin": stdin,
                             "stdout": stdout,
                             "stderr": stderr
                         })
@@ -243,24 +243,24 @@ class GitWorktree(GitRepository):
 class GitContext(GitWorktree):
     """
     Context for working within a git repository.
-    
+
     This tracks the current branch, commit, and path within the commit's
     tree.
     """
     git_path: Path = Path('.')
     branch: str = ''
     commit: str = ''
-    
+
     def reference(self, subpath: Optional[Path|str]=None) -> ContextKey:
         key = self.worktree or self.repository
         if subpath is None:
             return (key, self.git_path, self.branch, self.commit)
         return (key, subpath, self.branch, self.commit)
-    
+
     @property
     def cwd(self) -> Path:
         return Path.cwd()
-    
+
     def new_context(self, /,
                     worktree: Optional[Path]=None,
                     repository: Optional[Path] = None,
@@ -282,7 +282,7 @@ class GitContext(GitWorktree):
             git_path=git_path,
             branch=branch,
             commit=commit)
-    
+
     def _repr_pretty_(self, p: PrettyPrinter, cycle: bool):
         if cycle:
             p.text(f'GitContext({self.worktree} {self.git_path}')
@@ -302,12 +302,12 @@ class GitContext(GitWorktree):
                 p.text(f'commit: {self.commit}')
                 p.break_()
                 p.text(f'cwd: {relative_to_home(Path.cwd())}')
-                
+
 XGIT: GitContext|None  = None
 """
 The current `GitContext` for the session, or none if not in a git repository or worktree.
 """
-                
+
 XGIT_CONTEXTS: dict[Path, GitContext] = {}
 """
 A map of git contexts by worktree, or by repository if the worktree is not available.
@@ -330,7 +330,7 @@ def _set_xgit(xgit: GitContext|None) -> GitContext|None:
 def _git_context():
     """
     Get the git context based on the current working directory, updating it if necessary.
-    
+
     The result should generally be passed to `_set_xgit`.
     """
     global XGIT
@@ -353,7 +353,7 @@ def _git_context():
             # (or not understand if you don't know the syntax).
             result = result[0]
         return result
-    
+
     in_tree, in_git = multi_params('--is-inside-work-tree', '--is-inside-git-dir')
     try:
         if in_tree == 'true':
@@ -394,15 +394,15 @@ def _git_context():
                     worktree = None
             commits = multi_params('HEAD', 'main', 'master')
             commits = list(filter(lambda x: x, list(commits)))
-            commit = commits[0] if commits else ''    
-            branch = XSH.subproc_captured_stdout(['git', 'name-rev', '--name-only', commit])       
+            commit = commits[0] if commits else ''
+            branch = XSH.subproc_captured_stdout(['git', 'name-rev', '--name-only', commit])
             repo = worktree or repository
             if repo in XGIT_CONTEXTS:
                 xgit = XGIT_CONTEXTS[repo]
                 xgit.commit = commit
                 xgit.branch = branch
                 return xgit
-            else:       
+            else:
                 return GitContext(
                     worktree=worktree,
                     repository=repository,
@@ -442,7 +442,7 @@ def git_cd(path: str = '', stderr=sys.stderr) -> None:
         XSH.execer.exec(f'cd {fpath}')
     except Exception as ex:
         print(f'Could not change to {fpath}: {ex}', file=stderr)
-    
+
 def relative_to_home(path: Path) -> Path:
     """
     Get a path for display relative to the home directory.
@@ -471,61 +471,65 @@ def git_pwd():
         return
     return XGIT
 
-class GitId:
-    """
-    Anything that has a hash in a git repository.
-    """
-    hash: str
-    
-    def __init__(self, hash: str):
-        self.hash = hash
-        
-    def __hash__(self):
-        return hash(self.hash)
-    
-    def __eq__(self, other):
-        if not isinstance(other, type(self)):
-            return False
-        return self.hash == other.hash
-    
-    def __str__(self):
-        return self.hash
-    
-    def __repr__(self):
-        return f'{type(self).__name__}({self.hash!r})'
-    
-    def __format__(self, fmt: str):
-        return self.hash.format(fmt)
-
 type GitLoader = Callable[[], None]
 """
 A function that loads the contents of a git object.
 """
 
-def _null_loader():
+class GitId:
     """
-    A loader that does nothing.
+    Anything that has a hash in a git repository.
     """
+    _lazy_loader: GitLoader|None
+    hash: str
 
-class GitObject(GitId):
-    _lazy_loader: GitLoader
-    
-    def __init__(self, mode: str, type: str, hash: str, loader: GitLoader=_null_loader):
-        super().__init__(hash)
-        self.mode = mode
-        self.type = type
+    def __init__(self, hash: str, /, *,
+                 loader: Optional[GitLoader] = None,
+                 context: GitContext = XGIT,
+                 ):
+        self.hash = hash
         self._lazy_loader = loader
-        
-    def __format__(self, fmt: str):
-        return f'{self.type} {super().__format__(fmt)}'
-    
+
     def _expand(self):
         """
         Load the contents of the object.
         """
-        self._lazy_loader()
-        self._lazy_loader = _null_loader
+        if self._lazy_loader:
+            self._lazy_loader()
         return self
+
+    def __hash__(self):
+        return hash(self.hash)
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            return False
+        return self.hash == other.hash
+
+    def __str__(self):
+        return self.hash
+
+    def __repr__(self):
+        return f'{type(self).__name__}({self.hash!r})'
+
+    def __format__(self, fmt: str):
+        return self.hash.format(fmt)
+
+class GitObject(GitId):
+
+    def __init__(self, mode: str, type: str, hash: str, /,
+                 loader: Optional[GitLoader]= None,
+                 context: GitContext=XGIT,
+                 ):
+        super().__init__(hash,
+                         loader=loader,
+                         context=context,
+                         )
+        self.mode = mode
+        self.type = type
+
+    def __format__(self, fmt: str):
+        return f'{self.type} {super().__format__(fmt)}'
 
 def parse_git_entry(line: str, context: GitContext=XGIT, parent: str|None=None) -> GitObject:
     """
@@ -546,9 +550,9 @@ def git_entry(name: str, mode: str, type: str, hash: str, size: str,
     if entry is not None:
         return name, entry
     if type == 'tree':
-        entry = GitTree(hash, context)
+        entry = GitTree(hash, context=context)
     elif type == 'blob':
-        entry = GitBlob(mode, hash, size)
+        entry = GitBlob(mode, hash, size, context=context)
     else:
         # We don't currently handle tags or commits (submodules)
         raise ValueError(f'Unknown type {type}')
@@ -560,14 +564,16 @@ def git_entry(name: str, mode: str, type: str, hash: str, size: str,
 class GitTree(GitObject, dict[str, GitObject]):
     """
     A directory ("tree") stored in a git repository.
-    
+
     This is a read-only dictionary of the entries in the directory as well as being
     a git object.
-    
+
     Updates would make no sense, as this would invalidate the hash.
     """
 
-    def __init__(self, tree: str, context: GitContext):
+    def __init__(self, tree: str, /, *,
+                 context: GitContext=XGIT,
+                 ):
         def _lazy_loader():
             nonlocal context
             context = context.new_context()
@@ -577,52 +583,55 @@ class GitTree(GitObject, dict[str, GitObject]):
                     if line:
                         name, entry = parse_git_entry(line, context, tree)
                         dict.__setitem__(self, name, entry)
+            self._lazy_loader = None
         dict.__init__(self)
-        GitObject.__init__(self, '0400', 'tree', tree, _lazy_loader)
-    
+        GitObject.__init__(self, '0400', 'tree', tree,
+                           loader=_lazy_loader,
+                           context=context,)
+
     def __repr__(self):
         return f"GitTree(hash={self.hash})"
 
     def __len__(self):
         self._expand()
         return super().__len__()
-    
+
     def __contains__(self, key):
         self._expand()
         return super().__contains__(key)
-    
+
     def __getitem__(self, key: str) -> GitObject:
         self._expand()
         return super().__getitem__(key)
-    
+
     def __setitem__(self, key: str, value: GitObject):
         raise NotImplementedError('Cannot set items in a GitTree')
-    
+
     def __delitem__(self, key: str):
         raise NotImplementedError('Cannot delete items in a GitTree')
-    
+
     def __iter__(self):
         self._expand()
         return super().__iter__()
-    
+
     def __bool__(self):
         self._expand()
         return super().__bool__()
-    
+
     def __reversed__(self):
         self._expand()
         return super().__reversed__()
-    
+
     def __str__(self):
         return f'D {self.hash} {len(self):>8d}'
-    
+
     def __format__(self, fmt: str):
         """
         Format a directory for display.
         Format specifier is in two parts separated by a colon.
         The first part is a format string for the entries.
         The second part is a path to the directory.
-        
+
         The first part can contain:
         - 'r' to format recursively
         - 'l' to format the entries in long format.
@@ -632,19 +641,19 @@ class GitTree(GitObject, dict[str, GitObject]):
         """
         dfmt, *rest = fmt.split(':', 1)
         path = rest[0] if rest else ''
-        
+
         def dpath(name: str) -> str:
             if 'n' not in dfmt:
                 return f'{path}/{name}'
             return ''
-        
+
         if 'r' in dfmt:
             return '\n'.join(e.__format__(f'{dfmt}:{dpath(n)}') for n,e in self.items())
         if 'l' in dfmt and not 'd' in dfmt:
             return '\n'.join(e.__format__(f'd{dfmt}:{dpath(n)}') for n,e in self.items())
         hash = self.hash[:8] if 'a' in dfmt else self.hash
         return f'D {hash} {len(self):>8d}'
-    
+
     def _repr_pretty_(self, p, cycle):
         if cycle:
             p.text(f'GitTree({self.hash})')
@@ -660,31 +669,34 @@ class GitBlob(GitObject):
     """
     size: int
     "Size in bytes of the file."
-    
-    def __init__(self, mode, hash, size):
-        super().__init__(mode, 'blob', hash)
+
+    def __init__(self, mode, hash, size, /, *,
+                 context: GitContext = XGIT,):
+        super().__init__(mode, 'blob', hash,
+                         context=context,
+                         )
         self.size = int(size)
-        
+
     def __str__(self):
         rw = 'X' if self.mode == '100755' else '-'
         return f'{rw} {self.hash} {self.size:>8d}'
-    
+
     def __repr__(self):
         return f'GitFile({str(self)})'
-    
+
     def __len__(self):
         return self.size
-    
+
     def __format__(self, fmt: str):
         """
         Format a file for display.
         Format specifier is in two parts separated by a colon.
         The first part is a format string for the output.
         The second part is a path to the file.
-        
+
         As files don't have inherent names, the name must be provided in the format string
         by the directory that contains the file. If no path is provided, the hash is used.
-        
+
         The format string can contain:
         - 'l' to format the file in long format.
         """
@@ -695,6 +707,40 @@ class GitBlob(GitObject):
         if 'l' in dfmt:
             return f'{rw} {hash} {self.size:>8d}{path}'
         return path or hash
+
+class GitCommit(GitId):
+    """
+    A commit in a git repository.
+    """
+    def __init__(self, hash: str, /, *,
+                 context: GitContext=XGIT):
+        super().__init__(hash)
+
+    def __str__(self):
+        return f'commit {self.hash}'
+
+    def __repr__(self):
+        return f'GitCommit({self.hash!r})'
+
+    def __format__(self, fmt: str):
+        return f'commit {self.hash.format(fmt)}'
+
+class GitTagObject(GitId):
+    """
+    A tag in a git repository. This is an actual signed tag object, not just a reference.
+    """
+    def __init__(self, hash: str, /, *,
+                 context: GitContext=XGIT):
+        super().__init__(hash)
+
+    def __str__(self):
+        return f'tag {self.hash}'
+
+    def __repr__(self):
+        return f'GitTag({self.hash!r})'
+
+    def __format__(self, fmt: str):
+        return f'tag {self.hash.format(fmt)}'
 
 XGIT_OBJECTS: dict[str, GitObject] = {}
 """
@@ -719,7 +765,7 @@ def git_ls(path: Path|str = '.', stderr=sys.stderr):
     """
     if XGIT is None:
         raise ValueError('Not in a git repository')
-    path = Path(path) 
+    path = Path(path)
     with chdir(XGIT.worktree or XGIT.repository):
         parent: GitTree|None = None
         if path == Path('.'):
@@ -743,7 +789,7 @@ def _xgit_displayhook(value: Any):
         if '_XGIT_RETURN' in XSH.ctx:
             value = XSH.ctx.get('_XGIT_RETURN') or value
             del XSH.ctx['_XGIT_RETURN']
-        
+
     if XSH.env.get('XGIT_TRACE_DISPLAY') and ovalue is not value:
         sys.stdout.flush()
         print(f'DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}')
@@ -756,7 +802,7 @@ def _xgit_displayhook(value: Any):
     except Exception as ex:
         print(ex, file=sys.stderr)
         sys.stderr.flush()
-        
+
 # Set up the notebook-style convenience history variables.
 
 _xgit_counter = XSH.ctx.get('_xgit_counter', None) or iter(range(sys.maxsize))
@@ -795,7 +841,7 @@ def _on_precommand(cmd: str):
     We associate them with the session rather than the module.
     These names are deliberately impossible to use, and are named
     after similar variables long used in REPLs.
-    
+
     _, __, and ___ are the last three values displayed, and are
     directly useful. The variables here are simply to facilitate
     updating those values.
@@ -806,7 +852,7 @@ def _on_precommand(cmd: str):
     XSH.ctx['+'] = builtins._
     XSH.ctx['++'] = XSH.ctx.get('__')
     XSH.ctx['+++'] = XSH.ctx.get('___')
-    
+
 @events.on_chdir
 def update_git_context(olddir, newdir):
     """
@@ -826,7 +872,7 @@ def update_git_context(olddir, newdir):
     else:
         # Fast move within the same worktree.
         XGIT.git_path = Path(newdir).resolve().relative_to(XGIT.worktree)
-        
+
 # Export the functions and values we want to make available.
 
 _export('XGIT_CONTEXTS')
@@ -838,7 +884,7 @@ _export(None, '+++')
 _export(None, '-')
 _export(None, '__')
 _export(None, '___')
-	
+
 def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
     this function will be called when loading/reloading the xontrib.
@@ -850,14 +896,14 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     Returns:
         dict: this will get loaded into the current execution context
     """
-    
+
     XSH.env['XGIT_TRACE_LOAD'] = XSH.env.get('XGIT_TRACE_LOAD', False)
     # Set the initial context on loading.
     _set_xgit(_git_context())
     _export('XGIT')
     if '_XGIT_RETURN' in XSH.ctx:
         del XSH.ctx['_XGIT_RETURN']
-    
+
     # Install our displayhook
     global _xonsh_displayhook
     hook = _xonsh_displayhook
@@ -867,7 +913,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     _unload_actions.append(unhook_display)
     _xonsh_displayhook = hook
     sys.displayhook = _xgit_displayhook
-    
+
     def set_unload(ns: Mapping[str, Any], name: str, value = None,):
         old_value = None
         if name in ns:
@@ -888,7 +934,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     for name, value in _aliases.items():
         set_unload(xsh.aliases, name, value)
         xsh.aliases[name] = value
-    
+
     if 'XGIT_ENABLE_NOTEBOOK_HISTORY' not in XSH.env:
         XSH.env['XGIT_ENABLE_NOTEBOOK_HISTORY'] = True
 
@@ -901,10 +947,10 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     if XSH.env.get('XGIT_TRACE_LOAD'):
         print("Unloading xontrib-xgit", file=sys.stderr)
     _do_unload_actions()
-    
+
     if '_XGIT_RETURN' in XSH.ctx:
         del XSH.ctx['_XGIT_RETURN']
-    
+
     sys.displayhook = _xonsh_displayhook
     def remove(event: str, func: Callable):
         try:
@@ -921,4 +967,3 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     XSH.ctx['_xgit_counter'] = _xgit_counter
     if XSH.env.get('XGIT_TRACE_LOAD'):
         print("Unloaded xontrib-xgit", file=sys.stderr)
-    
