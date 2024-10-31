@@ -47,11 +47,19 @@ Print information about the current git context, including:
 - `commit`: Current commit
 - `cwd`: Working directory (what `pwd` would print)
 
-This just returns (and displays) the `XGIT` variable if it is not `None`. In scripts you can just reference this variable directly.
+This just returns (and displays) the [`XGIT`](#xgit-variable) variable if it is not `None`. In scripts you can just reference this variable directly.
 
 ### XGIT (Variable)
 
-The current git context.
+The current `GitContext`. This is the same as the value returned from the [`git-pwd`](#git-pwd-command) command.
+
+It will be `None` when not inside a git worktree or repository.
+
+### XGIT_CONTEXTS (variable)
+
+A dictionary of `GitContext` objects, one for every worktree or repository we have visited.
+
+This allows one to switch between repositories without losing context.
 
 ### git-ls (Command)
 
@@ -89,13 +97,13 @@ This package was created with [xontrib template](https://github.com/xonsh/xontri
 
 ## Xontrib Promotion (DO and REMOVE THIS SECTION)
 
-- Check that your repository name starts from `xontrib-` prefix. It helps Github search find it.
+- ✅ Check that your repository name starts from `xontrib-` prefix. It helps Github search find it.
 
-- Add `xonsh`, `xontrib` and other thematic topics to the repository "About" setting.
+- ✅ Add `xonsh`, `xontrib` and other thematic topics to the repository "About" setting.
 
-- Add preview image in "Settings" - "Options" - "Social preview". It allows to show preview image in Github Topics and social networks e.g. Twitter.
+- ✅ Add preview image in "Settings" - "Options" - "Social preview". It allows to show preview image in Github Topics and social networks e.g. Twitter.
 
-- Enable "Sponsorship" in "Settings" - "Features" - Check "Sponsorships".
+- ✅ Enable "Sponsorship" in "Settings" - "Features" - Check "Sponsorships".
 
 - Add xontrib to the [awesome-xontribs](https://github.com/xonsh/awesome-xontribs).
 
