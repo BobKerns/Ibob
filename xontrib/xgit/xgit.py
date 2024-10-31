@@ -17,10 +17,8 @@ from dataclasses import dataclass
 from typing import Literal, Mapping, Optional, Sequence, cast, Any
 from collections import defaultdict
 from collections.abc import Callable
-import builtins
-import sys
-import io
 from inspect import signature, Signature
+import builtins, sys, io
 
 from xonsh.built_ins import XSH, XonshSession
 from xonsh.events import events
@@ -80,6 +78,24 @@ def _do_unload_actions():
         except Exception as ex:
             from traceback import print_exc
             print_exc()
+
+def _run_stdout(cmd: Sequence[str]) -> str:
+    """
+    Run a command and return the standard output.
+    """
+    if XSH.env.get('XGIT_TRACE_COMMANDS'):
+        print(f'Running {' '.join(cmd)}', file=sys.stderr)
+    return XSH.subproc_captured_stdout([*cmd, ('2>', '/dev/null')])
+
+def _run_object(cmd: Sequence[str]) -> io.StringIO:
+    """
+    Run a command and return the standard output as an iterator.
+
+    Throws an exception if the command fails.
+    """
+    if XSH.env.get('XGIT_TRACE_COMMANDS'):
+        print(f'Running {' '.join(cmd)}', file=sys.stderr)
+    return XSH.subproc_captured_object([*cmd, ('2>', '/dev/null')]).itercheck()
 
 def command(cmd: Optional[Callable]=None,
             flags: set=set(),
@@ -201,6 +217,8 @@ def command(cmd: Optional[Callable]=None,
         try:
             val = cmd(*n_args, **n_kwargs)
             if for_value:
+                if XSH.env.get('XGIT_TRACE_DISPLAY'):
+                    print(f'Returning {val}', file=stderr)
                 XSH.ctx['_XGIT_RETURN'] = val
         except Exception as ex:
             print(f'Error running {alias}: {ex}', file=stderr)
@@ -242,8 +260,6 @@ type GitHash = str
 """
 A git hash. Defined as a string to make the code more self-documenting.
 """
-
-x: GitHash = '0123456789abcdef'
 
 @dataclass
 class GitRepository:
@@ -361,18 +377,17 @@ def _git_context():
 
     The result should generally be passed to `_set_xgit`.
     """
-    global XGIT
     def multi_params(*params: str) -> Sequence[str]:
         """
         Use `git rev-parse` to get multiple parameters at once.
         """
-        val = XSH.subproc_captured_stdout(['git', 'rev-parse', *params, ('2>', '/dev/null')])
+        val = _run_stdout(['git', 'rev-parse', *params])
         if val:
             result = val.strip().split('\n')
         else:
             # Try running them individually.
             result = [
-                XSH.subproc_captured_stdout(['git', 'rev-parse', param, ('2>', '/dev/null')])
+                _run_stdout(['git', 'rev-parse', param])
                 for param in params
             ]
         if len(result) == 1:
@@ -539,7 +554,9 @@ class GitId:
         return self.hash.format(fmt)
 
 class GitObject(GitId):
-
+    """
+    Any object stored in a git repository. Holds the hash and type of the object.
+    """
     git_type: GitObjectType
     def __init__(self, mode: str, type: str, hash: str, /,
                  loader: Optional[GitLoader]= None,
@@ -604,7 +621,7 @@ class GitTree(GitObject, dict[str, GitObject]):
             context = context.new_context()
             with chdir(context.worktree):
                 cmd = ['git', 'ls-tree', '--long', tree]
-                for line in XSH.subproc_captured_object(cmd).itercheck():
+                for line in _run_object(cmd).itercheck():
                     if line:
                         name, entry = parse_git_entry(line, context, tree)
                         dict.__setitem__(self, name, entry)
@@ -783,7 +800,6 @@ type GitObjectReference = tuple[ContextKey, GitObject|None]
 A reference to a git object in a tree in a repository.
 """
 
-
 class GitTreeEntry:
     """
     An entry in a git tree.
@@ -849,14 +865,20 @@ def _xgit_displayhook(value: Any):
     and exception protection.
     """
     ovalue = value
-    if isinstance(value, HiddenCommandPipeline) or True:
+    if isinstance(value, HiddenCommandPipeline):
+        value = XSH.ctx.get('_XGIT_RETURN', value)
         if '_XGIT_RETURN' in XSH.ctx:
-            value = XSH.ctx.get('_XGIT_RETURN') or value
+            if XSH.env.get('XGIT_TRACE_DISPLAY'):
+                print('clearing _XGIT_RETURN in XSH.ctx', file=sys.stderr)
             del XSH.ctx['_XGIT_RETURN']
+        else:
+            if XSH.env.get('XGIT_TRACE_DISPLAY'):
+                print('No _XGIT_RETURN, result has been displayed with str() and suppressed',
+                        file=sys.stderr)
 
     if XSH.env.get('XGIT_TRACE_DISPLAY') and ovalue is not value:
         sys.stdout.flush()
-        print(f'DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}')
+        print(f'DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}', sys.stderr)
         sys.stderr.flush()
     try:
         events.xgit_on_predisplay.fire(value=value)
@@ -910,7 +932,9 @@ def _on_precommand(cmd: str):
     directly useful. The variables here are simply to facilitate
     updating those values.
     """
-    if '_+' in XSH.ctx:
+    if '_XGIT_RETURN' in XSH.ctx:
+        if XSH.env.get('XGIT_TRACE_DISPLAY'):
+            print(f'Clearing _XGIT_RETURN before command', file=sys.stderr)
         del XSH.ctx['_XGIT_RETURN']
     XSH.ctx['-'] = cmd.strip()
     XSH.ctx['+'] = builtins._
