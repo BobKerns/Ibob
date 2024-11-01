@@ -2,7 +2,7 @@
 Package doc
 """
 
-from xontrib.xgit.xgit import (
+from xontrib.xgit.xgit_main import (
     _load_xontrib_,
     _unload_xontrib_,
     GitId,
