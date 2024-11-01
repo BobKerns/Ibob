@@ -29,7 +29,7 @@ from xonsh.procs.pipelines import HiddenCommandPipeline
 
 from xontrib.xgit.xgit_types import (
     CleanupAction,
-    GitTree_,
+    GitTree,
 )
 from xontrib.xgit.xgit_context import (
     _git_context,
@@ -306,11 +306,11 @@ def git_ls(path: Path | str = ".", stderr=sys.stderr):
         else:
             path_parent = path.parent
             if path_parent != path:
-                nparent: GitTree_ = git_ls(path.parent)
+                nparent: GitTree = git_ls(path.parent)
                 tree = nparent[path.name].hash
                 parent = nparent.hash
         _, dir = _git_entry(tree, path.name, "0400", "tree", "-", xv.XGIT, parent)
-        return cast(GitTree_, dir)
+        return cast(GitTree, dir)
 
 
 _xonsh_displayhook = sys.displayhook

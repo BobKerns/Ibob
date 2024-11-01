@@ -17,8 +17,10 @@ from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
 from xontrib.xgit.xgit_types import (
-    GitContext_,
+    GitContext,
     ContextKey,
+    GitRepository,
+    GitWorktree,
 )
 from xontrib.xgit.xgit_vars import XGIT_CONTEXTS
 from xontrib.xgit.xgit_procs import (
@@ -26,7 +28,7 @@ from xontrib.xgit.xgit_procs import (
 )
 
 @dataclass
-class GitRepository:
+class _GitRepository(GitRepository):
     """
     A git repository.
     """
@@ -44,7 +46,7 @@ class GitRepository:
 
 
 @dataclass
-class GitWorktree(GitRepository):
+class _GitWorktree(_GitRepository, GitWorktree):
     """
     A git worktree. This is the root directory of where the files are checked out.
     """
@@ -53,7 +55,7 @@ class GitWorktree(GitRepository):
 
 
 @dataclass
-class GitContext(GitWorktree, GitContext_):
+class _GitContext(_GitWorktree, GitContext):
     """
     Context for working within a git repository.
 
@@ -85,14 +87,14 @@ class GitContext(GitWorktree, GitContext_):
         git_path: Optional[Path] = None,
         branch: Optional[str] = None,
         commit: Optional[str] = None,
-    ) -> "GitContext":
+    ) -> "_GitContext":
         worktree = worktree or self.worktree
         repository = repository or self.repository
         common = common or self.common
         git_path = git_path or self.git_path
         branch = branch if branch is not None else self.branch
         commit = commit or self.commit
-        return GitContext(
+        return _GitContext(
             worktree=worktree,
             repository=repository,
             common=common,
@@ -121,7 +123,6 @@ class GitContext(GitWorktree, GitContext_):
                 p.text(f"commit: {self.commit}")
                 p.break_()
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
-
 
 
 def _relative_to_home(path: Path) -> Path:
@@ -196,7 +197,7 @@ def _git_context():
                 xgit.branch = branch
                 return xgit
             else:
-                return GitContext(
+                return _GitContext(
                     worktree=worktree,
                     repository=repository,
                     common=common,
@@ -225,7 +226,7 @@ def _git_context():
                 xgit.branch = branch
                 return xgit
             else:
-                return GitContext(
+                return _GitContext(
                     worktree=worktree,
                     repository=repository,
                     common=common,
