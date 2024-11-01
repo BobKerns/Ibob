@@ -16,7 +16,7 @@ In addition, it extends the displayhook to provide the following variables:
 from contextlib import suppress
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Literal, Mapping, Optional, Sequence, cast, Any
+from typing import Literal, Mapping, Optional, Sequence, cast, Any, overload
 from collections import defaultdict
 from collections.abc import Callable
 from inspect import signature, Signature
@@ -62,7 +62,7 @@ Dictionary of functions or other values defined here to loaded into the xonsh co
 """
 
 
-def _export(cmd: Any | str, name: Optional[str] = None) -> Callable:
+def _export(cmd: Any | str, name: Optional[str] = None):
     """
     Decorator to mark a function or value for export.
     This makes it available from the xonsh context, and is undone
@@ -75,7 +75,9 @@ def _export(cmd: Any | str, name: Optional[str] = None) -> Callable:
         name = cmd
         cmd = globals()[cmd]
     if name is None:
-        name = cmd.__name__
+        name = getattr(cmd, "__name__", None)
+    if name is None:
+        raise ValueError("No name supplied and no name found in value")
     _exports[name] = cmd
     return cmd
 
@@ -115,7 +117,7 @@ def _run_object(cmd: Sequence[str]) -> io.StringIO:
 
 def command(
     cmd: Optional[Callable] = None,
-    flags: set = frozenset(),
+    flags: frozenset = frozenset(),
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
@@ -163,9 +165,9 @@ def command(
 
     def wrapper(
         args,
-        stdin: io.TextIOBase = sys.stdin,
-        stdout: io.TextIOBase = sys.stdout,
-        stderr: io.TextIOBase = sys.stderr,
+        stdin=sys.stdin,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
         **kwargs,
     ):
         if "--help" in args:
@@ -190,42 +192,41 @@ def command(
         sig: Signature = signature(cmd)
         n_args = []
         n_kwargs = {}
-        for param in sig.parameters.values():
-            p = param
+        for p in sig.parameters.values():
 
             def add_arg(value: Any):
-                match p.kind:
-                    case p.POSITIONAL_ONLY:
+                match p.kind:  # noqa
+                    case p.POSITIONAL_ONLY:  # noqa
                         n_args.append(value)
-                    case p.POSITIONAL_OR_KEYWORD:
+                    case p.POSITIONAL_OR_KEYWORD:  # noqa
                         positional = len(args) > 0
-                        if value == p.empty:
+                        if value == p.empty:  # noqa
                             if positional:
                                 value = args.pop(0)
-                            elif p.name in kwargs:
-                                value = kwargs.pop(p.name)
+                            elif p.name in kwargs:  # noqa
+                                value = kwargs.pop(p.name)  # noqa
                             else:
-                                value = p.default
-                        if value == p.empty:
-                            raise ValueError(f"Missing value for {p.name}")
+                                value = p.default  # noqa
+                        if value == p.empty:  # noqa
+                            raise ValueError(f"Missing value for {p.name}")  # noqa
                         if positional:
                             n_args.append(value)
                         else:
-                            n_kwargs[p.name] = value
-                    case p.KEYWORD_ONLY:
-                        if value == p.empty:
-                            if p.name in kwargs:
-                                value = kwargs.pop(p.name)
+                            n_kwargs[p.name] = value  # noqa
+                    case p.KEYWORD_ONLY:  # noqa
+                        if value == p.empty:  # noqa
+                            if p.name in kwargs:  # noqa
+                                value = kwargs.pop(p.name)  # noqa
                             else:
-                                value = p.default
-                        if value == p.empty:
-                            raise ValueError(f"Missing value for {p.name}")
-                        n_kwargs[p.name] = value
-                    case p.VAR_POSITIONAL:
+                                value = p.default  # noqa
+                        if value == p.empty:  # noqa
+                            raise ValueError(f"Missing value for {p.name}")  # noqa
+                        n_kwargs[p.name] = value  # noqa
+                    case p.VAR_POSITIONAL:  # noqa
                         if len(args) > 0:
                             n_args.extend(args)
                             args.clear()
-                    case p.VAR_KEYWORD:
+                    case p.VAR_KEYWORD:  # noqa
                         n_args.update(
                             {"stdin": stdin, "stdout": stdout, "stderr": stderr}
                         )
@@ -332,6 +333,7 @@ class GitContext(GitWorktree):
     commit: str = ""
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
+        subpath = Path(subpath) if subpath else None
         key = self.worktree or self.repository
         if subpath is None:
             return (key, self.git_path, self.branch, self.commit)
@@ -372,7 +374,8 @@ class GitContext(GitWorktree):
         else:
             with p.group(4, "GitTree:"):
                 p.break_()
-                p.text(f"worktree: {relative_to_home(self.worktree)}")
+                wt = relative_to_home(self.worktree) if self.worktree else None
+                p.text(f"worktree: {wt}")
                 p.break_()
                 p.text(f"repository: {relative_to_home(self.repository)}")
                 p.break_()
@@ -422,7 +425,14 @@ def _git_context():
     The result should generally be passed to `_set_xgit`.
     """
 
-    def multi_params(*params: str) -> Sequence[str]:
+    @overload
+    def multi_params(params: str, /) -> str: ...
+
+    @overload
+    def multi_params(param: str, *params: str) -> Sequence[str]: ...
+
+    @overload
+    def multi_params(*params: str) -> Sequence[str] | str:
         """
         Use `git rev-parse` to get multiple parameters at once.
         """
@@ -437,7 +447,7 @@ def _git_context():
             # The comma is` necessary to unpack the single value
             # but is confusing and easy to forget
             # (or not understand if you don't know the syntax).
-            result = result[0]
+            return result[0]
         return result
 
     in_tree, in_git = multi_params("--is-inside-work-tree", "--is-inside-git-dir")
@@ -519,7 +529,7 @@ def git_cd(path: str = "", stderr=sys.stderr) -> None:
     If no path is provided, change the current working directory
     to the git repository root.
     """
-    if XGIT is None:
+    if XGIT is None or XGIT.worktree is None:
         XSH.execer.exec(f"cd {path}")
         return
     if path == "":
@@ -581,7 +591,7 @@ class GitId:
         /,
         *,
         loader: Optional[GitLoader] = None,
-        context: GitContext = XGIT,
+        context: Optional[GitContext] = XGIT,
     ):
         self.hash = hash
         self._lazy_loader = loader
@@ -626,7 +636,7 @@ class GitObject(GitId):
         hash: str,
         /,
         loader: Optional[GitLoader] = None,
-        context: GitContext = XGIT,
+        context: Optional[GitContext] = XGIT,
     ):
         super().__init__(
             hash,
@@ -641,8 +651,8 @@ class GitObject(GitId):
 
 
 def parse_git_entry(
-    line: str, context: GitContext = XGIT, parent: str | None = None
-) -> GitObject:
+    line: str, context: Optional[GitContext] = XGIT, parent: str | None = None
+) -> tuple[str, GitObject]:
     """
     Parse a line from `git ls-tree --long` and return a `GitObject`.
     """
@@ -656,7 +666,7 @@ def git_entry(
     type: str,
     hash: str,
     size: str,
-    context: GitContext = XGIT,
+    context: Optional[GitContext] = XGIT,
     parent: str | None = None,
 ) -> tuple[str, GitObject]:
     """
@@ -677,9 +687,10 @@ def git_entry(
         # We don't currently handle tags or commits (submodules)
         raise ValueError(f"Unknown type {type}")
     XGIT_OBJECTS[hash] = entry
-    key = (context.reference(name), parent)
-    XGIT_REFERENCES[hash].add(key)
-    return name, entry
+    if context is not None:
+        key = (context.reference(name), parent)
+        XGIT_REFERENCES[hash].add(key)
+    return name, cast(GitObject, entry)
 
 
 class GitTree(GitObject, dict[str, GitObject]):
@@ -699,7 +710,7 @@ class GitTree(GitObject, dict[str, GitObject]):
         tree: str,
         /,
         *,
-        context: GitContext = XGIT,
+        context: Optional[GitContext] = XGIT,
     ):
         def _lazy_loader():
             nonlocal context
@@ -720,6 +731,12 @@ class GitTree(GitObject, dict[str, GitObject]):
             loader=_lazy_loader,
             context=context,
         )
+
+    def __hash__(self):
+        GitObject.__hash__(self)
+
+    def __eq__(self, other):
+        return GitObject.__eq__(self, other)
 
     def __repr__(self):
         return f"GitTree(hash={self.hash})"
@@ -817,7 +834,7 @@ class GitBlob(GitObject):
         size,
         /,
         *,
-        context: GitContext = XGIT,
+        context: Optional[GitContext] = XGIT,
     ):
         super().__init__(
             mode,
@@ -867,8 +884,8 @@ class GitCommit(GitId):
 
     git_type: Literal["commit"] = "commit"
 
-    def __init__(self, hash: str, /, *, context: GitContext = XGIT):
-        super().__init__(hash)
+    def __init__(self, hash: str, /, *, context: Optional[GitContext] = XGIT):
+        super().__init__(hash, context=context)
 
     def __str__(self):
         return f"commit {self.hash}"
@@ -888,8 +905,8 @@ class GitTagObject(GitId):
 
     git_type: Literal["tag"] = "tag"
 
-    def __init__(self, hash: str, /, *, context: GitContext = XGIT):
-        super().__init__(hash)
+    def __init__(self, hash: str, /, *, context: Optional[GitContext] = XGIT):
+        super().__init__(hash, context=context)
 
     def __str__(self):
         return f"tag {self.hash}"
@@ -906,7 +923,7 @@ XGIT_OBJECTS: dict[str, GitObject] = {}
 All the git entries we have seen.
 """
 
-type GitObjectReference = tuple[ContextKey, GitObject | None]
+type GitObjectReference = tuple[ContextKey, str | None]
 """
 A reference to a git object in a tree in a repository.
 """
@@ -916,6 +933,8 @@ class GitTreeEntry:
     """
     An entry in a git tree.
     """
+
+    name: str
 
     object: GitObject
     _mode: GitEntryMode
@@ -931,6 +950,10 @@ class GitTreeEntry:
     @property
     def mode(self):
         return self._mode
+
+    @property
+    def entry(self):
+        return f"{self.mode} {self.object.type} {self.hash}\t{self.name}"
 
     def __init__(self, name: str, object: GitObject):
         self.name = name
@@ -961,7 +984,7 @@ def git_ls(path: Path | str = ".", stderr=sys.stderr):
         raise ValueError("Not in a git repository")
     path = Path(path)
     with chdir(XGIT.worktree or XGIT.repository):
-        parent: GitTree | None = None
+        parent: str | None = None
         if path == Path("."):
             tree = XSH.subproc_captured_stdout(
                 ["git", "log", "--format=%T", "-n", "1", "HEAD"]
@@ -969,9 +992,10 @@ def git_ls(path: Path | str = ".", stderr=sys.stderr):
         else:
             path_parent = path.parent
             if path_parent != path:
-                parent = git_ls(path.parent)
-                tree = parent[path.name].hash
-        _, dir = git_entry(path, "0400", "tree", tree, "-", XGIT, parent)
+                nparent: GitTree = git_ls(path.parent)
+                tree = nparent[path.name].hash
+                parent = nparent.hash
+        _, dir = git_entry(path.name, "0400", "tree", tree, "-", XGIT, parent)
         return cast(GitTree, dir)
 
 
@@ -1046,7 +1070,7 @@ def _xgit_on_postdisplay(value: Any):
     Update _, __, and ___ after displaying a value.
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
-        builtins._ = value
+        setattr(builtins, ",", value)
         XSH.ctx["__"] = XSH.ctx["+"]
         XSH.ctx["___"] = XSH.ctx["++"]
 
@@ -1068,7 +1092,7 @@ def _on_precommand(cmd: str):
             print("Clearing _XGIT_RETURN before command", file=sys.stderr)
         del XSH.ctx["_XGIT_RETURN"]
     XSH.ctx["-"] = cmd.strip()
-    XSH.ctx["+"] = builtins._
+    XSH.ctx["+"] = getattr(builtins, "_")  # noqa
     XSH.ctx["++"] = XSH.ctx.get("__")
     XSH.ctx["+++"] = XSH.ctx.get("___")
 
@@ -1202,3 +1226,4 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     XSH.ctx["_xgit_counter"] = _xgit_counter
     if XSH.env.get("XGIT_TRACE_LOAD"):
         print("Unloaded xontrib-xgit", file=sys.stderr)
+    return dict()
