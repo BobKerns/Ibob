@@ -16,7 +16,7 @@ In addition, it extends the displayhook to provide the following variables:
 from contextlib import suppress
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Literal, Mapping, Optional, Sequence, cast, Any, overload
+from typing import Literal, Mapping, Optional, Sequence, cast, Any, overload, TypeAlias
 from collections import defaultdict
 from collections.abc import Callable
 from inspect import signature, Signature
@@ -45,7 +45,7 @@ events.doc(
 
 # Good start! Get more documentation -> https://xon.sh/contents.html#guides,
 
-type CleanupAction = Callable[[], None]
+CleanupAction: TypeAlias = Callable[[], None]
 """
 An action to be taken when the xontrib is unloaded.
 """
@@ -100,7 +100,8 @@ def _run_stdout(cmd: Sequence[str]) -> str:
     Run a command and return the standard output.
     """
     if XSH.env.get("XGIT_TRACE_COMMANDS"):
-        print(f'Running {' '.join(cmd)}', file=sys.stderr)
+        cmdline = " ".join(cmd)
+        print(f"Running {cmdline}", file=sys.stderr)
     return XSH.subproc_captured_stdout([*cmd, ("2>", "/dev/null")])
 
 
@@ -111,7 +112,8 @@ def _run_object(cmd: Sequence[str]) -> io.StringIO:
     Throws an exception if the command fails.
     """
     if XSH.env.get("XGIT_TRACE_COMMANDS"):
-        print(f'Running {' '.join(cmd)}', file=sys.stderr)
+        cmdline = " ".join(cmd)
+        print(f'Running {cmdline}', file=sys.stderr)
     return XSH.subproc_captured_object([*cmd, ("2>", "/dev/null")]).itercheck()
 
 
@@ -263,14 +265,14 @@ def command(
     return cmd
 
 
-type ContextKey = tuple[Path, Path, str, str]
+ContextKey: TypeAlias = tuple[Path, Path, str, str]
 
-type GitLoader = Callable[[], None]
+GitLoader: TypeAlias = Callable[[], None]
 """
 A function that loads the contents of a git object.
 """
 
-type GitEntryMode = Literal[
+GitEntryMode: TypeAlias = Literal[
     "040000",  # directory
     "100755",  # executable
     "100644",  # normal file
@@ -281,12 +283,12 @@ type GitEntryMode = Literal[
 The valid modes for a git tree entry.
 """
 
-type GitObjectType = Literal["blob", "tree", "commit", "tag"]
+GitObjectType: TypeAlias = Literal["blob", "tree", "commit", "tag"]
 """
 Valid types for a git object.
 """
 
-type GitHash = str
+GitHash: TypeAlias = str
 """
 A git hash. Defined as a string to make the code more self-documenting.
 """
@@ -922,7 +924,7 @@ XGIT_OBJECTS: dict[str, GitObject] = {}
 All the git entries we have seen.
 """
 
-type GitObjectReference = tuple[ContextKey, str | None]
+GitObjectReference: TypeAlias = tuple[ContextKey, str | None]
 """
 A reference to a git object in a tree in a repository.
 """
