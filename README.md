@@ -94,7 +94,7 @@ git_ls('xontrib-xgit')
 This package was created with [xontrib template](https://github.com/xonsh/xontrib-template).
 
 --------------------
-
+git 
 ## Xontrib Promotion (DO and REMOVE THIS SECTION)
 
 - ✅ Check that your repository name starts from `xontrib-` prefix. It helps Github search find it.
