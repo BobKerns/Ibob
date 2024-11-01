@@ -431,7 +431,6 @@ def _git_context():
     @overload
     def multi_params(param: str, *params: str) -> Sequence[str]: ...
 
-    @overload
     def multi_params(*params: str) -> Sequence[str] | str:
         """
         Use `git rev-parse` to get multiple parameters at once.
