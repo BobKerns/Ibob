@@ -1,6 +1,6 @@
 # xontrib-xgit
 
-An [xonsh](https://xon.sh) command-line environment for exploring git repositories and histories.
+An [xonsh](https://xon.sh) command-line environment for exploring git repositories and histories. With [xgit](https://xon.sh/customization.html#updating-xonsh), you seamlessly blend displayed information and pythonic data manipulation, in the powerful python-native [xonsh](https://xon.sh) shell.
 
 This provides a set of commands that return objects for both display and pythonic manipulation.
 
@@ -8,7 +8,7 @@ If you like the idea click ⭐ on the repo and <a href="https://twitter.com/inte
 
 ## Installation
 
-To install use xpip:
+To install use [xpip](https://xon.sh/customization.html#updating-xonsh):
 
 ```xsh
 xpip install xontrib-xgit
@@ -23,9 +23,9 @@ xontrib load xgit
 
 ## Commands
 
-### git-cd (Command)
+### [`git-cd`](#git-cd-command) (Command)
 
-`git-cd [`_path_`]`
+> [`git-cd`](#git-cd-command) [`_path_`]`
 
 Update the git working directory (and the process working directory if the directory exists in the worktree).
 
@@ -33,9 +33,9 @@ If _path_ is in a different worktree or repository, it will switch automatically
 
 With no arguments, returns to the root of the current repository.
 
-### git-pwd (Command)
+### [`git-pwd`](xgit-pwd-command) (Command)
 
-`git-pwd`
+> [`git-pwd`](xgit-pwd-command)
 
 Print information about the current git context, including:
 
@@ -49,19 +49,19 @@ Print information about the current git context, including:
 
 This just returns (and displays) the [`XGIT`](#xgit-variable) variable if it is not `None`. In scripts you can just reference this variable directly.
 
-### XGIT (Variable)
+### [`XGIT`](#xgit-variable) (Variable)
 
 The current `GitContext`. This is the same as the value returned from the [`git-pwd`](#git-pwd-command) command.
 
 It will be `None` when not inside a git worktree or repository.
 
-### XGIT_CONTEXTS (variable)
+### [`XGIT_CONTEXTS`](#xgit_contexts-variable) (Variable)
 
 A dictionary of `GitContext` objects, one for every worktree or repository we have visited.
 
 This allows one to switch between repositories without losing context.
 
-### git-ls (Command)
+### [`git-ls`](#git-ls-command) (Command)
 
 This returns the directory as an object which can be accessed from the python REPL:
 
@@ -81,7 +81,7 @@ GitFile(- 505d8917cd9697185e30bb79238be4d84d02693e       50)
 '505d8917cd9697185e30bb79238be4d84d02693e'
 ```
 
-### git_ls (Function)
+### [git_ls](#git_ls-function) (Function)
 
 The functional version of the `git-ls` command.
 
@@ -109,4 +109,8 @@ git
 
 - ✅ Publish your xontrib to PyPi via Github Actions and users can install your xontrib via `xpip install xontrib-myxontrib`. Easiest way to achieve it is to use Github Actions. Register to [https://pypi.org/](https://pypi.org) and [create API token](https://pypi.org/help/#apitoken). Go to repository "Settings" - "Secrets" and your PyPI API token as `PYPI_API_TOKEN` as a "Repository Secret". Now when you create new Release the Github Actions will publish the xontrib to PyPi automatically. Release status will be in Actions section. See also `.github/workflows/release.yml`.
 
-- Write a message to: [xonsh Gitter chat](https://gitter.im/xonsh/xonsh?utm_source=xontrib-template&utm_medium=xontrib-template-promo&utm_campaign=xontrib-template-promo&utm_content=xontrib-template-promo), [Twitter](https://twitter.com/intent/tweet?text=xonsh%20is%20a%20Python-powered,%20cross-platform,%20Unix-gazing%20shell%20language%20and%20command%20prompt.&url=https://github.com/BobKerns/xontrib-xgit), [Reddit](https://www.reddit.com/r/xonsh), [Mastodon](https://mastodon.online/).
+- Write a message to:
+  - [xonsh Gitter chat](https://gitter.im/xonsh/xonsh?utm_source=xontrib-template&utm_medium=xontrib-template-promo&utm_campaign=xontrib-template-promo&utm_content=xontrib-template-promo),
+  - [Twitter](https://twitter.com/intent/tweet?text=xonsh%20is%20a%20Python-powered,%20cross-platform,%20Unix-gazing%20shell%20language%20and%20command%20prompt.&url=https://github.com/BobKerns/xontrib-xgit),
+  - [Reddit](https://www.reddit.com/r/xonsh),
+  - [Mastodon](https://mastodon.online/).
