@@ -13,15 +13,16 @@ In addition, it extends the displayhook to provide the following variables:
 - _<m>" The nth value.
 """
 
+from contextlib import suppress
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Literal, Mapping, Optional, Sequence, cast, Any
 from collections import defaultdict
 from collections.abc import Callable
+from inspect import signature, Signature
 import builtins
 import sys
 import io
-from inspect import signature, Signature
 
 from xonsh.built_ins import XSH, XonshSession
 from xonsh.events import events
@@ -35,11 +36,11 @@ __all__ = ()
 
 events.doc(
     "xgit_on_predisplay",
-    "Runs before displaying the result of a command. Receives the value to be displayed.",
+    "Runs before displaying the result of a command with the value to be displayed.",
 )
 events.doc(
     "xgit_on_postdisplay",
-    "Runs after displaying the result of a command. Receives C the value displayed.",
+    "Runs after displaying the result of a command with the value displayed.",
 )
 
 # Good start! Get more documentation -> https://xon.sh/contents.html#guides,
@@ -86,7 +87,7 @@ def _do_unload_actions():
     for action in _unload_actions:
         try:
             action()
-        except Exception as ex:
+        except Exception:
             from traceback import print_exc
 
             print_exc()
@@ -114,7 +115,7 @@ def _run_object(cmd: Sequence[str]) -> io.StringIO:
 
 def command(
     cmd: Optional[Callable] = None,
-    flags: set = set(),
+    flags: set = frozenset(),
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
@@ -189,7 +190,8 @@ def command(
         sig: Signature = signature(cmd)
         n_args = []
         n_kwargs = {}
-        for p in sig.parameters.values():
+        for param in sig.parameters.values():
+            p = param
 
             def add_arg(value: Any):
                 match p.kind:
@@ -297,7 +299,8 @@ class GitRepository:
 
     repository: Path = Path(".git")
     """
-    The path to the repository. If this is a worktree, it is the path to the worktree-specific part.
+    The path to the repository. If this is a worktree,
+    it is the path to the worktree-specific part.
     For the main worktree, this is the same as `common`.
     """
     common: Path = Path(".git")
@@ -367,7 +370,7 @@ class GitContext(GitWorktree):
         if cycle:
             p.text(f"GitContext({self.worktree} {self.git_path}")
         else:
-            with p.group(4, f"GitTree:"):
+            with p.group(4, "GitTree:"):
                 p.break_()
                 p.text(f"worktree: {relative_to_home(self.worktree)}")
                 p.break_()
@@ -386,7 +389,8 @@ class GitContext(GitWorktree):
 
 XGIT: GitContext | None = None
 """
-The current `GitContext` for the session, or none if not in a git repository or worktree.
+The current `GitContext` for the session,
+or none if not in a git repository or worktree.
 """
 
 XGIT_CONTEXTS: dict[Path, GitContext] = {}
@@ -412,7 +416,8 @@ def _set_xgit(xgit: GitContext | None) -> GitContext | None:
 
 def _git_context():
     """
-    Get the git context based on the current working directory, updating it if necessary.
+    Get the git context based on the current working directory,
+    updating it if necessary.
 
     The result should generally be passed to `_set_xgit`.
     """
@@ -429,7 +434,8 @@ def _git_context():
             result = [_run_stdout(["git", "rev-parse", param]) for param in params]
         if len(result) == 1:
             # Otherwise we have to assign like `value, = multi_params(...)`
-            # The comma is` necessary to unpack the single value, but is confusing and easy to forget
+            # The comma is` necessary to unpack the single value
+            # but is confusing and easy to forget
             # (or not understand if you don't know the syntax).
             result = result[0]
         return result
@@ -473,10 +479,7 @@ def _git_context():
             common = repository / common
             with chdir(common.parent):
                 worktree = multi_params("--show-toplevel")
-                if worktree:
-                    worktree = Path(worktree)
-                else:
-                    worktree = None
+                worktree = Path(worktree).resolve() if worktree else None
             commits = multi_params("HEAD", "main", "master")
             commits = list(filter(lambda x: x, list(commits)))
             commit = commits[0] if commits else ""
@@ -513,7 +516,8 @@ def _git_context():
 def git_cd(path: str = "", stderr=sys.stderr) -> None:
     """
     Change the current working directory to the path provided.
-    If no path is provided, change the current working directory to the git repository root.
+    If no path is provided, change the current working directory
+    to the git repository root.
     """
     if XGIT is None:
         XSH.execer.exec(f"cd {path}")
@@ -659,9 +663,9 @@ def git_entry(
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
-        print(
-            f"git_entry({name=}, {mode=}, {type=}, {hash=}, {size=}, {context=}, {parent=})"
-        )
+        args = f"{name=}, {mode=}, {type=}, {hash=}, {size=}, {context=}, {parent=}"
+        msg = f"git_entry({args})"
+        print(msg)
     entry = XGIT_OBJECTS.get(hash)
     if entry is not None:
         return name, entry
@@ -700,8 +704,8 @@ class GitTree(GitObject, dict[str, GitObject]):
         def _lazy_loader():
             nonlocal context
             context = context.new_context()
-            with chdir(context.worktree)
-                for line in _run_object(['git', 'ls-tree', '--long', tree]).itercheck():
+            with chdir(context.worktree):
+                for line in _run_object(["git", "ls-tree", "--long", tree]).itercheck():
                     if line:
                         name, entry = parse_git_entry(line, context, tree)
                         dict.__setitem__(self, name, entry)
@@ -779,7 +783,7 @@ class GitTree(GitObject, dict[str, GitObject]):
             return "\n".join(
                 e.__format__(f"{dfmt}:{dpath(n)}") for n, e in self.items()
             )
-        if "l" in dfmt and not "d" in dfmt:
+        if "l" in dfmt and "d" not in dfmt:
             return "\n".join(
                 e.__format__(f"d{dfmt}:{dpath(n)}") for n, e in self.items()
             )
@@ -828,7 +832,7 @@ class GitBlob(GitObject):
         return f"{rw} {self.hash} {self.size:>8d}"
 
     def __repr__(self):
-        return f"GitFile({str(self)})"
+        return f"GitFile({self,hash!r})"
 
     def __len__(self):
         return self.size
@@ -840,8 +844,9 @@ class GitBlob(GitObject):
         The first part is a format string for the output.
         The second part is a path to the file.
 
-        As files don't have inherent names, the name must be provided in the format string
-        by the directory that contains the file. If no path is provided, the hash is used.
+        As files don't have inherent names, the name must be provided
+        in the format string by the directory that contains the file.
+        If no path is provided, the hash is used.
 
         The format string can contain:
         - 'l' to format the file in long format.
@@ -877,7 +882,8 @@ class GitCommit(GitId):
 
 class GitTagObject(GitId):
     """
-    A tag in a git repository. This is an actual signed tag object, not just a reference.
+    A tag in a git repository.
+    This is an actual signed tag object, not just a reference.
     """
 
     git_type: Literal["tag"] = "tag"
@@ -986,10 +992,11 @@ def _xgit_displayhook(value: Any):
             del XSH.ctx["_XGIT_RETURN"]
         else:
             if XSH.env.get("XGIT_TRACE_DISPLAY"):
-                print(
-                    "No _XGIT_RETURN, result has been displayed with str() and suppressed",
-                    file=sys.stderr,
+                msg = (
+                    "No _XGIT_RETURN, "
+                    + "result has been displayed with str() and suppressed"
                 )
+                print(msg, file=sys.stderr)
 
     if XSH.env.get("XGIT_TRACE_DISPLAY") and ovalue is not value:
         sys.stdout.flush()
@@ -1020,14 +1027,17 @@ def _xgit_on_predisplay(value: Any):
     Update the notebook-style convenience history variables before displaying a value.
     """
     global _count
-    if value is not None and not isinstance(value, HiddenCommandPipeline):
-        if XSH.env.get("XGIT_ENABLE_NOTEBOOK_HISTORY"):
-            _count = next(_xgit_counter)
-            ivar = f"_i{_count}"
-            ovar = f"_{_count}"
-            XSH.ctx[ivar] = XSH.ctx["-"]
-            XSH.ctx[ovar] = value
-            print(f"{ovar}: ", end="")
+    if (
+        value is not None
+        and not isinstance(value, HiddenCommandPipeline)
+        and XSH.env.get("XGIT_ENABLE_NOTEBOOK_HISTORY")
+    ):
+        _count = next(_xgit_counter)
+        ivar = f"_i{_count}"
+        ovar = f"_{_count}"
+        XSH.ctx[ivar] = XSH.ctx["-"]
+        XSH.ctx[ovar] = value
+        print(f"{ovar}: ", end="")
 
 
 @events.xgit_on_postdisplay
@@ -1055,7 +1065,7 @@ def _on_precommand(cmd: str):
     """
     if "_XGIT_RETURN" in XSH.ctx:
         if XSH.env.get("XGIT_TRACE_DISPLAY"):
-            print(f"Clearing _XGIT_RETURN before command", file=sys.stderr)
+            print("Clearing _XGIT_RETURN before command", file=sys.stderr)
         del XSH.ctx["_XGIT_RETURN"]
     XSH.ctx["-"] = cmd.strip()
     XSH.ctx["+"] = builtins._
@@ -1102,8 +1112,10 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     this function will be called when loading/reloading the xontrib.
 
     Args:
-        xsh: the current xonsh session instance, serves as the interface to manipulate the session.
-             This allows you to register new aliases, history backends, event listeners ...
+        xsh: the current xonsh session instance, serves as the interface to
+            manipulate the session.
+            This allows you to register new aliases, history backends,
+            event listeners ...
         **kwargs: it is empty as of now. Kept for future proofing.
     Returns:
         dict: this will get loaded into the current execution context
@@ -1144,10 +1156,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         else:
 
             def del_item():
-                try:
+                with suppress(KeyError):
                     del ns[name]
-                except KeyError:
-                    pass
 
             _unload_actions.append(del_item)
 

@@ -62,12 +62,15 @@ force-exclude = '''
 )/
 '''
 
+[tool.mypy]
+mypy_path = "."
+
 [tool.ruff]
 lint.select = [
     "E",
     "F",
     "B", # flake8-bugbear
-    "I", # isort
+    #"I", # isort
     "UP", # pyupgrade
     "SIM", # simplify
     "TCH", # flake8-type-checking
