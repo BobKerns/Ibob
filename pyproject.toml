@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Version Control :: Git",
 ]
-    
+
 packages = [{ include = "xontrib" }]
 
 [tool.poetry.urls]
@@ -63,7 +63,7 @@ force-exclude = '''
 '''
 
 [tool.ruff]
-select = [
+lint.select = [
     "E",
     "F",
     "B", # flake8-bugbear
