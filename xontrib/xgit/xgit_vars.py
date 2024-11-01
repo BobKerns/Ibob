@@ -8,19 +8,19 @@ import sys
 from xonsh.built_ins import XSH
 
 from xontrib.xgit.xgit_types import (
-    GitContext_,
+    GitContext,
     GitObjectReference,
-    GitObject_,
+    GitObject,
 )
 
-XGIT: GitContext_ | None = None
+XGIT: GitContext | None = None
 """
 The current `GitContext` for the session,
 or none if not in a git repository or worktree.
 """
 
 
-def _set_xgit(xgit: GitContext_ | None) -> GitContext_ | None:
+def _set_xgit(xgit: GitContext | None) -> GitContext | None:
     """
     Set the xgit context, making it available in the xonsh context,
     and storing it in the context map.
@@ -32,7 +32,7 @@ def _set_xgit(xgit: GitContext_ | None) -> GitContext_ | None:
     return xgit
 
 
-XGIT_CONTEXTS: dict[Path, GitContext_] = {}
+XGIT_CONTEXTS: dict[Path, GitContext] = {}
 """
 A map of git contexts by worktree, or by repository if the worktree is not available.
 
@@ -41,7 +41,7 @@ looking at in each one.
 """
 
 
-XGIT_OBJECTS: dict[str, GitObject_] = {}
+XGIT_OBJECTS: dict[str, GitObject] = {}
 """
 All the git entries we have seen.
 """

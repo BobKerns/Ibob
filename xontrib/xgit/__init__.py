@@ -16,17 +16,17 @@ from xontrib.xgit.xgit_types import (
     GitEntryMode,
     GitObjectType,
     GitHash,
-)
-from xontrib.xgit.xgit_objects import (
     GitId,
     GitObject,
     GitBlob,
     GitTree,
+    GitCommit,
+    GitTagObject,
 )
 from xontrib.xgit.xgit_context import (
-    GitRepository,
-    GitWorktree,
-    GitContext,
+    _GitRepository,
+    _GitWorktree,
+    _GitContext,
 )
 from xontrib.xgit.xgit_main import (
     _load_xontrib_,
@@ -37,13 +37,13 @@ __all__ = (
     "_load_xontrib_",
     "_unload_xontrib_",
     "GitHash",
-    "GitId",
-    "GitObject",
-    "GitBlob",
-    "GitTree",
-    "GitRepository",
-    "GitWorktree",
-    "GitContext",
+    "_GitId",
+    "_GitObject",
+    "_GitBlob",
+    "_GitTree",
+    "_GitRepository",
+    "_GitWorktree",
+    "_GitContext",
     "GitEntryMode",
     "GitObjectType",
     "GitTreeEntry",
