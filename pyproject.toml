@@ -21,7 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Version Control :: Git",
 ]
-    
+
 packages = [{ include = "xontrib" }]
 
 [tool.poetry.urls]
@@ -62,12 +62,15 @@ force-exclude = '''
 )/
 '''
 
+[tool.mypy]
+mypy_path = "."
+
 [tool.ruff]
-select = [
+lint.select = [
     "E",
     "F",
     "B", # flake8-bugbear
-    "I", # isort
+    #"I", # isort
     "UP", # pyupgrade
     "SIM", # simplify
     "TCH", # flake8-type-checking
