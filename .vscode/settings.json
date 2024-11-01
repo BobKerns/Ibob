@@ -23,6 +23,7 @@
         "Gitter",
         "itercheck",
         "ivar",
+        "mypy",
         "myxontrib",
         "newdir",
         "newpath",
