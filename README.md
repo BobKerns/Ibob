@@ -83,7 +83,7 @@ GitFile(- 505d8917cd9697185e30bb79238be4d84d02693e       50)
 
 ### [git_ls](#git_ls-function) (Function)
 
-The functional version of the `git-ls` command.
+The functional version of the [`git-ls`](#git-ls-command) command.
 
 ```python
 git_ls('xontrib-xgit')
@@ -94,7 +94,7 @@ git_ls('xontrib-xgit')
 This package was created with [xontrib template](https://github.com/xonsh/xontrib-template).
 
 --------------------
-git 
+
 ## Xontrib Promotion (DO and REMOVE THIS SECTION)
 
 - ✅ Check that your repository name starts from `xontrib-` prefix. It helps Github search find it.
