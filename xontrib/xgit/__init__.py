@@ -31,20 +31,29 @@ from xontrib.xgit.xgit_context import (
 from xontrib.xgit.xgit_main import (
     _load_xontrib_,
     _unload_xontrib_,
+    git_cd,
+    git_pwd,
+    git_ls,
 )
 
 __all__ = (
     "_load_xontrib_",
     "_unload_xontrib_",
+    'git_cd',
+    'git_pwd',
+    'git_ls',
     "GitHash",
-    "_GitId",
-    "_GitObject",
-    "_GitBlob",
-    "_GitTree",
+    "GitId",
+    "GitObject",
+    "GitBlob",
+    "GitTree",
+    'GitCommit',
+    'GitTagObject',
     "_GitRepository",
     "_GitWorktree",
     "_GitContext",
     "GitEntryMode",
     "GitObjectType",
     "GitTreeEntry",
+    '__version__',
 )

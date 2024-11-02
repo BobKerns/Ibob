@@ -5,7 +5,7 @@ This incudes `GitCommit`, `GitTree`, `GitTagObject` objects, as well as
 refs and entries in trees.
 """
 
-from typing import Optional
+from typing import Any, Optional
 from pathlib import Path
 
 from xontrib.xgit.xgit_types import (
@@ -47,14 +47,14 @@ class _GitTreeEntry(GitTreeEntry):
 
     @property
     def entry(self):
-        return f"{self.mode} {self.type} {self.hash}\t{self.name}"
+        rw = "X" if self.mode == "100755" else "-"
+        return f"{rw} {self.type} {self.hash}\t{self.name}"
 
     @property
     def entry_long(self):
-        size = self.size
-        if isinstance(size, int):
-            size = size if size >= 0 else '-'
-        return f"{self.mode} {self.type} {self.hash} {size}\t{self.name}"
+        size = str(self.size) if self.size >= 0 else '-'
+        rw = "X" if self.mode == "100755" else "-"
+        return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
 
     @property
     def object(self):
@@ -69,6 +69,21 @@ class _GitTreeEntry(GitTreeEntry):
         self._name = name
         self._mode = mode
         self._path = path or Path(name)
+        
+    def __getattr__(self, name):
+        try:
+            return getattr(self._object, name)
+        except AttributeError:
+            raise AttributeError(f"GitTreeEntry has no attribute {name!r}") from None
+        
+    #def __hasattr__(self, name):
+    #    return hasattr(self._object, name)  
+    
+    def __getitem__(self, name):
+        return self._object[name]
+
+    def __contains__(self, name):
+        return name in self._object
 
     def __str__(self):
         return f"{self.entry_long} {self.name}"
@@ -77,7 +92,17 @@ class _GitTreeEntry(GitTreeEntry):
         return f"GitTreeEntry({self.name!r}, {self.entry_long!r})"
 
     def __format__(self, fmt: str):
-        return f"{self.entry_long.__format__(fmt)} {self.name}"
+        return f"{self.entry_long.__format__(fmt)}"
 
     def _repr_pretty_(self, p, cycle):
-        return self._object._repr_pretty_(p, cycle)
+        if cycle:
+            p.text("GitTreeEntry(...)")
+        else:
+            with p.group(4, "GitTreeEntry(", ')'):
+                p.breakable(),
+                self._object._repr_pretty_(p, cycle),
+                p.text(','),
+                p.breakable(),
+                p.text(f'mode{self.mode!r},')
+                p.breakable(),
+                p.text(f'name={self.name!r}')

@@ -65,21 +65,53 @@ This allows one to switch between repositories without losing context.
 
 This returns the directory as an object which can be accessed from the python REPL:
 
-```bash
->>> git-ls
-_3: GitTree(c000f7a0a713b405fe0de6531fdbdfff3ff65d38)[7]
-    - 569f95766c26158241a665763c76b93b103538b9     3207 .gitignore
-    D 46b57ab337456176669e75513dbe0f5eeca38a22        1 .vscode
-    - a3990ed1209000756420fae0ee6386e051204a60     1066 LICENSE
-    - 505d8917cd9697185e30bb79238be4d84d02693e       50 README.md
-    D 6f0c75cd8b53eeb83198dd5c6caea5361a240e20        2 bstring
-    - 16494e4075e5cc44c5a928c7a325b8bc7bf552d5       23 requirements.txt
-    D 05433255eddde7d3261f07a45b857374e6087278       10 xontrib-xgit
->>> _['README.md']
-GitFile(- 505d8917cd9697185e30bb79238be4d84d02693e       50)
->>> _.hash
-'505d8917cd9697185e30bb79238be4d84d02693e'
+```python
+>>> git-ls .
+_1: GitTree('998db2d22502eed36bd39653c8a793c22acd6687', len=14, '''
+    - 998db2d22502eed36bd39653c8a793c22acd6687      441 .editorconfig
+    - 998db2d22502eed36bd39653c8a793c22acd6687       36 .gitattributes
+    D 998db2d22502eed36bd39653c8a793c22acd6687        - .github
+    - 998db2d22502eed36bd39653c8a793c22acd6687     3207 .gitignore
+    - 998db2d22502eed36bd39653c8a793c22acd6687       62 .markdownlint.json
+    - 998db2d22502eed36bd39653c8a793c22acd6687      890 .pre-commit-config.yaml
+    D 998db2d22502eed36bd39653c8a793c22acd6687        - .vscode
+    - 998db2d22502eed36bd39653c8a793c22acd6687     1068 LICENSE
+    - 998db2d22502eed36bd39653c8a793c22acd6687     4984 README.md
+    - 998db2d22502eed36bd39653c8a793c22acd6687     5937 poetry.lock
+    - 998db2d22502eed36bd39653c8a793c22acd6687     1675 pyproject.toml
+    - 998db2d22502eed36bd39653c8a793c22acd6687       28 requirements.txt
+    D 998db2d22502eed36bd39653c8a793c22acd6687        - tests
+    D 998db2d22502eed36bd39653c8a793c22acd6687        - xontrib
+''')
+>>> _1['README.md']
+_2: GitTreeEntry(
+    GitBlob('1017942b1ddbcc52e35e4bdf9f28638464105d06', 4984),
+    mode'100644',
+    name='README.md')
+>>>_2.object
+_3: GitBlob('1017942b1ddbcc52e35e4bdf9f28638464105d06', 4984)
+>>> _2.object.size
+_4: 4984
+>>> _2.size
+_5: 4984
+>>> _2.name
+_6: 'README.md'
+>>> _2.hash
+_7: '1017942b1ddbcc52e35e4bdf9f28638464105d06'
 ```
+
+At the first prompt, we type the 'git-ls' command. This returns an object which
+displays the listing nicely as part of its pretty display.
+
+Each line of the listing can be accessed as a `dict` (it is, in fact, a type of `dict`).
+This includes iterating over keys or values.
+
+The values in the dict are actually `GitTreeEntry` instances, which wrap the referenced
+object with the additional information (name, and the file mode for the entry, which
+conveys executable/link/regular file status for blobs).
+
+However, `GitTreeEntry` instances proxy access to the underlying object, so you can mostly ignore the extra layer. The extra layer is needed because the same object may
+appear in multiple trees under multiple names.
 
 ### [git_ls](#git_ls-function) (Function)
 
@@ -88,6 +120,10 @@ The functional version of the [`git-ls`](#git-ls-command) command.
 ```python
 git_ls('xontrib-xgit')
 ```
+
+This looks up the `GitTreeEntry` at the supplied path (default=`.`), and returns the underlying (`entry.object`).
+
+The `GitTreeEntry` object itself is not returned, for a better display experience. It is presumed that you know where you started.
 
 ## Credits
 

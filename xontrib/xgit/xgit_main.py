@@ -15,8 +15,7 @@ In addition, it extends the displayhook to provide the following variables:
 
 from contextlib import suppress
 from pathlib import Path
-from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, cast, Any, overload
+from typing import Mapping, Optional, cast, Any
 from collections.abc import Callable
 from inspect import signature, Signature
 import builtins
@@ -310,11 +309,13 @@ def git_ls(path: Path | str = ".", stderr=sys.stderr):
                 tree = nparent[path.name].hash
                 parent = nparent.hash
         _, dir = _git_entry(tree, path.name, "0400", "tree", "-", xv.XGIT, parent)
-        return cast(GitTree, dir)
+        return dir.object
 
 
 _xonsh_displayhook = sys.displayhook
-
+"""
+Xonsh's original displayhook.
+"""
 
 def _xgit_displayhook(value: Any):
     """
@@ -424,6 +425,12 @@ def update_git_context(olddir, newdir):
         # Fast move within the same worktree.
         xv.XGIT.git_path = Path(newdir).resolve().relative_to(xv.XGIT.worktree)
 
+def xgit_version():
+    """
+    Return the version of xgit.
+    """
+    from importlib.metadata import version
+    return version("xontrib-xgit")
 
 # Export the functions and values we want to make available.
 
@@ -499,6 +506,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         set_unload(xsh.aliases, name, value)
         xsh.aliases[name] = value
 
+    XSH.env['PROMPT_FIELDS']['xgit.version'] = xgit_version
+
     if "XGIT_ENABLE_NOTEBOOK_HISTORY" not in XSH.env:
         XSH.env["XGIT_ENABLE_NOTEBOOK_HISTORY"] = True
 
@@ -534,4 +543,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     XSH.ctx["_xgit_counter"] = _xgit_counter
     if XSH.env.get("XGIT_TRACE_LOAD"):
         print("Unloaded xontrib-xgit", file=sys.stderr)
+    if 'xgit.version' in XSH.env['PROMPT_FIELDS']:
+        del XSH.env['PROMPT_FIELDS']['xgit.version']
     return dict()

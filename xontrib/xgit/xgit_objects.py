@@ -1,12 +1,11 @@
 '''
-Implementations of the `GitObject family of classes.
+Implementations of the `GitObject famil of classes.
 
 These are the core objects that represent the contents of a git repository.
 '''
 
 from datetime import datetime
-from typing import Optional, Literal, Sequence, cast
-import sys
+from typing import Optional, Literal, Sequence, Any, Protocol
 
 from xonsh.built_ins import XSH
 from xonsh.tools import chdir
@@ -32,6 +31,12 @@ from xontrib.xgit.xgit_vars import (
     XGIT_REFERENCES,
 )
 from xontrib.xgit.xgit_procs import _run_object, _run_stdout
+
+class ObjectMetaclass(type(Protocol)):
+    def __instancecheck__(self, instance: Any) -> bool:
+        if hasattr(instance, '__object'):
+            return isinstance(instance.__object, self)
+        return super().__instancecheck__(instance)
 
 class _GitId(GitId):
     """
@@ -81,7 +86,7 @@ class _GitId(GitId):
         return self.hash.format(fmt)
 
 
-class _GitObject(_GitId, GitObject):
+class _GitObject(_GitId, GitObject, metaclass=ObjectMetaclass):
     """
     Any object stored in a git repository. Holds the hash and type of the object.
     """
@@ -108,6 +113,9 @@ class _GitObject(_GitId, GitObject):
 
     def __format__(self, fmt: str):
         return f"{self.type} {super().__format__(fmt)}"
+
+    def _repr_pretty_(self, p, cycle):
+        p.text(f"{type(self).__name__.strip('_')}({self.hash})")
 
 
 def _parse_git_entry(
@@ -142,7 +150,7 @@ def _git_entry(
     if type == "tree":
         obj = _GitTree(hash, context=context)
     elif type == "blob":
-        obj = _GitBlob(hash, size, context=context)
+        obj = _GitBlob(hash, int(size), context=context)
     else:
         # We don't currently handle tags or commits (submodules)
         raise ValueError(f"Unknown type {type}")
@@ -238,40 +246,37 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
         The second part is a path to the directory.
 
         The first part can contain:
-        - 'r' to format recursively
         - 'l' to format the entries in long format.
         - 'a' to abbreviate the hash to 8 characters.
         - 'd' to format the directory as itself
-        - 'n' to include only the entry names, not the full paths.
         """
-        dfmt, *rest = fmt.split(":", 1)
-        path = rest[0] if rest else ""
-
-        def dpath(name: str) -> str:
-            if "n" not in dfmt:
-                return f"{path}/{name}"
-            return ""
-
-        if "r" in dfmt:
+        if "l" in fmt and "d" not in fmt:
             return "\n".join(
-                e.__format__(f"{dfmt}:{dpath(n)}") for n, e in self.items()
+                e.__format__(f"d{fmt}") for e in self.values()
             )
-        if "l" in dfmt and "d" not in dfmt:
-            return "\n".join(
-                e.__format__(f"d{dfmt}:{dpath(n)}") for n, e in self.items()
-            )
-        hash = self.hash[:8] if "a" in dfmt else self.hash
+        hash = self.hash[:8] if "a" in fmt else self.hash
         return f"D {hash} {len(self):>8d}"
 
     def _repr_pretty_(self, p, cycle):
         if cycle:
             p.text(f"GitTree({self.hash})")
         else:
-            with p.group(4, f"GitTree({self.hash})[{len(self)}]"):
-                for n, e in self.items():
-                    p.breakable()
-                    #p.text(f"{e:ld} {n}")
-                    p.text(f"{e} {n}")
+            with p.group(4, f"GitTree({self.hash!r}, len={len(self)}, '''", "\n''')"):
+                for e in self.values():
+                    p.break_()
+                    if e.type == "tree":
+                        rw = "D"
+                    elif e.mode == "120000":
+                        rw = "L"
+                    elif e.mode == "160000":
+                        rw = "S"
+                    elif e.mode == "100755":
+                        rw = "X"
+                    else:
+                        rw = "-"
+                    size = str(e.size) if e.size >= 0 else '-'
+                    l = f'{rw} {self.hash} {size:>8s} {e.name}'
+                    p.text(l)
 
 
 class _GitBlob(_GitObject, GitBlob):
@@ -286,7 +291,7 @@ class _GitBlob(_GitObject, GitBlob):
     def __init__(
         self,
         hash: GitHash,
-        size: int|str,
+        size: int=-1,
         /,
         *,
         context: Optional[GitContext] = XGIT,
@@ -299,11 +304,10 @@ class _GitBlob(_GitObject, GitBlob):
         )
 
     def __str__(self):
-        rw = "X" if self.mode == "100755" else "-"
-        return f"{rw} {self.hash} {self.size:>8d}"
+        return f"{self.type} {self.hash} {self.size:>8d}"
 
     def __repr__(self):
-        return f"GitFile({self,hash!r})"
+        return f"GitFile({self.hash!r})"
 
     def __len__(self):
         return self.size
@@ -322,13 +326,13 @@ class _GitBlob(_GitObject, GitBlob):
         The format string can contain:
         - 'l' to format the file in long format.
         """
-        dfmt, *rest = fmt.split(":", 1)
-        path = f" {rest[0]}" if rest else ""
-        rw = "X" if self.mode == "100755" else "-"
-        hash = self.hash[:8] if "a" in dfmt else self.hash
-        if "l" in dfmt:
-            return f"{rw} {hash} {self.size:>8d}{path}"
-        return path or hash
+        hash = self.hash[:8] if "a" in fmt else self.hash
+        if "l" in fmt:
+            return f"{hash} {self.size:>8d}"
+        return hash
+
+    def _repr_pretty_(self, p, cycle):
+        p.text(f"GitBlob({self.hash!r}, {self.size})")
 
     @property
     def data(self):
