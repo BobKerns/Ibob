@@ -22,11 +22,9 @@ from xontrib.xgit.xgit_types import (
     GitTree,
     GitCommit,
     GitTagObject,
-)
-from xontrib.xgit.xgit_context import (
-    _GitRepository,
-    _GitWorktree,
-    _GitContext,
+    GitRepository,
+    GitWorktree,
+    GitContext,
 )
 from xontrib.xgit.xgit_main import (
     _load_xontrib_,
@@ -49,9 +47,9 @@ __all__ = (
     "GitTree",
     'GitCommit',
     'GitTagObject',
-    "_GitRepository",
-    "_GitWorktree",
-    "_GitContext",
+    "GitRepository",
+    "GitWorktree",
+    "GitContext",
     "GitEntryMode",
     "GitObjectType",
     "GitTreeEntry",

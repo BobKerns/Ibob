@@ -53,7 +53,16 @@ class _GitTreeEntry(GitTreeEntry):
     @property
     def entry_long(self):
         size = str(self.size) if self.size >= 0 else '-'
-        rw = "X" if self.mode == "100755" else "-"
+        if self.type == "tree":
+            rw = "D"
+        elif self.mode == "120000":
+            rw = "L"
+        elif self.mode == "160000":
+            rw = "S"
+        elif self.mode == "100755":
+            rw = "X"
+        else:
+            rw = "-"
         return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
 
     @property
@@ -69,16 +78,16 @@ class _GitTreeEntry(GitTreeEntry):
         self._name = name
         self._mode = mode
         self._path = path or Path(name)
-        
+
     def __getattr__(self, name):
         try:
             return getattr(self._object, name)
         except AttributeError:
             raise AttributeError(f"GitTreeEntry has no attribute {name!r}") from None
-        
+
     #def __hasattr__(self, name):
-    #    return hasattr(self._object, name)  
-    
+    #    return hasattr(self._object, name)
+
     def __getitem__(self, name):
         return self._object[name]
 
