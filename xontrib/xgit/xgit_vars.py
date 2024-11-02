@@ -7,6 +7,7 @@ import sys
 
 from xonsh.built_ins import XSH
 
+import xontrib.xgit as xgit
 from xontrib.xgit.xgit_types import (
     GitContext,
     GitObjectReference,
@@ -54,6 +55,12 @@ A map to where an object is referenced.
 
 
 # Set up the notebook-style convenience history variables.
-
-_xgit_counter = XSH.ctx.get("_xgit_counter", None) or iter(range(sys.maxsize))
-_count: int = next(_xgit_counter)
+def _xgit_count():
+    """
+    Set up and use the counter for notebook-style history.
+    """
+    counter = xgit.__dict__.get("_xgit_counter", None) 
+    if not counter:
+        counter = iter(range(1, sys.maxsize))
+        xgit.__dict__["_xgit_counter"] = counter
+    return next(counter)
