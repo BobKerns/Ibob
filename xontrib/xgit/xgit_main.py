@@ -39,7 +39,7 @@ from xontrib.xgit.xgit_objects import (
 )
 from xontrib.xgit.xgit_vars import (
     _set_xgit,
-    _xgit_counter,
+    _xgit_count,
 )
 from xontrib.xgit import xgit_vars as xv
 
@@ -79,7 +79,7 @@ def _export(cmd: Any | str, name: Optional[str] = None):
     """
     if name is None and isinstance(cmd, str):
         name = cmd
-        cmd = xv.__dict__[cmd]
+        cmd = xv.__dict__.get(cmd, None)
     if name is None:
         name = getattr(cmd, "__name__", None)
     if name is None:
@@ -358,15 +358,15 @@ def _xgit_on_predisplay(value: Any):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
-    global _count
+    global count
     if (
         value is not None
         and not isinstance(value, HiddenCommandPipeline)
         and XSH.env.get("XGIT_ENABLE_NOTEBOOK_HISTORY")
     ):
-        _count = next(_xgit_counter)
-        ivar = f"_i{_count}"
-        ovar = f"_{_count}"
+        count = _xgit_count()
+        ivar = f"_i{count}"
+        ovar = f"_{count}"
         XSH.ctx[ivar] = XSH.ctx["-"]
         XSH.ctx[ovar] = value
         print(f"{ovar}: ", end="")
@@ -539,10 +539,11 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     remove("on_chdir", update_git_context)
     remove("xgit_on_predisplay", _xgit_on_predisplay)
     remove("xgit_on_postdisplay", _xgit_on_postdisplay)
-    # Remember this across reloads.
-    XSH.ctx["_xgit_counter"] = _xgit_counter
     if XSH.env.get("XGIT_TRACE_LOAD"):
         print("Unloaded xontrib-xgit", file=sys.stderr)
     if 'xgit.version' in XSH.env['PROMPT_FIELDS']:
         del XSH.env['PROMPT_FIELDS']['xgit.version']
+        
+    for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
+        del sys.modules[m]
     return dict()
