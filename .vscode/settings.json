@@ -19,7 +19,9 @@
         "dfmt",
         "dpath",
         "execer",
+        "extracontext",
         "frozendict",
+        "gctx",
         "Gitter",
         "itercheck",
         "ivar",
@@ -38,6 +40,7 @@
         "precommand",
         "predisplay",
         "procs",
+        "proxied",
         "PYPI",
         "pyproject",
         "pythonic",
@@ -49,8 +52,12 @@
         "XGIT",
         "xonfig",
         "xonsh",
+        "xontext",
         "xontrib",
         "xontribs",
         "xpip"
-    ]
+    ],
+    "hide-files.files": [],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.terminal.shellIntegration.enabled": true
 }

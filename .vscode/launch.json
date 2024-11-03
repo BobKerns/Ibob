@@ -5,13 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: xgit_main",
             "type": "debugpy",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
+            "program": "${workspaceFolder}/xontrib/xgit/xgit_main.py",
+            // integraatedTerminal hangs!
+            "console": "internalConsole",
+            "justMyCode": true,
+            "python": "/Users/rwk/p/xontrib-xgit/.venv/bin/python3.12",
+            "args": ["git-ls"],
             "env": {
-                "PYTHONPATH": "${workspaceFolder}"
+                "PYTHONPATH": "${workspaceFolder}",
+                "XONSH_DEBUG": "1",
+                "XGIT_TRACE_ERRORS": "True",
+                "XONSH_SHOW_TRACEBACK": "True"
             }
         }
     ]

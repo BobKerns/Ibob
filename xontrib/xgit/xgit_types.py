@@ -8,11 +8,13 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 from abc import abstractmethod
 from datetime import datetime
 from io import IOBase
+from readline import parse_and_bind
 from typing import (
     Callable, Iterator, TypeAlias, Literal, Protocol, runtime_checkable,
-    Sequence
+    Sequence, Any, Generic, TypeVar
 )
 from pathlib import Path
+from wave import Wave_write
 
 CleanupAction: TypeAlias = Callable[[], None]
 """
@@ -87,7 +89,7 @@ class GitWorktree(GitRepository, Protocol):
     worktree: Path | None = Path(".")
 
 @runtime_checkable
-class GitContext(Protocol):
+class GitContext(GitWorktree, Protocol):
     """
     A git context. A protocol to avoid circular imports.
     """
@@ -156,16 +158,40 @@ class GitTree(GitObject, Protocol):
     @abstractmethod
     def __init__(self, hash: GitHash,
                  loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
+                 cleanup: Optional[CleanupAction] = None): ...
     @property
     def type(self) -> Literal['tree']:
         return 'tree'
 
-    @property
     @abstractmethod
-    def entries(self) -> dict[str, GitObject]:
-        ...
+    def items(self) -> dict[str, GitObject]: ...
+        
+    @abstractmethod
+    def keys(self) -> Iterator[str]: ...
+    
+    @abstractmethod
+    def values(self) -> Iterator[GitObject]: ...
+        
+    @abstractmethod
+    def __getitem__(self, key: str) -> GitObject: ...
+        
+    @abstractmethod
+    def __iter__(self) -> Iterator[str]:  ...
+        
+    @abstractmethod
+    def __len__(self) -> int: ...
+        
+    @abstractmethod
+    def __contains__(self, key: str) -> bool: ...
+        
+    @abstractmethod
+    def get(self, key: str, default: Any = None) -> GitObject: ...
+        
+    @abstractmethod
+    def __eq__(self, other: Any) -> bool: ...
+        
+    def __bool__(self) -> bool: ...
+    
 
 @runtime_checkable
 class GitBlob(GitObject, Protocol):
@@ -207,6 +233,7 @@ class GitCommit(GitObject, Protocol):
     @property
     def type(self) -> Literal['commit']:
         return 'commit'
+
     @property
     @abstractmethod
     def message(self) -> str:
@@ -217,15 +244,38 @@ class GitCommit(GitObject, Protocol):
         ...
     @property
     @abstractmethod
+    def author_date(self) -> datetime:
+        ...
+
+    @property
+    @abstractmethod
+    def author_email(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def author_name(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
     def committer(self) -> str:
         ...
     @property
     @abstractmethod
-    def author_date(self) -> datetime:
-        ...
-    @abstractmethod
     def committer_date(self) -> datetime:
         ...
+
+    @property
+    @abstractmethod
+    def committer_email(self) -> datetime:
+        ...
+
+    @property
+    @abstractmethod
+    def committer_name(self) -> datetime:
+        ...
+
     @property
     @abstractmethod
     def tree(self) -> GitTree:
@@ -284,29 +334,31 @@ class GitTreeEntry(GitObject, Protocol):
         ...
     @property
     @abstractmethod
-    def mode(self) -> GitEntryMode:
-        ...
+    def mode(self) -> GitEntryMode: ...
     @property
     @abstractmethod
-    def size(self) -> int:
-        ...
+    def size(self) -> int: ...
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
     @property
     @abstractmethod
-    def entry(self) -> str:
-        ...
+    def entry(self) -> str: ...
     @property
     @abstractmethod
-    def entry_long(self) -> str:
-        ...
+    def entry_long(self) -> str: ...
     @property
     @abstractmethod
-    def object(self) -> GitObject:
-        ...
+    def object(self) -> GitObject: ...
     @property
     @abstractmethod
-    def path(self) -> Path:
-        ...
+    def path(self) -> Path: ...
+    @abstractmethod
+    def __getitem__(self, key: str) -> GitObject: ...
+
+
+T = TypeVar("T", covariant=True)
+@runtime_checkable
+class XGitProxy(Generic[T], Protocol):
+    """fff"""
+    _target: T
