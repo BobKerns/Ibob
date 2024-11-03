@@ -153,9 +153,9 @@ def _git_context():
     def multi_params(params: str, /) -> str: ...
 
     @overload
-    def multi_params(param: str, *params: str) -> Sequence[str]: ...
+    def multi_params(param: str, *_params: str) -> Sequence[str]: ...
 
-    def multi_params(*params: str) -> Sequence[str] | str:
+    def multi_params(param: str, *params: str) -> Sequence[str] | str:
         """
         Use `git rev-parse` to get multiple parameters at once.
         """
@@ -187,17 +187,18 @@ def _git_context():
             repository = Path(repository)
             common = repository / common
             git_path = Path.cwd().relative_to(worktree)
-            branch = XSH.subproc_captured_stdout(
+            branch = _run_stdout(
                 ["git", "name-rev", "--name-only", commit]
             )
-            if worktree in XGIT_CONTEXTS:
-                xgit = XGIT_CONTEXTS[worktree]
+            key = worktree or repository
+            if key in XGIT_CONTEXTS:
+                xgit = XGIT_CONTEXTS[key]
                 xgit.git_path = git_path
                 xgit.commit = commit
                 xgit.branch = branch
                 return xgit
             else:
-                return _GitContext(
+                gctx = _GitContext(
                     worktree=worktree,
                     repository=repository,
                     common=common,
@@ -205,6 +206,8 @@ def _git_context():
                     commit=commit,
                     branch=branch,
                 )
+                XGIT_CONTEXTS[key] = gctx
+                return gctx
         elif in_git == "true":
             # Inside a .git directory or bare repository.
             repository, common = multi_params("--absolute-git-dir", "--git-common-dir")
@@ -216,7 +219,7 @@ def _git_context():
             commits = multi_params("HEAD", "main", "master")
             commits = list(filter(lambda x: x, list(commits)))
             commit = commits[0] if commits else ""
-            branch = XSH.subproc_captured_stdout(
+            branch = _run_stdout(
                 ["git", "name-rev", "--name-only", commit]
             )
             repo = worktree or repository
@@ -237,7 +240,9 @@ def _git_context():
         else:
             return None
     except Exception as ex:
-        if XSH.env.get("XGIT_TRACE_ERRORS"):
+        env = XSH.env
+        assert env is not None, "XSH.env is None"
+        if env.get("XGIT_TRACE_ERRORS"):
             import traceback
             traceback.print_exc()
         print(f"Error setting git context: {ex}", file=sys.stderr)

@@ -8,6 +8,7 @@ refs and entries in trees.
 from typing import Any, Optional
 from pathlib import Path
 
+from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.xgit_types import (
     GitEntryMode,
     GitObject, GitTreeEntry,
@@ -40,6 +41,26 @@ class _GitTreeEntry(GitTreeEntry):
     @property
     def size(self):
         return self._object.size
+    
+    @property
+    def object(self):
+        return self._object
+
+    @property
+    def prefix(self):
+        """
+        Return the prefix for the entry type.
+        """
+        if self.type == "tree":
+            return "D"
+        elif self.mode == "120000":
+            return "L"
+        elif self.mode == "160000":
+            return "S"
+        elif self.mode == "100755":
+            return "X"
+        else:
+            return"-"
 
     @property
     def name(self):
@@ -47,27 +68,14 @@ class _GitTreeEntry(GitTreeEntry):
 
     @property
     def entry(self):
-        rw = "X" if self.mode == "100755" else "-"
+        rw = self.prefix
         return f"{rw} {self.type} {self.hash}\t{self.name}"
 
     @property
     def entry_long(self):
         size = str(self.size) if self.size >= 0 else '-'
-        if self.type == "tree":
-            rw = "D"
-        elif self.mode == "120000":
-            rw = "L"
-        elif self.mode == "160000":
-            rw = "S"
-        elif self.mode == "100755":
-            rw = "X"
-        else:
-            rw = "-"
+        rw = self.prefix
         return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
-
-    @property
-    def object(self):
-        return self._object
 
     @property
     def path(self):
@@ -89,9 +97,10 @@ class _GitTreeEntry(GitTreeEntry):
     #    return hasattr(self._object, name)
 
     def __getitem__(self, name):
-        return self._object[name]
+        # Only implemented for trees, but we'll let the object raise the exception.
+        return self._object[name] # type: ignore
 
-    def __contains__(self, name):
+    def __contains__(self, name):             
         return name in self._object
 
     def __str__(self):
@@ -103,15 +112,15 @@ class _GitTreeEntry(GitTreeEntry):
     def __format__(self, fmt: str):
         return f"{self.entry_long.__format__(fmt)}"
 
-    def _repr_pretty_(self, p, cycle):
+    def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
         if cycle:
             p.text("GitTreeEntry(...)")
         else:
             with p.group(4, "GitTreeEntry(", ')'):
-                p.breakable(),
-                self._object._repr_pretty_(p, cycle),
-                p.text(','),
-                p.breakable(),
+                p.breakable()
+                p.pretty(self._object)
+                p.text(',')
+                p.breakable()
                 p.text(f'mode{self.mode!r},')
-                p.breakable(),
+                p.breakable()
                 p.text(f'name={self.name!r}')

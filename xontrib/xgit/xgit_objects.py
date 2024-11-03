@@ -4,8 +4,12 @@ Implementations of the `GitObject famil of classes.
 These are the core objects that represent the contents of a git repository.
 '''
 
+from typing import (
+    Optional, Literal, Sequence, Any, Protocol, cast, TypeAlias,
+    Callable,
+)
 from datetime import datetime
-from typing import Optional, Literal, Sequence, Any, Protocol
+import re
 
 from xonsh.built_ins import XSH
 from xonsh.tools import chdir
@@ -25,14 +29,19 @@ from xontrib.xgit.xgit_types import (
     GitTreeEntry,
 )
 from xontrib.xgit.xgit_refs import _GitTreeEntry
-from xontrib.xgit.xgit_vars import (
-    XGIT,
-    XGIT_OBJECTS,
-    XGIT_REFERENCES,
+#from xontrib.xgit.xgit_vars import (
+#    XGIT,
+#    XGIT_OBJECTS
+#    XGIT_REFERENCES,
+#)
+from xontrib.xgit import xgit_vars as xv
+from xontrib.xgit.xgit_procs import (
+    _run_binary, _run_stdout, _run_text, _run_lines, _run_stream
 )
-from xontrib.xgit.xgit_procs import _run_object, _run_stdout
 
-class ObjectMetaclass(type(Protocol)):
+GitContextFn: TypeAlias = Callable[[], GitContext]
+
+class ObjectMetaclass(type(Protocol)): # type: ignore
     def __instancecheck__(self, instance: Any) -> bool:
         if hasattr(instance, '__object'):
             return isinstance(instance.__object, self)
@@ -55,7 +64,7 @@ class _GitId(GitId):
         /,
         *,
         loader: Optional[GitLoader] = None,
-        context: 'Optional[GitContext]' = XGIT,
+        **kwargs,
     ):
         self._hash = hash
         self._lazy_loader = loader
@@ -101,7 +110,7 @@ class _GitObject(_GitId, GitObject, metaclass=ObjectMetaclass):
         size=-1,
         /,
         loader: Optional[GitLoader] = None,
-        context: Optional[GitContext] = XGIT,
+        context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
     ):
         _GitId.__init__(
             self,
@@ -110,21 +119,31 @@ class _GitObject(_GitId, GitObject, metaclass=ObjectMetaclass):
             context=context,
         )
         self._size = size
+        
+    @property
+    def type(self):
+        raise NotImplementedError("Must be implemented in a subclass")
 
     def __format__(self, fmt: str):
         return f"{self.type} {super().__format__(fmt)}"
 
     def _repr_pretty_(self, p, cycle):
         p.text(f"{type(self).__name__.strip('_')}({self.hash})")
-
+xv.__dict__['_GitObject'] = _GitObject
 
 def _parse_git_entry(
-    line: str, context: Optional[GitContext] = XGIT, parent: GitHash | None = None
+    line: str,
+    context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
+parent: GitHash | None = None
 ) -> tuple[str, GitTreeEntry]:
+    if callable(context):
+        context = context()
     """
     Parse a line from `git ls-tree --long` and return a `GitObject`.
     """
     mode, type, hash, size, name = line.split()
+    mode = cast(GitEntryMode, mode)
+    type = cast(GitObjectType, type)
     return _git_entry(hash, name, mode, type, size, context, parent)
 
 
@@ -134,31 +153,36 @@ def _git_entry(
     mode: GitEntryMode,
     type: GitObjectType,
     size: str|int,
-    context: Optional[GitContext] = XGIT,
+    context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
     parent: str | None = None,
 ) -> tuple[str, GitTreeEntry]:
+    if callable(context):
+        context = context()
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
+    assert XSH.env is not None, "env() not a mapping"
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
         print(msg)
-    entry = XGIT_OBJECTS.get(hash)
-    if entry is not None:
-        return name, entry
+    
+    entry = xv.XGIT_OBJECTS.get(hash)
     if type == "tree":
         obj = _GitTree(hash, context=context)
     elif type == "blob":
         obj = _GitBlob(hash, int(size), context=context)
+    elif type == "commit":
+        obj = _GitCommit(hash, context=context)
+    elif type == "tag":
+        obj = _GitTagObject(hash, context=context)
     else:
-        # We don't currently handle tags or commits (submodules)
         raise ValueError(f"Unknown type {type}")
-    XGIT_OBJECTS[hash] = obj
+    xv.XGIT_OBJECTS[hash] = obj
     entry = _GitTreeEntry(obj, name, mode)
     if context is not None:
         key = (context.reference(name), parent)
-        XGIT_REFERENCES[hash].add(key)
+        xv.XGIT_REFERENCES[hash].add(key)
     return name, entry
 
 
@@ -176,13 +200,15 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
         tree: GitHash,
         /,
         *,
-        context: Optional[GitContext] = XGIT,
+        context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT),
     ):
+        if callable(context):
+            context = context()
         def _lazy_loader():
             nonlocal context
             context = context.new_context()
             with chdir(context.worktree):
-                for line in _run_object(["git", "ls-tree", "--long", tree]):
+                for line in _run_lines(["git", "ls-tree", "--long", tree]):
                     if line:
                         name, entry = _parse_git_entry(line, context, tree)
                         dict.__setitem__(self, name, entry)
@@ -207,15 +233,15 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
 
     def __len__(self):
         self._expand()
-        return super().__len__()
+        return dict.__len__(self)
 
     def __contains__(self, key):
         self._expand()
-        return super().__contains__(key)
+        return dict.__contains__(self, key)
 
     def __getitem__(self, key: str) -> _GitObject:
         self._expand()
-        return super().__getitem__(key)
+        return dict.__getitem__(self, key)
 
     def __setitem__(self, key: str, value: _GitObject):
         raise NotImplementedError("Cannot set items in a GitTree")
@@ -225,15 +251,30 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
 
     def __iter__(self):
         self._expand()
-        return super().__iter__()
+        return dict.__iter__(self)
 
     def __bool__(self):
-        self._expand()
-        return super().__bool__()
+        return len(self) > 0
 
     def __reversed__(self):
         self._expand()
         return super().__reversed__()
+    
+    def items(self):
+        self.expand()
+        return dict.items(self)
+    
+    def keys(self):
+        self.expand()
+        return dict.keys(self)
+    
+    def values(self):
+        self.expand()
+        return dict.values(self)
+    
+    def get(self, key: str, default: Any = None):
+        self.expand()
+        return dict.get(self, key, default)
 
     def __str__(self):
         return f"D {self.hash} {len(self):>8d}"
@@ -294,7 +335,7 @@ class _GitBlob(_GitObject, GitBlob):
         size: int=-1,
         /,
         *,
-        context: Optional[GitContext] = XGIT,
+        context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT),
     ):
         _GitObject.__init__(
             self,
@@ -339,23 +380,38 @@ class _GitBlob(_GitObject, GitBlob):
         """
         Return the contents of the file.
         """
-        return _run_object(["git", "cat-file", "blob", self.hash], text=True).stdout
+        return _run_binary(["git", "cat-file", "blob", self.hash]).stdout
 
     @property
     def stream(self):
         """
         Return the contents of the file.
         """
-        return _run_object(["git", "cat-file", "blob", self.hash], text=True).stdout
+        return _run_stream(["git", "cat-file", "blob", self.hash])
 
     @property
     def lines(self):
-        return _run_object(["git", "cat-file", "blob", self.hash], text=True).itercheck()
+        return _run_lines(["git", "cat-file", "blob", self.hash])
 
     @property
     def text(self):
-        return _run_stdout(["git", "cat-file", "blob", self.hash])
+        return _run_text(["git", "cat-file", "blob", self.hash])
+    
+_RE_AUTHOR = re.compile(r"^(([^<]+) [<]([^>+])[>]) (\d+) ([+-]\d{4})$")
 
+def _parse_author_date(line: str) -> tuple[str, str, str, datetime]:
+    """
+    Parse a line from a git commit and return the author info and the date.
+    
+    returns: author, name, email, date
+    """
+    m = _RE_AUTHOR.match(line)
+    if m is None:
+        raise ValueError(f"Could not parse author line: {line}")
+    author, name, email, _date, _tz = m.groups()
+    tz = datetime.strptime(_tz, "%z").tzinfo
+    date = datetime.fromtimestamp(int(_date), tz=tz)
+    return author, name, email, date
 
 class _GitCommit(_GitObject, GitCommit):
     """
@@ -365,47 +421,122 @@ class _GitCommit(_GitObject, GitCommit):
     @property
     def type(self) -> Literal["commit"]:
         return "commit"
-    _tree: GitTree
+    
+    _tree: GitTree|GitLoader
     @property
     def tree(self) -> GitTree:
-        return self._tree
-    _parents: Sequence[GitCommit]
+        if callable(self._tree):
+            self._tree()
+        return cast(GitTree, self._tree)
+    
+    _parents: Sequence[GitCommit]|GitLoader
     @property
-    def parents(self) -> list[GitCommit]:
-        return self._parents
-    _message: str
+    def parents(self) -> Sequence[GitCommit]:
+        if callable(self._parents):
+            self._parents()
+        return cast(Sequence[GitCommit], self._parents)
+    
+    _message: str|GitLoader
     @property
     def message(self) -> str:
-        return self._message
-    _author: str
+        if callable(self._message):
+            self._message()
+        return cast(str, self._message)
+    
+    _author: str|GitLoader
     @property
     def author(self) -> str:
-        return self._author
-    _author_date: datetime
+        if callable(self._author):
+            self._author()
+        return cast(str, self._author)
+    
+    _author_date: datetime|GitLoader
     @property
     def author_date(self) -> datetime:
-        return self._date
-    _committer: str
+        if callable(self.author_date):
+            self.author_date()
+        return self.author_date
+    
+    _author_email: str|GitLoader
+    @property
+    def author_email(self) -> str:
+        if callable(self.author_email):
+            self.author_email()
+        return self.author_email
+    
+    _author_name: str|GitLoader
+    @property
+    def author_name(self) -> str:
+        if callable(self.author_name):
+            self.author_name()
+        return self.author_name
+
+    _committer: str|GitLoader
     @property
     def committer(self) -> str:
-        return self._committer
-    _committer_date: datetime
+        if callable(self._committer):
+            self._committer()
+        return cast(str, self._committer)
+    
+    _committer_date: datetime|GitLoader
     @property
-    def committer_date(self) -> datetime:
-        return self._date
+    def committer_date(self) -> datetime|GitLoader:
+        if callable(self._committer_date):
+            self._committer_date()
+        return cast(datetime, self._committer_date)
 
-    def __init__(self, hash: str, /, *, context: Optional[GitContext] = XGIT):
+    _committer_email: str|GitLoader
+    @property
+    def committer_name(self) -> str|GitLoader:
+        if callable(self._committer_name):
+            self._committer_name()
+        return cast(str, self._committer_name)
+    
+    _committer_email: str|GitLoader
+    @property
+    def committer_email(self) -> str|GitLoader:
+        if callable(self._committer_email):
+            self._committer_email()
+        return cast(str, self._committer_email)
+    
+    def _update_author(self, line: str):
+        author, name, email, date = _parse_author_date(line)
+        self._author = author 
+        self._author_name = name
+        self._author_email = email
+        self._author_date = date
+    
+    def _updatecommitter(self, line: str):
+        committer, name, email, date = _parse_author_date(line)
+        self._committer = committer 
+        self._committer_name = name
+        self._hashcommitter_email = email
+        self._committer_date = date
+        
+
+    def __init__(self, hash: str, /, *, context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT)):
+        if callable(context):
+            context = context()
         def loader():
             nonlocal context
             context = context.new_context(commit=hash)
             with chdir(context.worktree):
-                lines = _run_object(["git", "cat-file", "commit", hash], text=True)
+                lines = _run_lines(["git", "cat-file", "commit", hash])
                 tree = next(lines).split()[1]
-                self.tree = _GitTree(tree, context=context)
-                self.parents = []
+                self._tree = _GitTree(tree, context=context)
+                self._parents = []
                 for line in lines:
                     if line.startswith("parent"):
-                        self.parents.append(_GitCommit(line.split()[1], context=context))
+                        self._parents.append(_GitCommit(line.split()[1], context=context))
+                    elif line.startswith("author"):
+                        self._author = line.split(maxsplit=1)[1]
+                    elif line.startswith("committer"):
+                        self._committer = line.split(maxsplit=1)[1]
+                    elif line == "":
+                        break
+                    else:
+                        raise ValueError(f"Unexpected line: {line}")
+                self._message = "\n".join(lines)
             self._lazy_loader = None
 
         _GitObject.__init__(self, hash, context=context, loader=loader)
@@ -442,23 +573,27 @@ class _GitTagObject(_GitObject, GitTagObject):
     def message(self) -> str:
         return self._message
 
-    def __init__(self, hash: str, /, *, context: Optional[GitContext] = XGIT):
+    def __init__(self, hash: str, /, *,
+                 context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT)):
         def loader():
             nonlocal context
             context = context.new_context(commit=hash)
             with chdir(context.worktree):
-                lines = _run_object(["git", "cat-file", "tag", hash], text=True)
+                lines = _run_lines(["git", "cat-file", "tag", hash])
                 for line in lines:
                     if line.startswith("object"):
-                        self.object = _GitObject(line.split()[1], context=context)
+                        self._object = _GitObject(line.split()[1], context=context)
                     elif line.startswith("type"):
-                        self.type = line.split()[1]
+                        self._type = line.split()[1]
                     elif line.startswith("tag"):
-                        self.tag = line.split(maxsplit=1)[1]
+                        self._tag = line.split(maxsplit=1)[1]
                     elif line.startswith("tagger"):
-                        self.tagger = line.split(maxsplit=1)[1]
+                        self._lazy_loadertagger = line.split(maxsplit=1)[1]
                     elif line == "":
                         break
+                    else:
+                        raise ValueError(f"Unexpected line: {line}")
+                self._message = "\n".join(lines)
             self._lazy_loader = None
         _GitObject.__init__(self, hash, context=context, loader=loader)
 

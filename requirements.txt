@@ -1,3 +1,4 @@
 ipython
-prompt_toolkit
+prompt-toolkit
 xonsh
+python-extracontext>=1.0.0
