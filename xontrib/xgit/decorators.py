@@ -8,9 +8,9 @@ from inspect import signature, Signature
 from functools import partial
 import sys
 
-from xontrib.xgit import xgit_vars as xv
-from xontrib.xgit.xgit_types import CleanupAction
-from xontrib.xgit.xgit_vars import XSH
+from xontrib.xgit import vars as xv
+from xontrib.xgit.types import CleanupAction
+from xontrib.xgit.vars import XSH
 
 
 _unload_actions: list[CleanupAction] = []

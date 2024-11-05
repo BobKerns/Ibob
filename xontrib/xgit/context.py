@@ -16,14 +16,14 @@ from xonsh.built_ins import XSH
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
-from xontrib.xgit.xgit_types import (
+from xontrib.xgit.types import (
     GitContext,
     ContextKey,
     GitRepository,
     GitWorktree,
 )
-from xontrib.xgit.xgit_vars import XGIT_CONTEXTS
-from xontrib.xgit.xgit_procs import (
+from xontrib.xgit.vars import XGIT_CONTEXTS
+from xontrib.xgit.procs import (
     _run_stdout
 )
 

@@ -14,7 +14,7 @@ import re
 from xonsh.built_ins import XSH
 from xonsh.tools import chdir
 
-from xontrib.xgit.xgit_types import (
+from xontrib.xgit.types import (
     GitLoader,
     GitHash,
     GitEntryMode,
@@ -28,14 +28,14 @@ from xontrib.xgit.xgit_types import (
     GitTagObject,
     GitTreeEntry,
 )
-from xontrib.xgit.xgit_refs import _GitTreeEntry
+from xontrib.xgit.entries import _GitTreeEntry
 #from xontrib.xgit.xgit_vars import (
 #    XGIT,
 #    XGIT_OBJECTS
 #    XGIT_REFERENCES,
 #)
-from xontrib.xgit import xgit_vars as xv
-from xontrib.xgit.xgit_procs import (
+from xontrib.xgit import vars as xv
+from xontrib.xgit.procs import (
     _run_binary, _run_stdout, _run_text, _run_lines, _run_stream
 )
 
@@ -119,7 +119,7 @@ class _GitObject(_GitId, GitObject, metaclass=ObjectMetaclass):
             context=context,
         )
         self._size = size
-        
+
     @property
     def type(self):
         raise NotImplementedError("Must be implemented in a subclass")
@@ -166,7 +166,7 @@ def _git_entry(
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
         print(msg)
-    
+
     entry = xv.XGIT_OBJECTS.get(hash)
     if type == "tree":
         obj = _GitTree(hash, context=context)
@@ -259,19 +259,19 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
     def __reversed__(self):
         self._expand()
         return super().__reversed__()
-    
+
     def items(self):
         self.expand()
         return dict.items(self)
-    
+
     def keys(self):
         self.expand()
         return dict.keys(self)
-    
+
     def values(self):
         self.expand()
         return dict.values(self)
-    
+
     def get(self, key: str, default: Any = None):
         self.expand()
         return dict.get(self, key, default)
@@ -396,13 +396,13 @@ class _GitBlob(_GitObject, GitBlob):
     @property
     def text(self):
         return _run_text(["git", "cat-file", "blob", self.hash])
-    
+
 _RE_AUTHOR = re.compile(r"^(([^<]+) [<]([^>+])[>]) (\d+) ([+-]\d{4})$")
 
 def _parse_author_date(line: str) -> tuple[str, str, str, datetime]:
     """
     Parse a line from a git commit and return the author info and the date.
-    
+
     returns: author, name, email, date
     """
     m = _RE_AUTHOR.match(line)
@@ -421,49 +421,49 @@ class _GitCommit(_GitObject, GitCommit):
     @property
     def type(self) -> Literal["commit"]:
         return "commit"
-    
+
     _tree: GitTree|GitLoader
     @property
     def tree(self) -> GitTree:
         if callable(self._tree):
             self._tree()
         return cast(GitTree, self._tree)
-    
+
     _parents: Sequence[GitCommit]|GitLoader
     @property
     def parents(self) -> Sequence[GitCommit]:
         if callable(self._parents):
             self._parents()
         return cast(Sequence[GitCommit], self._parents)
-    
+
     _message: str|GitLoader
     @property
     def message(self) -> str:
         if callable(self._message):
             self._message()
         return cast(str, self._message)
-    
+
     _author: str|GitLoader
     @property
     def author(self) -> str:
         if callable(self._author):
             self._author()
         return cast(str, self._author)
-    
+
     _author_date: datetime|GitLoader
     @property
     def author_date(self) -> datetime:
         if callable(self.author_date):
             self.author_date()
         return self.author_date
-    
+
     _author_email: str|GitLoader
     @property
     def author_email(self) -> str:
         if callable(self.author_email):
             self.author_email()
         return self.author_email
-    
+
     _author_name: str|GitLoader
     @property
     def author_name(self) -> str:
@@ -477,7 +477,7 @@ class _GitCommit(_GitObject, GitCommit):
         if callable(self._committer):
             self._committer()
         return cast(str, self._committer)
-    
+
     _committer_date: datetime|GitLoader
     @property
     def committer_date(self) -> datetime|GitLoader:
@@ -491,28 +491,28 @@ class _GitCommit(_GitObject, GitCommit):
         if callable(self._committer_name):
             self._committer_name()
         return cast(str, self._committer_name)
-    
+
     _committer_email: str|GitLoader
     @property
     def committer_email(self) -> str|GitLoader:
         if callable(self._committer_email):
             self._committer_email()
         return cast(str, self._committer_email)
-    
+
     def _update_author(self, line: str):
         author, name, email, date = _parse_author_date(line)
-        self._author = author 
+        self._author = author
         self._author_name = name
         self._author_email = email
         self._author_date = date
-    
+
     def _updatecommitter(self, line: str):
         committer, name, email, date = _parse_author_date(line)
-        self._committer = committer 
+        self._committer = committer
         self._committer_name = name
         self._hashcommitter_email = email
         self._committer_date = date
-        
+
 
     def __init__(self, hash: str, /, *, context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT)):
         if callable(context):

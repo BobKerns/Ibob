@@ -165,33 +165,33 @@ class GitTree(GitObject, Protocol):
 
     @abstractmethod
     def items(self) -> dict[str, GitObject]: ...
-        
+
     @abstractmethod
     def keys(self) -> Iterator[str]: ...
-    
+
     @abstractmethod
     def values(self) -> Iterator[GitObject]: ...
-        
+
     @abstractmethod
     def __getitem__(self, key: str) -> GitObject: ...
-        
+
     @abstractmethod
     def __iter__(self) -> Iterator[str]:  ...
-        
+
     @abstractmethod
     def __len__(self) -> int: ...
-        
+
     @abstractmethod
     def __contains__(self, key: str) -> bool: ...
-        
+
     @abstractmethod
     def get(self, key: str, default: Any = None) -> GitObject: ...
-        
+
     @abstractmethod
     def __eq__(self, other: Any) -> bool: ...
-        
+
     def __bool__(self) -> bool: ...
-    
+
 
 @runtime_checkable
 class GitBlob(GitObject, Protocol):
@@ -360,5 +360,4 @@ class GitTreeEntry(GitObject, Protocol):
 T = TypeVar("T", covariant=True)
 @runtime_checkable
 class XGitProxy(Generic[T], Protocol):
-    """fff"""
-    _target: T
+    """A proxy for an object managed in some other context"""

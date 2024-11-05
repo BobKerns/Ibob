@@ -9,7 +9,7 @@ from typing import Any, Optional
 from pathlib import Path
 
 from xonsh.lib.pretty import RepresentationPrinter
-from xontrib.xgit.xgit_types import (
+from xontrib.xgit.types import (
     GitEntryMode,
     GitObject, GitTreeEntry,
 )
@@ -41,7 +41,7 @@ class _GitTreeEntry(GitTreeEntry):
     @property
     def size(self):
         return self._object.size
-    
+
     @property
     def object(self):
         return self._object
@@ -100,7 +100,7 @@ class _GitTreeEntry(GitTreeEntry):
         # Only implemented for trees, but we'll let the object raise the exception.
         return self._object[name] # type: ignore
 
-    def __contains__(self, name):             
+    def __contains__(self, name):
         return name in self._object
 
     def __str__(self):

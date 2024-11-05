@@ -11,7 +11,7 @@ from xonsh.procs.pipelines import HiddenCommandPipeline
 from xonsh.events import events
 import builtins
 
-from xontrib.xgit.xgit_vars import (
+from xontrib.xgit.vars import (
     _xgit_count,
     XSH,
     XGitProxy,
