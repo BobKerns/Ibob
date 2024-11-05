@@ -11,8 +11,7 @@ and pythonic manipulation.
 See https://xonsh.org/ for more information about `xonsh`.
 """
 
-
-from xontrib.xgit.xgit_types import (
+from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
     GitHash,
@@ -25,8 +24,9 @@ from xontrib.xgit.xgit_types import (
     GitRepository,
     GitWorktree,
     GitContext,
+    GitTreeEntry,
 )
-from xontrib.xgit.xgit_main import (
+from xontrib.xgit.main import (
     _load_xontrib_,
     _unload_xontrib_,
     git_cd,
@@ -53,5 +53,4 @@ __all__ = (
     "GitEntryMode",
     "GitObjectType",
     "GitTreeEntry",
-    '__version__',
 )

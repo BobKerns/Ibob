@@ -6,7 +6,7 @@ from typing import Sequence, MutableMapping, Generator, cast, Any
 import sys
 
 from xonsh.procs.pipelines import HiddenCommandPipeline
-from xontrib.xgit import xgit_vars as xv
+from xontrib.xgit import vars as xv
 
 
 def _run_stdout(cmd: Sequence[str]) -> str:
@@ -15,7 +15,7 @@ def _run_stdout(cmd: Sequence[str]) -> str:
     """
     env = xv.XSH.env
     assert isinstance(env, MutableMapping), "env() not a mapping"
-        
+
     if env.get("XGIT_TRACE_COMMANDS"):
         cmdline = " ".join(cmd)
         print(f"Running {cmdline}", file=sys.stderr)
@@ -24,7 +24,7 @@ def _run_stdout(cmd: Sequence[str]) -> str:
 def _run_object(cmd: Sequence[str]) -> HiddenCommandPipeline:
     env = xv.XSH.env
     assert isinstance(env, MutableMapping), "env() not a mapping"
-        
+
     if env.get("XGIT_TRACE_COMMANDS"):
         cmdline = " ".join(cmd)
         print(f'Running {cmdline}', file=sys.stderr)
