@@ -230,61 +230,58 @@ class GitCommit(GitObject, Protocol):
                  loader: Optional[GitLoader] = None,
                  cleanup: Optional[CleanupAction] = None):
         ...
+
     @property
     def type(self) -> Literal['commit']:
         return 'commit'
 
     @property
     @abstractmethod
-    def message(self) -> str:
-        ...
-    @property
-    @abstractmethod
-    def author(self) -> str:
-        ...
-    @property
-    @abstractmethod
-    def author_date(self) -> datetime:
-        ...
+    def message(self) -> str: ...
 
     @property
     @abstractmethod
-    def author_email(self) -> str:
-        ...
+    def author(self) -> str: ...
 
     @property
     @abstractmethod
-    def author_name(self) -> str:
-        ...
+    def author_date(self) -> datetime:  ...
 
     @property
     @abstractmethod
-    def committer(self) -> str:
-        ...
-    @property
-    @abstractmethod
-    def committer_date(self) -> datetime:
-        ...
+    def author_email(self) -> str:  ...
 
     @property
     @abstractmethod
-    def committer_email(self) -> datetime:
-        ...
+    def author_name(self) -> str: ...
 
     @property
     @abstractmethod
-    def committer_name(self) -> datetime:
-        ...
+    def committer(self) -> str: ...
+    @property
+    @abstractmethod
+    def committer_date(self) -> datetime: ...
 
     @property
     @abstractmethod
-    def tree(self) -> GitTree:
-        ...
+    def committer_email(self) -> datetime: ...
+
+    @property
+    @abstractmethod
+    def committer_name(self) -> datetime: ...
+
+    @property
+    @abstractmethod
+    def tree(self) -> GitTree: ...
+
     @property
     @abstractmethod
     def parents(self) -> 'Sequence[GitCommit]':
         ...
 
+    @property
+    @abstractmethod
+    def signature(self) -> str: ...
 
 @runtime_checkable
 class GitTagObject(GitObject, Protocol):
@@ -299,22 +296,38 @@ class GitTagObject(GitObject, Protocol):
     @property
     def type(self) -> Literal['tag']:
         return 'tag'
+
     @property
     @abstractmethod
-    def object(self) -> GitObject:
-        ...
+    def object(self) -> GitObject:  ...
+
     @property
     @abstractmethod
-    def tagger(self) -> str:
-        ...
+    def tagger(self) -> str: ...
+
     @property
     @abstractmethod
-    def created(self) -> datetime:
-        ...
+    def tagger_name(self) -> str: ...
+
     @property
     @abstractmethod
-    def message(self) -> str:
-        ...
+    def tagger_email(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def created(self) -> datetime: ...
+
+    @property
+    @abstractmethod
+    def message(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def tag_type(self) -> GitObjectType: ...
+
+    @property
+    @abstractmethod
+    def signature(self) -> str: ...
 
 
 class GitTreeEntry(GitObject, Protocol):
