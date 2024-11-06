@@ -356,8 +356,3 @@ class GitTreeEntry(GitObject, Protocol):
     @abstractmethod
     def __getitem__(self, key: str) -> GitObject: ...
 
-
-T = TypeVar("T", covariant=True)
-@runtime_checkable
-class XGitProxy(Generic[T], Protocol):
-    """A proxy for an object managed in some other context"""
