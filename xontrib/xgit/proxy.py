@@ -263,7 +263,7 @@ class AdaptorWrapperFn(Generic[V], Protocol):
     @abstractmethod
     def __call__(self, value: V|None|bool, action: ProxyAction, method: AdaptorMethod, /) -> V|None|bool: ...
 
-class AdapterWrapper(ObjectAdaptor[T, V]):
+class AdaptorWrapper(ObjectAdaptor[T, V]):
     """
     This adaptor wraps another adaptor, allowing for additional operations
     to be performed on the target object.
@@ -377,8 +377,9 @@ class BaseMappingTargetAccessor(KeyedTargetAccessor[D, MM, T, V]):
     key: str
     def __init__(self,
                  descriptor: D,
+                 /, *,
                  key: str,
-                 default: T|_NoValue=_NO_VALUE, /, *,
+                 default: T|_NoValue=_NO_VALUE,
                  name: Optional[str]=None,
                  **kwargs):
         super().__init__(descriptor, key, default, name=name)
@@ -396,9 +397,9 @@ class BaseMappingTargetAccessor(KeyedTargetAccessor[D, MM, T, V]):
             case _NoValue(),_NoValue():
                 self.__delete__(obj)
             case _NoValue(), _:
-                setattr(self.mapping, self.key, self.default)
+                self.mapping[self.key] = self.default
             case _, _:
-                setattr(self.mapping, self.key, value)
+                self.mapping[self.key] = value
 
     def __delete__(self, _):
         del self.mapping[self.key]
@@ -423,13 +424,16 @@ class ModuleTargetAccessor(BaseMappingTargetAccessor[str, MutableMapping[str, V]
     """
     @property
     def mapping(self) -> MutableMapping[str, V]:
+        if self.descriptor not in sys.modules:
+            raise NameError(f'Module {self.descriptor} not found')
         return sys.modules[self.descriptor].__dict__
 
     def __repr__ (self)-> str:
-        return f'{{cls}}(sys.modules[{self.key}])'
+        cls = type(self).__name__.strip('_')
+        return f'{cls}(sys.modules[{self.key!r}])'
 
 
-class ContextVarAccessor(IdentityTargetAccessor[ContextLocal, V]):
+class ContextLocalAccessor(IdentityTargetAccessor[ContextLocal, V]):
     """
     A reference to the target object for a proxy object, with the target living in a context variable.
     """
@@ -491,7 +495,7 @@ class AttributeTargetAccessor(TargetAccessor[object, object, T, V]):
 
     def __repr__ (self)-> str:
         cls = type(self).__name__.strip('_')
-        return f'{{cls}}(.{self.name}.{self.attribute})'
+        return f'{cls}(.{self.name}.{self.attribute})'
 
 
 class XGitProxy(Generic[T,V]):
@@ -566,7 +570,7 @@ class TargetAccessorFactory(Generic[D, M, T, V], Protocol):
     """
     A factory function that creates a `TargetDescriptor` object.
     """
-    def __call__(self, descriptor: D, **kwargs) -> TargetAccessor[D,M, T, V]: ...
+    def __call__(self, descriptor: D, /, **kwargs) -> TargetAccessor[D,M, T, V]: ...
 
 class AdapterFactory(Generic[D, M, T, V], Protocol):
     """
@@ -574,15 +578,15 @@ class AdapterFactory(Generic[D, M, T, V], Protocol):
     `ObjectAdaptor`. This can be a class (such as `AttributeAdapter` or `MappingAdapter`)
     or a factory function that returns an `ObjectAdaptor`.
     """
-    def __call__(self, descriptor: TargetAccessor[D,M, T, V], **kwargs) -> ObjectAdaptor[T, V]: ...
+    def __call__(self, descriptor: TargetAccessor[D,M, T, V], /, **kwargs) -> ObjectAdaptor[T, V]: ...
 
 
 def proxy(name: str,
           namespace: Any,
-          descriptor: TargetAccessorFactory[D,M, T, V],
-          adaptor: AdapterFactory[D, M, T, V], /,
+          accessor_factory: TargetAccessorFactory[D, M, T, V],
+          adaptor_factory: AdapterFactory[D, M, T, V]=ObjectAdaptor, /,
           value_type: Optional[type[V]] = None,
-          mapping_type: Optional[type[MM]] = None,
+          mapping_type: Optional[type[M]] = None,
           instance_type: type[XGitProxy[T, V]] = XGitProxy[T, V],
           initializer: Optional[ProxyInitializer] = None,
           **kwargs
@@ -600,29 +604,21 @@ def proxy(name: str,
     the actual access to the target object on behalf of the proxy.
     """
     proxy = instance_type()
-    d = descriptor(namespace, **kwargs)
+    d = accessor_factory(namespace, **kwargs)
     d.__set_name__(proxy, name)
     _meta.descriptors[proxy] = d
-    _meta.adaptors[proxy] = adaptor(d, **kwargs)
+    _meta.adaptors[proxy] = adaptor_factory(d, **kwargs)
     if initializer is not None:
         _meta.initializers[proxy] = initializer
     return proxy
 
 class _ProxyMetadata:
-    lock: RLock
-    descriptors: WeakKeyDictionary[XGitProxy, TargetAccessor]
-    adaptors: WeakKeyDictionary[XGitProxy, ObjectAdaptor]
-    initializers: WeakKeyDictionary[XGitProxy, ProxyInitializer]
-    deinitializers: deque[ProxyDeinitializer]
-    no_pass_through: set[str]
-    def __init__(self):
-        self.lock = RLock()
-        self.descriptors = WeakKeyDictionary()
-        self.adaptors = WeakKeyDictionary()
-        self.initializers = WeakKeyDictionary()
-        self.descriptors = WeakKeyDictionary()
-        self.deinitializers = deque()
-        self.no_pass_through = {
+    lock: RLock = RLock()
+    descriptors: WeakKeyDictionary[XGitProxy, TargetAccessor] = WeakKeyDictionary()
+    adaptors: WeakKeyDictionary[XGitProxy, ObjectAdaptor] = WeakKeyDictionary()
+    initializers: WeakKeyDictionary[XGitProxy, ProxyInitializer] = WeakKeyDictionary()
+    deinitializers: deque[ProxyDeinitializer] = deque()
+    no_pass_through: set[str] = {
             '_target', '__class__', '__dict__', '__dir__', '__doc__',
             '__module__', '__weakref__', '__orig_class__', '__orig_bases__',
         }
@@ -647,7 +643,7 @@ class _ProxyMetadata:
                                 except Exception as ex:
                                     print(f'Error cleaning up proxy {proxy}: {ex}')
                         return deinit
-                        self.deinitializers.append(deinit(proxy, deinitializer))
+                    self.deinitializers.append(deinit(proxy, deinitializer))
 
     def unload(self):
         """
@@ -687,10 +683,10 @@ class _ProxyMetadata:
             case _NoValue(), True:
                 d.__delete__(proxy)
                 del d.__get__
-            case _NO_VALUE, _:
+            case _NoValue(), _:
                 return d.__get__(None, type(proxy))
             case _, _:
-                self.descriptors[proxy] = value
+                self.descriptors[proxy].__set__(proxy, value)
 
 
 def descriptor(proxy: 'XGitProxy[T, V]', /) -> TargetAccessor[object, object, T, V]:
@@ -704,7 +700,6 @@ def adaptor(proxy: 'XGitProxy[T, V]', /) -> ObjectAdaptor[T, V]:
     Get the adaptor for a proxy object.
     """
     return _meta.adaptor(proxy)
-_adaptor = adaptor
 
 @overload
 def target(proxy: 'XGitProxy[T, V]', /) -> T: ...

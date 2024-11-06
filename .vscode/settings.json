@@ -6,12 +6,13 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
-        "**/*.crswap": true,
-        "**/.ruby-lsp": true
+        "**/.ruby-lsp": true,
+        "**/*.crswap": true
     },
     "cSpell.words": [
         "argcnt",
         "autoupdate",
+        "autouse",
         "blist",
         "bobkerns",
         "bset",
@@ -50,6 +51,7 @@
         "PYPI",
         "pyproject",
         "pythonic",
+        "setenv",
         "sorteddict",
         "subproc",
         "unloadable",
@@ -65,5 +67,7 @@
     ],
     "hide-files.files": [],
     "python.analysis.typeCheckingMode": "basic",
-    "python.terminal.shellIntegration.enabled": true
+    "python.terminal.shellIntegration.enabled": true,
+    "python.analysis.inlayHints.pytestParameters": true,
+    "python.testing.pytestEnabled": true
 }

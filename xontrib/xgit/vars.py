@@ -35,13 +35,6 @@ from xontrib.xgit.types import (
     GitObject
 )
 
-if '_context' in xgit.__dict__:
-    _context = ContextLocal()
-else:
-    print("xgit.__dict__['_context'] does not exist, creating it")
-    _context = ContextLocal()
-    xgit.__dict__['_context'] = _context
-
 if 0:
     XSH: XonshSession = context_var_proxy('_context')
     """
