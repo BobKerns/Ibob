@@ -12,7 +12,6 @@ from typing import Optional, Sequence, overload
 from pathlib import Path
 import sys
 
-from xonsh.built_ins import XSH
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
@@ -22,7 +21,7 @@ from xontrib.xgit.types import (
     GitRepository,
     GitWorktree,
 )
-from xontrib.xgit.vars import XGIT_CONTEXTS
+from xontrib.xgit.vars import XGIT_CONTEXTS, XSH
 from xontrib.xgit.procs import (
     _run_stdout
 )

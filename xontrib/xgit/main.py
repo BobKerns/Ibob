@@ -51,8 +51,6 @@ from xontrib.xgit.vars import (
     XSH,
     XGIT,
     xgit_version,
-    target,
-    del_target,
 )
 from xontrib.xgit import vars as xv
 from xontrib.xgit.display import (
@@ -60,6 +58,8 @@ from xontrib.xgit.display import (
     _xgit_displayhook,
 )
 from xontrib.xgit.procs import _run_stdout
+from xontrib.xgit.proxy import target, ProxyMetadata
+
 
 @command(export=True)
 def git_cd(path: str = "", stderr=sys.stderr) -> None:
@@ -171,8 +171,9 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     Returns:
         dict: this will get loaded into the current execution context
     """
-    target(XSH, xsh)
-    env =  XSH.env
+    from xontrib import xgit
+    ProxyMetadata.load()
+    env =  xsh.env
     assert env is not None, "XSH.env is None"
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
     # Set the initial context on loading.
@@ -213,7 +214,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
                     del ns[name]
 
             _unload_actions.append(del_item)
-
+    
     for name, value in _exports.items():
         set_unload(XSH.ctx, name, value)
     for name, value in _aliases.items():
@@ -239,15 +240,15 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
 def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """Clean up on unload."""
-    env = XSH.env
+    env = xsh.env
     assert env is not None, "XSH.env is None"
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloading xontrib-xgit", file=sys.stderr)
     _do_unload_actions()
 
-    if "_XGIT_RETURN" in XSH.ctx:
-        del XSH.ctx["_XGIT_RETURN"]
+    if "_XGIT_RETURN" in xsh.ctx:
+        del xsh.ctx["_XGIT_RETURN"]
 
     sys.displayhook = _xonsh_displayhook
 
@@ -263,7 +264,7 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     remove("on_chdir", update_git_context)
     remove("xgit_on_predisplay", _xgit_on_predisplay)
     remove("xgit_on_postdisplay", _xgit_on_postdisplay)
-    env = XSH.env
+    env = xsh.env
     assert env is not None, "XSH.env is None"
     prompt_fields = env['PROMPT_FIELDS']
     assert isinstance(prompt_fields, dict), "PROMPT_FIELDS not a dict"
@@ -275,12 +276,13 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
         del sys.modules[m]
-    del_target(XGIT)
+    ProxyMetadata.unload()
     return dict()
 
-if __name__ == "__main__":
+if __name__ == "__main__" and False:
     print("This is a xontrib module for xonsh, it is not meant to be executed.")
     print("But we'll do it anyway.")
+
     from xonsh.built_ins import XSH as _XSH
     #_XSH.env={}
     _XSH.load(execer=Execer())
