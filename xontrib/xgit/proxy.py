@@ -762,6 +762,7 @@ class ProxyMetadata(Generic[T, V]):
         """
         while len(ProxyMetadata.__initializers) > 0:
             with ProxyMetadata.lock:
+                deinitializer = None
                 proxy, initializer = ProxyMetadata.__initializers.popitem()
                 try:
                     deinitializer = initializer(proxy)
