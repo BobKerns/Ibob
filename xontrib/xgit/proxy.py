@@ -33,12 +33,8 @@ or even methods on the target object.
 
 from abc import abstractmethod
 from extracontext import ContextLocal, ContextMap
-from decimal import Context
-from email.mime import base
-from re import A
 import sys
 from threading import RLock
-from unittest.loader import VALID_MODULE_NAME
 from weakref import WeakKeyDictionary
 from typing import (
     Callable, Literal, Mapping, MutableMapping, Optional, Protocol, cast, Any, overload,
@@ -46,13 +42,12 @@ from typing import (
 )
 from collections import deque
 
-from xontrib.xgit.types import GitRepository
-
 V = TypeVar('V')
 """
 The type of object stored in the proxy object's target. This will typically be `Any`,
 but may be more restrictive if the target object supports a more limited value type.
 """
+
 D = TypeVar('D')
 """
 The type of the descriptor of the mapping. This is usually the mapping itself (`M`),
@@ -61,11 +56,13 @@ mapping to have the same type.
 
 It may be other types, such as a string for a module name, or an object for an attribute.
 """
+
 M = TypeVar('M')
 """
 The type of the mapping object. This is usually a `MutableMapping`, but may be other types,
 by supplying a suitable adaptor.
 """
+
 MM = TypeVar('MM', bound=MutableMapping)
 
 T = TypeVar('T')
@@ -73,14 +70,22 @@ T = TypeVar('T')
 The type of the target object.
 """
 
+K = TypeVar('K')
+"""
+The type of the key used to access the target object.
+"""
+
+
 class _NoValue:
     """A type for a marker for a value that is not passed in."""
     __match_args__ = ()
     def __repr__(self):
         return '_NO_VALUE'
 
+
 _NO_VALUE = _NoValue()
 """A marker value to indicate that a value was not supplied"""
+
 
 class TargetAccessor(Generic[D, M, T, V]):
     """
@@ -124,10 +129,27 @@ class TargetAccessor(Generic[D, M, T, V]):
         """
         Get the target object.
         """
-        with _meta.lock:
+        with ProxyMetadata.lock:
             return self.__get__(self.owner, type(self.owner))
 
-    def __get__(self, obj: 'XGitProxy[T, V]|None', objtype: type) -> T: ...
+    @target.setter
+    def target(self, value: T):
+        """
+        Set the target object.
+        """
+        with ProxyMetadata.lock:
+            self.__set__(self.owner, value)
+
+    @target.deleter
+    def target(self):
+        """
+        Delete the target object.
+        """
+        with ProxyMetadata.lock:
+            self.__delete__(self.owner)
+
+    @abstractmethod
+    def __get__(self, obj: 'XGitProxy[T, V]', objtype: type) -> T: ...
 
     @abstractmethod
     def __set__(self, obj: 'XGitProxy[T,V]', value: T): ...
@@ -153,14 +175,15 @@ class TargetAccessor(Generic[D, M, T, V]):
         name = self.name
         return f'{cls}({name!r})'
 
+
 class IdentityTargetAccessor(TargetAccessor[T, T, T, V]):
     """
     A reference to the target object for a proxy object, with the target being given directly.
     """
-    def __get__(self, _, objtype) -> T:
+    def __get__(self, _: 'XGitProxy[T,V]', objtype) -> T:
         return self.descriptor
 
-    def __set__(self, obj, value: T):
+    def __set__(self, _: 'XGitProxy[T,V]', value: T):
         self.descriptor = value
 
     def __delete__(self, _):
@@ -169,6 +192,7 @@ class IdentityTargetAccessor(TargetAccessor[T, T, T, V]):
 AdaptorMethod: TypeAlias = Literal[
     'getitem', 'setitem', 'delitem', 'setattr', 'getattr', 'contains', 'hasattr', 'bool'
 ]
+
 
 class BaseObjectAdaptor(Generic[T, V]):
     """
@@ -207,12 +231,9 @@ class BaseObjectAdaptor(Generic[T, V]):
         return setattr(target, name, value)
 
     def getattr(self, name):
-        if name in _meta.no_pass_through:
+        if name in ProxyMetadata._no_pass_through:
             return super().__getattribute__(name)
-
         target = self.target
-        if not hasattr(target, '__getattr__'):
-            raise TypeError(f'{target} has no __getattr__ method')
         return  getattr(target, name)
 
     def contains(self, name):
@@ -227,6 +248,7 @@ class BaseObjectAdaptor(Generic[T, V]):
         target = self.target
         return bool(target)
 
+
 class ObjectAdaptor(BaseObjectAdaptor[T,V]):
     """
     Basic default `ObjectAdaptor` that provides transparent access to the target object.
@@ -239,10 +261,13 @@ class ObjectAdaptor(BaseObjectAdaptor[T,V]):
                  **kwargs):
         setattr(self, 'descriptor', descriptor)
 
+
 ProxyAction: TypeAlias = Literal['get', 'set', 'delete', 'bool']
 """
 Flags indicating the action being undertaken at the time of proxy access.
 """
+
+
 class AdaptorWrapperFn(Generic[V], Protocol):
     """
     A function that validates or perform other actions on the value being
@@ -263,6 +288,7 @@ class AdaptorWrapperFn(Generic[V], Protocol):
     @abstractmethod
     def __call__(self, value: V|None|bool, action: ProxyAction, method: AdaptorMethod, /) -> V|None|bool: ...
 
+
 class AdaptorWrapper(ObjectAdaptor[T, V]):
     """
     This adaptor wraps another adaptor, allowing for additional operations
@@ -277,6 +303,7 @@ class AdaptorWrapper(ObjectAdaptor[T, V]):
                 **kwargs):
             self.base_adaptor = base_adaptor
             self.wrapper_fn = wrapper_fn
+
 
     @overload
     def _wrap(self, value: None, action: Literal['delete'], method: AdaptorMethod, /) -> None: ...
@@ -334,6 +361,7 @@ class AttributeAdapter(ObjectAdaptor[T, V]):
     def contains(self, name):
         return self.hasattr(name)
 
+
 class MappingAdapter(MutableMapping[Any, V], ObjectAdaptor[T, V]):
     """
     This adaptor maps dictionary or array keys on the proxy object
@@ -351,34 +379,34 @@ class MappingAdapter(MutableMapping[Any, V], ObjectAdaptor[T, V]):
     def hasattr(self, name):
         return self.contains(name)
 
-
     def __iter__(self):
         return iter(self.target.__dict__)
 
-class KeyedTargetAccessor(TargetAccessor[D, MM, T, V]):
+
+class KeyedTargetAccessor(Generic[D, K, M, T, V], TargetAccessor[D, M, T, V]):
     """
     A reference to the target object for a proxy object, with the
     ultimate target living in an attribute or key in the first-level target.
     """
-    key: str
+    key: K
     def __init__(self,
                  descriptor: D,
-                 key: str,
+                 key: K,
                  default: T|_NoValue=_NO_VALUE, /, *,
                  name: Optional[str]=None,
                  **kwargs):
         super().__init__(descriptor, default, name=name)
         self.key = key
 
-class BaseMappingTargetAccessor(KeyedTargetAccessor[D, MM, T, V]):
+
+class BaseMappingTargetAccessor(KeyedTargetAccessor[D, K, MM, T, V]):
     """
     A reference to the target object for a proxy object, with the target living in a Mapping.
     """
-    key: str
     def __init__(self,
                  descriptor: D,
                  /, *,
-                 key: str,
+                 key: K,
                  default: T|_NoValue=_NO_VALUE,
                  name: Optional[str]=None,
                  **kwargs):
@@ -392,7 +420,7 @@ class BaseMappingTargetAccessor(KeyedTargetAccessor[D, MM, T, V]):
             default = self.default
             return cast(T, default)
 
-    def __set__(self, obj, value:V):
+    def __set__(self, obj, value:T):
         match value, self.default:
             case _NoValue(),_NoValue():
                 self.__delete__(obj)
@@ -409,16 +437,57 @@ class BaseMappingTargetAccessor(KeyedTargetAccessor[D, MM, T, V]):
         return f'{cls}({self.name}[{self.key!r}])'
 
 
-class Base2MappingTargetAccessor(BaseMappingTargetAccessor[MM, MM, T, V]):
+class Base2MappingTargetAccessor(BaseMappingTargetAccessor[MM, K, MM, T, V]):
     "Just constrains the two mapping types to be the same"
     pass
 
 
-class MappingTargetAccessor(Base2MappingTargetAccessor[MutableMapping[str, V], T, V]):
+class MappingTargetAccessor(Base2MappingTargetAccessor[MutableMapping[K, V], K, T, V]):
     pass
 
 
-class ModuleTargetAccessor(BaseMappingTargetAccessor[str, MutableMapping[str, V], T, V]):
+class ObjectTargetAccessor(KeyedTargetAccessor[D, str, M, T, V]):
+    """
+    A reference to the target object for a proxy object, with the target living in an attribute
+    on an object..
+    """
+    key: str
+    def __init__(self,
+                 descriptor: D,
+                 /, *,
+                 key: str,
+                 default: T|_NoValue=_NO_VALUE,
+                 name: Optional[str]=None,
+                 **kwargs):
+        super().__init__(descriptor, key, default, name=name)
+    def __get__(self, _, objtype) -> T:
+        try:
+            return getattr(self.mapping, self.key)
+        except AttributeError:
+            if self.default is _NO_VALUE:
+                raise
+            default = cast(T, self.default)
+            self.__set__(objtype, default)
+            return default
+
+    def __set__(self, obj, value:T):
+        match value, self.default:
+            case _NoValue(),_NoValue():
+                self.__delete__(obj)
+            case _NoValue(), _:
+                setattr(self.mapping, self.key, self.default)
+            case _, _:
+                setattr(self.mapping, self.key, value)
+
+    def __delete__(self, _):
+        delattr(self.mapping, self.key)
+
+    def __repr__ (self)-> str:
+        cls = type(self).__name__.strip('_')
+        return f'{cls}({self.name}[{self.key!r}])'
+
+
+class ModuleTargetAccessor(BaseMappingTargetAccessor[str, str, MutableMapping[str, V], T, V]):
     """
     A reference to a variable in a module.
     """
@@ -433,13 +502,13 @@ class ModuleTargetAccessor(BaseMappingTargetAccessor[str, MutableMapping[str, V]
         return f'{cls}(sys.modules[{self.key!r}])'
 
 
-class ContextLocalAccessor(IdentityTargetAccessor[ContextLocal, V]):
+class ContextLocalAccessor(ObjectTargetAccessor[ContextLocal, ContextLocal, ContextLocal, V]):
     """
     A reference to the target object for a proxy object, with the target living in a context variable.
     """
     def __get__(self, proxy: 'XGitProxy[ContextLocal, V]', objtype) -> ContextLocal:
         try:
-            return self.__get__(proxy, objtype)
+            return getattr(self.descriptor, self.key)
         except NameError:
             ctx = ContextLocal()
             ctx = cast(ContextLocal, ctx)
@@ -447,14 +516,15 @@ class ContextLocalAccessor(IdentityTargetAccessor[ContextLocal, V]):
             return ctx
 
 
-class ContextMapAccessor(IdentityTargetAccessor[ContextMap, V]):
+class ContextMapAccessor(MappingTargetAccessor[K, V, ContextMap]):
     """
     A reference to the target object for a proxy object, with the target living in a context variable.
     """
     def __get__(self, proxy: 'XGitProxy[ContextMap, V]', objtype) -> ContextMap:
         try:
-            return self.__get__(proxy, objtype)
-        except NameError:
+            return cast(ContextMap, self.descriptor[self.key])
+            return cast(ContextMap, getattr(self.descriptor, self.key))
+        except KeyError:
             ctx = ContextMap()
             ctx = cast(ContextMap, ctx)
             self.__set__(proxy, ctx)
@@ -466,6 +536,7 @@ class AttributeTargetAccessor(TargetAccessor[object, object, T, V]):
     A reference to the target object for a proxy object, with the target living in an object and the keys being an  attribute..
     """
     attribute: str
+
     def __init__(self,
                 mapping_descriptor: object,
                 attribute: str,
@@ -503,49 +574,56 @@ class XGitProxy(Generic[T,V]):
     A proxy for items managed in other contexts.
     """
     def __getitem__(self, name):
-        with _meta.lock:
-            return adaptor(self).getitem(name)
+        with ProxyMetadata.lock:
+            return meta(self).adaptor.getitem(name)
 
     def __setitem__(self, name, value):
-        with _meta.lock:
-            adaptor(self).setitem(name, value)
+        with ProxyMetadata.lock:
+            meta(self).adaptor.setitem(name, value)
 
     def __delitem__(self, name):
-        with _meta.lock:
-            adaptor(self).delitem(name)
+        with ProxyMetadata.lock:
+            meta(self).adaptor.delitem(name)
 
     def __setattr__(self, name: str, value):
-        with _meta.lock:
-            if name in _meta.no_pass_through:
+        with ProxyMetadata.lock:
+            if name in ProxyMetadata._no_pass_through:
                 return super().__setattr__(name, value)
-            adaptor(self).setattr(name, value)
+            meta(self).adaptor.setattr(name, value)
 
     def __getattr__(self, name):
-        with _meta.lock:
-            if name in _meta.no_pass_through:
+        with ProxyMetadata.lock:
+            if name in ProxyMetadata._no_pass_through:
                 try:
                     return super().__getattribute__(name)
                 except AttributeError as ex:
                     print(ex)
                     pass
-            return adaptor(self).getattr(name)
+            return meta(self).adaptor.getattr(name)
 
     def __contains__(self, name):
-        with _meta.lock:
-            return adaptor(self).contains(name)
+        with ProxyMetadata.lock:
+            return meta(self).adaptor.contains(name)
 
     def __hasattr__(self, name):
-        with _meta.lock:
-            return adaptor(self).hasattr(name)
+        with ProxyMetadata.lock:
+            return meta(self).adaptor.hasattr(name)
 
     def __bool__(self):
-        with _meta.lock:
-            return adaptor(self).bool()
+        with ProxyMetadata.lock:
+            return meta(self).adaptor.bool()
 
-    def __str__(self):
-        d = descriptor(self)
-        name = d.name
-        return str(f'{type(self).__name__}({name=!r}, target={self._target})')
+    def __repr__(self):
+        try:
+            name = meta(self).accessor.name
+        except Exception:
+            name = "<unbound>"
+        try:
+            t = target(self)
+        except Exception:
+            t = "<unbound>"
+        return str(f'{type(self).__name__}({name=!r}, target={t})')
+
 
 ProxyDeinitializer: TypeAlias = Callable[[], None]
 """
@@ -553,6 +631,7 @@ A function returned from a `ProxyInitializer` that cleans up resources associate
 on plugin unload.
 
 """
+
 
 ProxyInitializer: TypeAlias = Callable[[XGitProxy[T, V]], ProxyDeinitializer|None]
 """
@@ -566,11 +645,13 @@ is unloaded. This can be used to clean up any resources associated with the prox
 or to restore the unloaded state.
 """
 
+
 class TargetAccessorFactory(Generic[D, M, T, V], Protocol):
     """
     A factory function that creates a `TargetDescriptor` object.
     """
     def __call__(self, descriptor: D, /, **kwargs) -> TargetAccessor[D,M, T, V]: ...
+
 
 class AdapterFactory(Generic[D, M, T, V], Protocol):
     """
@@ -604,32 +685,64 @@ def proxy(name: str,
     the actual access to the target object on behalf of the proxy.
     """
     proxy = instance_type()
-    d = accessor_factory(namespace, **kwargs)
-    d.__set_name__(proxy, name)
-    _meta.descriptors[proxy] = d
-    _meta.adaptors[proxy] = adaptor_factory(d, **kwargs)
+    accessor = accessor_factory(namespace, **kwargs)
+    accessor.__set_name__(proxy, name)
+    adaptor = adaptor_factory(accessor, **kwargs)
+    ProxyMetadata._metadata[proxy] = ProxyMetadata(namespace, accessor, adaptor)
+
     if initializer is not None:
-        _meta.initializers[proxy] = initializer
+        ProxyMetadata.set_initializer(proxy, initializer)
     return proxy
 
-class _ProxyMetadata:
+
+class ProxyMetadata(Generic[T, V]):
+    """
+    Metadata for proxy objects.
+    """
     lock: RLock = RLock()
-    descriptors: WeakKeyDictionary[XGitProxy, TargetAccessor] = WeakKeyDictionary()
-    adaptors: WeakKeyDictionary[XGitProxy, ObjectAdaptor] = WeakKeyDictionary()
-    initializers: WeakKeyDictionary[XGitProxy, ProxyInitializer] = WeakKeyDictionary()
-    deinitializers: deque[ProxyDeinitializer] = deque()
-    no_pass_through: set[str] = {
+    _metadata: WeakKeyDictionary[XGitProxy, 'ProxyMetadata'] = WeakKeyDictionary()
+    __initializers: WeakKeyDictionary[XGitProxy, ProxyInitializer] = WeakKeyDictionary()
+    __deinitializers: deque[ProxyDeinitializer] = deque()
+    _no_pass_through: set[str] = {
             '_target', '__class__', '__dict__', '__dir__', '__doc__',
             '__module__', '__weakref__', '__orig_class__', '__orig_bases__',
         }
 
-    def load(self):
+    __namespace: object
+    @property
+    def namespace(self) -> Any:
+        return self.__namespace
+
+    __accessor: TargetAccessor[object, object, T, V]
+    @property
+    def accessor(self) -> TargetAccessor[object, object, T, V]:
+        return self.__accessor # type: ignore
+
+    __adaptor: ObjectAdaptor[T, V]
+    @property
+    def adaptor(self) -> ObjectAdaptor[T, V]:
+        return self.__adaptor
+
+    def __init__(self, namespace: Any, accessor: TargetAccessor[D, M, T, V], adaptor: ObjectAdaptor[T, V], /):
+        self.__namespace = namespace
+        self.__accessor = accessor # type: ignore
+        self.__adaptor = adaptor
+
+    @staticmethod
+    def set_initializer(proxy: 'XGitProxy[T, V]', initializer: ProxyInitializer):
+        """
+        Add an initializer to the proxy object.
+        """
+        ProxyMetadata.__initializers[proxy] = initializer
+
+    @staticmethod
+    def load():
         """
         Load the proxy metadata.
         """
-        while len(self.initializers) > 0:
-            with self.lock:
-                proxy, initializer = self.initializers.popitem()
+        while len(ProxyMetadata.__initializers) > 0:
+            with ProxyMetadata.lock:
+                proxy, initializer = ProxyMetadata.__initializers.popitem()
                 try:
                     deinitializer = initializer(proxy)
                 except Exception as ex:
@@ -637,69 +750,37 @@ class _ProxyMetadata:
                 if deinitializer is not None:
                     def deinit(proxy, deinitializer) -> 'ProxyDeinitializer':
                         def deinit():
-                            with self.lock:
+                            with ProxyMetadata.lock:
                                 try:
                                     deinitializer()
                                 except Exception as ex:
                                     print(f'Error cleaning up proxy {proxy}: {ex}')
                         return deinit
-                    self.deinitializers.append(deinit(proxy, deinitializer))
+                    ProxyMetadata.__deinitializers.append(deinit(proxy, deinitializer))
 
-    def unload(self):
+    @staticmethod
+    def unload():
         """
         Unload the proxy metadata.
         """
-        while len(self.deinitializers) > 0:
-            with self.lock:
-                deinitializer = self.deinitializers.pop()
+        while len(ProxyMetadata.__deinitializers) > 0:
+            with ProxyMetadata.lock:
+                deinitializer = ProxyMetadata.__deinitializers.pop()
                 try:
                     deinitializer()
                 except Exception as ex:
                     print(f'Error cleaning up proxy: {ex}')
 
-    def descriptor(self, proxy: 'XGitProxy[T, V]', /) -> TargetAccessor[object,object,T,V]:
-        """
-        Get the descriptor for a proxy object.
-        """
-        with self.lock:
-            return self.descriptors[proxy]
 
-    def adaptor(self, proxy: 'XGitProxy[T,V]', /) -> ObjectAdaptor[T,V]:
-        """
-        Get the adaptor for a proxy object.
-        """
-        with self.lock:
-            return self.adaptors[proxy]
-
-    def target(self, proxy: 'XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete: bool=False) -> Any|None:
-        """
-        Get, set, or delete the target object for a proxy object.
-        """
-        with self.lock:
-            d = self.descriptor(proxy)
-        assert d is not None, f'No target descriptor for {proxy}'
-
-        match value, delete:
-            case _NoValue(), True:
-                d.__delete__(proxy)
-                del d.__get__
-            case _NoValue(), _:
-                return d.__get__(None, type(proxy))
-            case _, _:
-                self.descriptors[proxy].__set__(proxy, value)
-
-
-def descriptor(proxy: 'XGitProxy[T, V]', /) -> TargetAccessor[object, object, T, V]:
+def meta(proxy: XGitProxy[T,V]) -> ProxyMetadata[T, V]:
     """
-    Get the descriptor for a proxy object.
+    Get the metadata for a proxy object.
     """
-    return _meta.descriptor(proxy)
+    meta = ProxyMetadata._metadata[proxy]
+    if meta is None:
+        raise AttributeError(f'No metadata for {proxy}')
+    return meta
 
-def adaptor(proxy: 'XGitProxy[T, V]', /) -> ObjectAdaptor[T, V]:
-    """
-    Get the adaptor for a proxy object.
-    """
-    return _meta.adaptor(proxy)
 
 @overload
 def target(proxy: 'XGitProxy[T, V]', /) -> T: ...
@@ -710,6 +791,40 @@ def target(proxy: 'XGitProxy[T, V]', /, *, delete: bool) -> None: ...
 def target(proxy: 'XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete: bool=False) -> T|None:
     """
     Get, set, or delete the target object for a proxy object.
+
+    With one argument, get the target object.
+
+    With two arguments, set the target object to the value provided.
+
+    With one positional argument and the `delete` keyword argument,
+    delete the target object.
+
+    Note: This affects the target object, not the proxy object, nor any
+    container in which the target object is stored.
+
+    For example, if the target object is stored in a dictionary or a module,
+    the target object is the value in the dictionary or the module attribute.
+    It does not affect what dictionary or module the proxy starts with to access
+    with.
+
+    If you need to switch the container in which the target object is stored,
+    use another proxy object with `IdentityTargetAccessor`.
+
+    PARAMETERS:
+    * `proxy`: The proxy object.
+    * `value`: The value to set the target object to.
+    * `delete`: If `True`, delete the target object.
     """
-    return _meta.target(proxy, value, delete=delete)
-_meta = _ProxyMetadata()
+
+    with ProxyMetadata.lock:
+        d: TargetAccessor[D, M, T, V]  = meta(proxy).accessor # type: ignore
+        assert d is not None, f'No target descriptor for {proxy}'
+
+        match value, delete:
+            case _NoValue(), True:
+                del d.target
+            case _NoValue(), _:
+                return d.target
+            case _, _:
+                d.target = value
+        return None

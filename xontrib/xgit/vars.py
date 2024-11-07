@@ -11,16 +11,10 @@ The `XonshSession` object is stored in a `ContextVar` in the xgit module,
 permitting separate contexts for different contexts, e.g. with
 different threads or asyncio tasks.
 '''
-from collections import defaultdict
 from pathlib import Path
-from contextvars import ContextVar, Token
-from re import M
-from threading import Lock, RLock
-from tkinter import NO
+from threading import Lock
 from typing import (
-    Any, Callable, Optional, cast, Protocol, overload,
-    Sequence, Mapping, MutableMapping, TypeAlias, Literal,
-    Generic, TypeVar,
+     Optional,
 )
 from functools import wraps
 import sys
@@ -32,8 +26,28 @@ import xontrib.xgit as xgit
 from xontrib.xgit.types import (
     GitContext,
     GitObjectReference,
-    GitObject
+    GitObject,
 )
+from xontrib.xgit.proxy import (
+    proxy, target,
+    ModuleTargetAccessor,
+)
+
+_CONTEXT = proxy('_CONTEXT', 'xontrib.xgit', ModuleTargetAccessor,
+                 key='_CONTEXT',
+                 initializer=lambda p: target(p, ContextLocal())
+                 )
+"""
+We store a `ContextLocal` object in the xgit module, to allow persistence + session separation.
+
+xonsh does not currently support multiple sessions in the same process, notably the `XSH`
+global variable. But to avoid future problems, let's attempt to be thread safe.
+
+Note that the `extracontext` module handles async tasks and generators, avoiding the issue
+with threading.ContextVar, which is not inherited to new threads.
+"""
+
+
 
 if 0:
     XSH: XonshSession = context_var_proxy('_context')
