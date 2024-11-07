@@ -1,3 +1,4 @@
+from functools import wraps
 import pytest
 from importlib import import_module
 from typing import Callable, Any
@@ -25,9 +26,10 @@ def module():
     """
 
     modules = set(sys.modules.values())
+    @wraps(module)
     def loader(mod_name: str, _t: Callable, _as='module'):
         mod = import_module(mod_name)
-        return _t(**mod.__dict__, **{_as: mod})
+        return _t(mod, **mod.__dict__)
 
     yield loader
 
