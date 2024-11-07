@@ -662,16 +662,36 @@ class AdapterFactory(Generic[D, M, T, V], Protocol):
     def __call__(self, descriptor: TargetAccessor[D,M, T, V], /, **kwargs) -> ObjectAdaptor[T, V]: ...
 
 
+@overload
 def proxy(name: str,
           namespace: Any,
-          accessor_factory: TargetAccessorFactory[D, M, T, V],
-          adaptor_factory: AdapterFactory[D, M, T, V]=ObjectAdaptor, /,
-          value_type: Optional[type[V]] = None,
-          mapping_type: Optional[type[M]] = None,
+          accessor_factory: TargetAccessorFactory[D, M, T, V]=IdentityTargetAccessor,
+          adaptor_factory: AdapterFactory[D, M, T, V]=ObjectAdaptor, /, *,
+          type: type[V],
           instance_type: type[XGitProxy[T, V]] = XGitProxy[T, V],
           initializer: Optional[ProxyInitializer] = None,
           **kwargs
-    ) -> XGitProxy:
+    ) -> V: ...
+
+@overload
+def proxy(name: str,
+          namespace: Any,
+          accessor_factory: TargetAccessorFactory[D, M, T, V]=IdentityTargetAccessor,
+          adaptor_factory: AdapterFactory[D, M, T, V]=ObjectAdaptor, /, *,
+          type: None=None,
+          instance_type: type[XGitProxy[T, V]] = XGitProxy[T, V],
+          initializer: Optional[ProxyInitializer] = None,
+          **kwargs
+    ) -> XGitProxy[T,V]: ...
+def proxy(name: str,
+          namespace: Any,
+          accessor_factory: TargetAccessorFactory[D, M, T, V]=IdentityTargetAccessor,
+          adaptor_factory: AdapterFactory[D, M, T, V]=ObjectAdaptor, /, *,
+          type: Optional[type[V]] = None,
+          instance_type: type[XGitProxy[T, V]] = XGitProxy[T, V],
+          initializer: Optional[ProxyInitializer] = None,
+          **kwargs
+    ) -> XGitProxy[T,V]|V:
     """
     Create a proxy for values in another namespace.
 
@@ -783,12 +803,12 @@ def meta(proxy: XGitProxy[T,V]) -> ProxyMetadata[T, V]:
 
 
 @overload
-def target(proxy: 'XGitProxy[T, V]', /) -> T: ...
+def target(proxy: 'T|XGitProxy[T, V]', /) -> T: ...
 @overload
-def target(proxy: 'XGitProxy[T, V]', value: T, /) -> None: ...
+def target(proxy: 'T|XGitProxy[T, V]', value: T, /) -> None: ...
 @overload
-def target(proxy: 'XGitProxy[T, V]', /, *, delete: bool) -> None: ...
-def target(proxy: 'XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete: bool=False) -> T|None:
+def target(proxy: 'T|XGitProxy[T, V]', /, *, delete: bool) -> None: ...
+def target(proxy: 'T|XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete: bool=False) -> T|None:
     """
     Get, set, or delete the target object for a proxy object.
 
@@ -809,12 +829,27 @@ def target(proxy: 'XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete: 
 
     If you need to switch the container in which the target object is stored,
     use another proxy object with `IdentityTargetAccessor`.
+    
+    `target` may be called with one argument on non-proxy objects, in which case
+    it returns the object unchanged. This allows `target` to be used in a
+    type-safe manner in code that may be passed either a proxy object or a
+    non-proxy object.
 
     PARAMETERS:
     * `proxy`: The proxy object.
     * `value`: The value to set the target object to.
     * `delete`: If `True`, delete the target object.
     """
+    
+    match isinstance(proxy, XGitProxy), value, delete:
+        case False, _NoValue(), _:
+            return cast(T, proxy)
+        case False, _, True:
+            raise ValueError(f'Cannot delete target for {proxy}, which is not a proxy object')
+        case False, _, _:
+            raise ValueError(f'Cannot set target for {proxy}, which is not a proxy object')
+        case True, _, _:
+            proxy = cast(XGitProxy[T, V], proxy)
 
     with ProxyMetadata.lock:
         d: TargetAccessor[D, M, T, V]  = meta(proxy).accessor # type: ignore

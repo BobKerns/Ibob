@@ -14,8 +14,8 @@ import builtins
 from xontrib.xgit.vars import (
     _xgit_count,
     XSH,
-    XGitProxy,
 )
+from xontrib.xgit.proxy import XGitProxy
 
 # Our events:
 

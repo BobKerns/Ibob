@@ -1,5 +1,5 @@
 '''
-Implementations of the `GitObject famil of classes.
+Implementations of the `GitObject family of classes.
 
 These are the core objects that represent the contents of a git repository.
 '''
