@@ -38,7 +38,7 @@ import sys
 from threading import RLock
 from weakref import WeakKeyDictionary
 from typing import (
-    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, Self, cast, Any, overload,
+    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, cast, Any, overload,
     Generic, TypeAlias, TypeVar
 )
 from collections import deque
@@ -750,7 +750,7 @@ class ProxyMetadata(Generic[T, V]):
         return proxy
 
     __initializer: ProxyInitializer|None
-    def _init(self) -> Self:
+    def _init(self) -> 'ProxyMetadata[T, V]':
         if self.__initializer is None:
             return self
         try:
@@ -772,7 +772,7 @@ class ProxyMetadata(Generic[T, V]):
         return self
 
     @property
-    def init(self) -> Self:
+    def init(self) -> 'ProxyMetadata[T, V]':
         return self._init()
 
     def __init__(self, namespace: Any,
