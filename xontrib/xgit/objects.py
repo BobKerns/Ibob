@@ -5,7 +5,7 @@ These are the core objects that represent the contents of a git repository.
 '''
 
 from typing import (
-    Optional, Literal, Sequence, Any, Protocol, cast, TypeAlias,
+    MutableMapping, Optional, Literal, Sequence, Any, Protocol, cast, TypeAlias,
     Callable,
 )
 from datetime import datetime
@@ -29,14 +29,11 @@ from xontrib.xgit.types import (
     GitTreeEntry,
 )
 from xontrib.xgit.entries import _GitTreeEntry
-#from xontrib.xgit.xgit_vars import (
-#    XGIT,
-#    XGIT_OBJECTS
-#    XGIT_REFERENCES,
-#)
+# Avoid a circular import dependency by not looking
+# at the vars module until it is loaded.
 from xontrib.xgit import vars as xv
 from xontrib.xgit.procs import (
-    _run_binary, _run_stdout, _run_text, _run_lines, _run_stream
+    _run_binary, _run_text, _run_lines, _run_stream
 )
 
 GitContextFn: TypeAlias = Callable[[], GitContext]
@@ -162,7 +159,7 @@ def _git_entry(
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
-    assert XSH.env is not None, "env() not a mapping"
+    assert isinstance(XSH.env, MutableMapping), f"XSH.env() not a mapping: {XSH.env!r}"
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
@@ -539,7 +536,7 @@ class _GitCommit(_GitObject, GitCommit):
         if callable(context):
             context = context()
         context = context.new_context(commit=hash)
-        
+
         def loader():
             with chdir(context.worktree):
                 lines = _run_lines(["git", "cat-file", "commit", hash])

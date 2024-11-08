@@ -3,7 +3,7 @@ Various decorators for xgit commands and functions.
 
 """
 
-from typing import Any, Optional, Callable
+from typing import Any, MutableMapping, Optional, Callable
 from inspect import signature, Signature
 from functools import partial
 import sys
@@ -137,7 +137,7 @@ def command(
         n_args = []
         n_kwargs = {}
         env = XSH.env
-        assert isinstance(env, dict), "XSH.env() not a mapping"
+        assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
         for p in sig.parameters.values():
 
             def add_arg(value: Any):
