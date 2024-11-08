@@ -176,24 +176,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     env =  xsh.env
     assert env is not None, "XSH.env is None"
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
-    # Set the initial context on loading.
-    target(XGIT, _git_context())
-    #_export("XGIT")
-    if "_XGIT_RETURN" in XSH.ctx:
-        del XSH.ctx["_XGIT_RETURN"]
-
-    # Install our displayhook
-    global _xonsh_displayhook
-    hook = _xonsh_displayhook
-    target(XSH, xsh)
-
-    def unhook_display():
-        sys.displayhook = hook
-
-    _unload_actions.append(unhook_display)
-    _xonsh_displayhook = hook
-    sys.displayhook = _xgit_displayhook
-
     def set_unload(
         ns: MutableMapping[str, Any],
         name: str,
@@ -214,20 +196,38 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
                     del ns[name]
 
             _unload_actions.append(del_item)
-    
+
     for name, value in _exports.items():
-        set_unload(XSH.ctx, name, value)
+        set_unload(xsh.ctx, name, value)
     for name, value in _aliases.items():
-        aliases = XSH.aliases
+        aliases = xsh.aliases
         assert aliases is not None, "XSH.aliases is None"
         set_unload(aliases, name, value)
         aliases[name] = value
 
-    env = XSH.env
+    env = xsh.env
     assert env is not None, "XSH.env is None"
 
+    # Set the initial context on loading.
+    target(XGIT, None)
+    #_export("XGIT")
+    if "_XGIT_RETURN" in xsh.ctx:
+        del env["_XGIT_RETURN"]
+
+    # Install our displayhook
+    global _xonsh_displayhook
+    hook = _xonsh_displayhook
+    target(XSH, xsh)
+
+    def unhook_display():
+        sys.displayhook = hook
+
+    _unload_actions.append(unhook_display)
+    _xonsh_displayhook = hook
+    sys.displayhook = _xgit_displayhook
+
     prompt_fields = env['PROMPT_FIELDS']
-    assert isinstance(prompt_fields, dict), "PROMPT_FIELDS not a dict"
+    assert isinstance(prompt_fields, MutableMapping), "PROMPT_FIELDS not a MutableMapping"
     prompt_fields['xgit.version'] = xgit_version
 
     if "XGIT_ENABLE_NOTEBOOK_HISTORY" not in env:

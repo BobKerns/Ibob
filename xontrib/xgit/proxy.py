@@ -32,12 +32,13 @@ or even methods on the target object.
 """
 
 from abc import abstractmethod
+from colorama import init
 from extracontext import ContextLocal, ContextMap
 import sys
 from threading import RLock
 from weakref import WeakKeyDictionary
 from typing import (
-    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, cast, Any, overload,
+    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, Self, cast, Any, overload,
     Generic, TypeAlias, TypeVar
 )
 from collections import deque
@@ -233,8 +234,8 @@ class BaseObjectAdaptor(Generic[T, V]):
     def getattr(self, name):
         if name in ProxyMetadata._no_pass_through:
             return super().__getattribute__(name)
-        target = self.target
-        return  getattr(target, name)
+        t = self.target
+        return getattr(t, name)
 
     def contains(self, name):
         target = self.target
@@ -362,7 +363,7 @@ class AttributeAdapter(ObjectAdaptor[T, V]):
         return self.hasattr(name)
 
 
-class MappingAdapter(MutableMapping[Any, V], ObjectAdaptor[T, V]):
+class MappingAdapter(ObjectAdaptor[T, V]):
     """
     This adaptor maps dictionary or array keys on the proxy object
     to attributes on the target object.
@@ -509,7 +510,7 @@ class ContextLocalAccessor(ObjectTargetAccessor[ContextLocal, ContextLocal, Cont
     def __get__(self, proxy: 'XGitProxy[ContextLocal, V]', objtype) -> ContextLocal:
         try:
             return getattr(self.descriptor, self.key)
-        except NameError:
+        except AttributeError:
             ctx = ContextLocal()
             ctx = cast(ContextLocal, ctx)
             self.__set__(proxy, ctx)
@@ -708,10 +709,9 @@ def proxy(name: str,
     accessor = accessor_factory(namespace, **kwargs)
     accessor.__set_name__(proxy, name)
     adaptor = adaptor_factory(accessor, **kwargs)
-    ProxyMetadata._metadata[proxy] = ProxyMetadata(namespace, accessor, adaptor)
-
-    if initializer is not None:
-        ProxyMetadata.set_initializer(proxy, initializer)
+    ProxyMetadata._metadata[proxy] = ProxyMetadata(
+        namespace, accessor, adaptor, proxy, initializer,
+        )
     return proxy
 
 
@@ -721,7 +721,6 @@ class ProxyMetadata(Generic[T, V]):
     """
     lock: RLock = RLock()
     _metadata: WeakKeyDictionary[XGitProxy, 'ProxyMetadata'] = WeakKeyDictionary()
-    __initializers: WeakKeyDictionary[XGitProxy, ProxyInitializer] = WeakKeyDictionary()
     __deinitializers: deque[ProxyDeinitializer] = deque()
     _no_pass_through: set[str] = {
             '_target', '__class__', '__dict__', '__dir__', '__doc__',
@@ -743,41 +742,68 @@ class ProxyMetadata(Generic[T, V]):
     def adaptor(self) -> ObjectAdaptor[T, V]:
         return self.__adaptor
 
-    def __init__(self, namespace: Any, accessor: TargetAccessor[D, M, T, V], adaptor: ObjectAdaptor[T, V], /):
+    __proxy: XGitProxy[T, V]|None
+    @property
+    def proxy(self) -> XGitProxy[T, V]:
+        proxy = self.__proxy
+        assert proxy is not None, 'Proxy has been deleted.'
+        return proxy
+
+    __initializer: ProxyInitializer|None
+    def _init(self) -> Self:
+        if self.__initializer is None:
+            return self
+        try:
+            deinit = self.__initializer(self.proxy)
+        except Exception as ex:
+            print(f'Error initializing proxy {self.__proxy}: {ex}')
+            deinit = None
+        finally:
+            self.__initializer = None
+        if deinit is None or not callable(deinit):
+            return self
+        def run_deinit():
+            with ProxyMetadata.lock:
+                try:
+                    deinit()
+                except Exception as ex:
+                    print(f'Error cleaning up proxy {self.__proxy}: {ex}')
+        ProxyMetadata.__deinitializers.append(run_deinit)
+        return self
+
+    @property
+    def init(self) -> Self:
+        return self._init()
+
+    def __init__(self, namespace: Any,
+                 accessor: TargetAccessor[D, M, T, V],
+                 adaptor: ObjectAdaptor[T, V],
+                 proxy: XGitProxy[T, V],
+                 /,
+                initializer: Optional[ProxyInitializer] = None
+        ) -> None:
         self.__namespace = namespace
         self.__accessor = accessor # type: ignore
         self.__adaptor = adaptor
+        self.__proxy = proxy
+        if ProxyMetadata.__loaded and initializer is not None:
+            self._init()
+        self.__initializer = initializer
 
-    @staticmethod
-    def set_initializer(proxy: 'XGitProxy[T, V]', initializer: ProxyInitializer):
-        """
-        Add an initializer to the proxy object.
-        """
-        ProxyMetadata.__initializers[proxy] = initializer
-
+    __loaded: bool = False
+    """
+    Been there, done that. Now we're late. Any new proxies will have to init
+    immediately.
+    """
     @staticmethod
     def load():
         """
         Load the proxy metadata.
         """
-        while len(ProxyMetadata.__initializers) > 0:
-            with ProxyMetadata.lock:
-                deinitializer = None
-                proxy, initializer = ProxyMetadata.__initializers.popitem()
-                try:
-                    deinitializer = initializer(proxy)
-                except Exception as ex:
-                    print(f'Error initializing proxy {proxy}: {ex}')
-                if deinitializer is not None:
-                    def deinit(proxy, deinitializer) -> 'ProxyDeinitializer':
-                        def deinit():
-                            with ProxyMetadata.lock:
-                                try:
-                                    deinitializer()
-                                except Exception as ex:
-                                    print(f'Error cleaning up proxy {proxy}: {ex}')
-                        return deinit
-                    ProxyMetadata.__deinitializers.append(deinit(proxy, deinitializer))
+        with ProxyMetadata.lock:
+            ProxyMetadata.__loaded = True
+            for meta in list(ProxyMetadata._metadata.values()):
+                meta.init
 
     @staticmethod
     def unload():
@@ -830,7 +856,7 @@ def target(proxy: 'T|XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete
 
     If you need to switch the container in which the target object is stored,
     use another proxy object with `IdentityTargetAccessor`.
-    
+
     `target` may be called with one argument on non-proxy objects, in which case
     it returns the object unchanged. This allows `target` to be used in a
     type-safe manner in code that may be passed either a proxy object or a
@@ -841,7 +867,7 @@ def target(proxy: 'T|XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete
     * `value`: The value to set the target object to.
     * `delete`: If `True`, delete the target object.
     """
-    
+
     match isinstance(proxy, XGitProxy), value, delete:
         case False, _NoValue(), _:
             return cast(T, proxy)
