@@ -159,7 +159,8 @@ def _git_entry(
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
-    assert isinstance(XSH.env, MutableMapping), f"XSH.env() not a mapping: {XSH.env!r}"
+    assert isinstance(XSH.env, MutableMapping),\
+        f"XSH.env not a MutableMapping: {XSH.env!r}"
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"

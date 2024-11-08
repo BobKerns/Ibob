@@ -174,7 +174,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     from xontrib import xgit
     ProxyMetadata.load()
     env =  xsh.env
-    assert env is not None, "XSH.env is None"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env is not a MutableMapping: {env!r}"
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
     def set_unload(
         ns: MutableMapping[str, Any],
@@ -206,7 +207,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         aliases[name] = value
 
     env = xsh.env
-    assert env is not None, "XSH.env is None"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env is a MutableMapping {env!r}"
 
     # Set the initial context on loading.
     target(XGIT, None)
@@ -227,7 +229,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     sys.displayhook = _xgit_displayhook
 
     prompt_fields = env['PROMPT_FIELDS']
-    assert isinstance(prompt_fields, MutableMapping), "PROMPT_FIELDS not a MutableMapping"
+    assert isinstance(prompt_fields, MutableMapping), \
+        f"PROMPT_FIELDS not a MutableMapping: {prompt_fields!r}"
     prompt_fields['xgit.version'] = xgit_version
 
     if "XGIT_ENABLE_NOTEBOOK_HISTORY" not in env:
@@ -241,7 +244,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """Clean up on unload."""
     env = xsh.env
-    assert env is not None, "XSH.env is None"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env is not a MutableMapping: {env!r}"
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloading xontrib-xgit", file=sys.stderr)
@@ -265,9 +269,11 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     remove("xgit_on_predisplay", _xgit_on_predisplay)
     remove("xgit_on_postdisplay", _xgit_on_postdisplay)
     env = xsh.env
-    assert env is not None, "XSH.env is None"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env is not a MutableMapping: {env!r}"
     prompt_fields = env['PROMPT_FIELDS']
-    assert isinstance(prompt_fields, dict), "PROMPT_FIELDS not a dict"
+    assert isinstance(prompt_fields, MutableMapping),\
+        "PROMPT_FIELDS not a MutableMapping"
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloaded xontrib-xgit", file=sys.stderr)
