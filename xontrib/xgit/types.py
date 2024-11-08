@@ -11,10 +11,9 @@ from io import IOBase
 from readline import parse_and_bind
 from typing import (
     Callable, Iterator, TypeAlias, Literal, Protocol, runtime_checkable,
-    Sequence, Any, Generic, TypeVar
+    Sequence, Any,
 )
 from pathlib import Path
-from wave import Wave_write
 
 CleanupAction: TypeAlias = Callable[[], None]
 """

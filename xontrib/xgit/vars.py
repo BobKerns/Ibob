@@ -25,19 +25,19 @@ from xontrib.xgit.types import (
     GitObject,
 )
 from xontrib.xgit.proxy import (
-    ContextLocalAccessor, IdentityTargetAccessor, proxy, target,
+    ContextLocalAccessor, MappingAdapter, proxy, target,
     ModuleTargetAccessor, ObjectTargetAccessor,
     T, V, _NoValue, _NO_VALUE,
 )
 
 
 def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
-    return proxy(name, XSH, ObjectTargetAccessor,
-                 key=name,
+    return proxy(name, XSH, ObjectTargetAccessor, MappingAdapter,
+                 key='env',
                  type=type,
                  initializer=lambda p: target(p, value)
             )
-    
+
 def xgit_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
     return proxy(name, 'xontrib.xgit', ModuleTargetAccessor,
                  key=name,
