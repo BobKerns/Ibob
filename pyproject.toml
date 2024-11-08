@@ -38,6 +38,7 @@ prompt_toolkit = ">=3.0.48"
 ipython = ">=8.29.0"
 python-extracontext = ">=1.0.0"
 colorama = ">=0.4.6"
+gnureadline = ">=8.2.13"
 
 [tool.poetry.dev-dependencies]
 pytest = ">=8.3.3"
