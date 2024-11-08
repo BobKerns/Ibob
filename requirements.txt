@@ -2,3 +2,4 @@ ipython
 prompt-toolkit
 xonsh
 python-extracontext>=1.0.0
+colorama>=0.4.6
