@@ -8,7 +8,7 @@ Implementation of the `GitContext` class and related types.
 '''
 
 from dataclasses import dataclass
-from typing import Optional, Sequence, overload
+from typing import MutableMapping, Optional, Sequence, overload
 from pathlib import Path
 import sys
 
@@ -240,7 +240,8 @@ def _git_context():
             return None
     except Exception as ex:
         env = XSH.env
-        assert env is not None, "XSH.env is None"
+        assert isinstance(env, MutableMapping),\
+            f"XSH.env is not a MutableMapping: {env!r}"
         if env.get("XGIT_TRACE_ERRORS"):
             import traceback
             traceback.print_exc()

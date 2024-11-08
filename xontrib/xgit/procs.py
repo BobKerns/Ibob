@@ -14,7 +14,8 @@ def _run_stdout(cmd: Sequence[str]) -> str:
     Run a command and return the standard output.
     """
     env = xv.XSH.env
-    assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env not a MutableMapping: {env!r}"
 
     if env.get("XGIT_TRACE_COMMANDS"):
         cmdline = " ".join(cmd)
@@ -23,7 +24,8 @@ def _run_stdout(cmd: Sequence[str]) -> str:
 
 def _run_object(cmd: Sequence[str]) -> HiddenCommandPipeline:
     env = xv.XSH.env
-    assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env not a MutableMapping: {env!r}"
 
     if env.get("XGIT_TRACE_COMMANDS"):
         cmdline = " ".join(cmd)

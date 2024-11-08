@@ -137,7 +137,8 @@ def command(
         n_args = []
         n_kwargs = {}
         env = XSH.env
-        assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+        assert isinstance(env, MutableMapping),\
+            f"XSH.env not a MutableMapping: {env!r}"
         for p in sig.parameters.values():
 
             def add_arg(value: Any):

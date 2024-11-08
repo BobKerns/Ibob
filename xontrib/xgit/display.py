@@ -41,7 +41,8 @@ def _xgit_displayhook(value: Any):
     """
     ovalue = value
     env = XSH.env
-    assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+    assert isinstance(env, MutableMapping), \
+        f"XSH.env not a MutableMapping: {env!r}"
     if isinstance(value, HiddenCommandPipeline):
         value = XSH.ctx.get("_XGIT_RETURN", value)
         if "_XGIT_RETURN" in XSH.ctx:
@@ -81,7 +82,8 @@ def _xgit_on_predisplay(value: Any):
     """
     global count
     env = XSH.env
-    assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env not a MutableMapping: {env!r}"
     if (
         value is not None
         and not isinstance(value, HiddenCommandPipeline)
@@ -119,7 +121,8 @@ def _on_precommand(cmd: str):
     updating those values.
     """
     env = XSH.env
-    assert isinstance(env, MutableMapping), f"XSH.env() not a mapping: {env!r}"
+    assert isinstance(env, MutableMapping),\
+        f"XSH.env not a MutableMapping: {env!r}"
     if "_XGIT_RETURN" in XSH.ctx:
         if env.get("XGIT_TRACE_DISPLAY"):
             print("Clearing _XGIT_RETURN before command", file=sys.stderr)
