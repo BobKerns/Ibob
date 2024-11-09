@@ -1,0 +1,18 @@
+version: "0.2"
+ignorePaths:
+  - *.lock
+  - "1"
+
+dictionaryDefinitions:
+  - name: xgit
+    path: ./.xgit.txt
+dictionaries:
+  - en_us
+  - en_gb
+  - softwareTerms
+  - misc
+  - python
+words:
+  - MAXDEPTH
+ignoreWords: []
+import: []
