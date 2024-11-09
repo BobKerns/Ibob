@@ -23,11 +23,12 @@ from xontrib.xgit.types import (
     GitContext,
     GitObjectReference,
     GitObject,
+    _NoValue, _NO_VALUE,
 )
 from xontrib.xgit.proxy import (
     ContextLocalAccessor, MappingAdapter, proxy, target,
     ModuleTargetAccessor, ObjectTargetAccessor,
-    T, V, _NoValue, _NO_VALUE,
+    T, V,
 )
 
 

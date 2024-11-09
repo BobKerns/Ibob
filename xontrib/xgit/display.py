@@ -15,7 +15,7 @@ from xontrib.xgit.vars import (
     _xgit_count,
     XSH,
 )
-from xontrib.xgit.proxy import XGitProxy
+from xontrib.xgit.proxy import XGitProxy, target
 
 # Our events:
 
@@ -57,7 +57,7 @@ def _xgit_displayhook(value: Any):
                 )
                 print(msg, file=sys.stderr)
     if isinstance(value, XGitProxy):
-        value = value._target
+        value = target(value)
 
     if env.get("XGIT_TRACE_DISPLAY") and ovalue is not value:
         sys.stdout.flush()

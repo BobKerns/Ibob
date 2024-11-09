@@ -11,7 +11,7 @@ from io import IOBase
 from readline import parse_and_bind
 from typing import (
     Callable, Iterator, TypeAlias, Literal, Protocol, runtime_checkable,
-    Sequence, Any,
+    Sequence, Any, Optional,
 )
 from pathlib import Path
 
@@ -57,8 +57,16 @@ GitObjectReference: TypeAlias = tuple[ContextKey, str | None]
 A reference to a git object in a tree in a repository.
 """
 
-from typing import Optional
-from pathlib import Path
+
+class _NoValue:
+    """A type for a marker for a value that is not passed in."""
+    __match_args__ = ()
+    def __repr__(self):
+        return '_NO_VALUE'
+
+
+_NO_VALUE = _NoValue()
+"""A marker value to indicate that a value was not supplied"""
 
 
 @runtime_checkable
