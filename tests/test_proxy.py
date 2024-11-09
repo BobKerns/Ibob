@@ -13,6 +13,25 @@ def test_proxy_loads(module):
         assert module is not None
     module('xontrib.xgit.proxy', _t)
 
+def test_simple_proxy_map(module):
+    def _t(_, proxy, target, **__):
+        val = {}
+        p = proxy('P', val)
+        p['x'] = 42
+        assert val['x'] == 42
+        assert target(p) is val
+        assert p['x'] == 42
+    module('xontrib.xgit.proxy', _t)
+
+def test_simple_proxy_object(module):
+    def _t(_, proxy, target, **__):
+        val = SimpleNamespace()
+        p = proxy('P', val)
+        p.x = 42
+        assert val.x == 42
+        assert target(p) is val
+        assert p.x == 42
+    module('xontrib.xgit.proxy', _t)
 
 def test_module_var(module, debug_env):
     def _t(xgit, /, **__):

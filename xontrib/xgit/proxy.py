@@ -38,10 +38,14 @@ import sys
 from threading import RLock
 from weakref import WeakKeyDictionary
 from typing import (
-    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, cast, Any, overload,
-    Generic, TypeAlias, TypeVar
+    Callable, Literal, Mapping, MutableMapping, Optional, Protocol, TypedDict, cast, Any, overload,
+    Generic, TypeAlias, TypeVar, runtime_checkable,
 )
 from collections import deque
+
+from xontrib.xgit.types import (
+    _NoValue, _NO_VALUE,
+)
 
 V = TypeVar('V')
 """
@@ -75,18 +79,6 @@ K = TypeVar('K')
 """
 The type of the key used to access the target object.
 """
-
-
-class _NoValue:
-    """A type for a marker for a value that is not passed in."""
-    __match_args__ = ()
-    def __repr__(self):
-        return '_NO_VALUE'
-
-
-_NO_VALUE = _NoValue()
-"""A marker value to indicate that a value was not supplied"""
-
 
 class TargetAccessor(Generic[D, M, T, V]):
     """
@@ -209,33 +201,40 @@ class BaseObjectAdaptor(Generic[T, V]):
 
     def getitem(self, name):
         tm = cast(Mapping[str,V], self.target)
-        if not hasattr(tm, '__getitem__'):
-            raise TypeError(f'{tm} has no __getitem__ method')
-        return tm[name]
+        try:
+            return tm[name]
+        except KeyError as ex:
+            raise KeyError(*ex.args) from None
 
     def setitem(self, name, value):
         tm = cast(MutableMapping[str,V], self.target)
-        if not hasattr(tm, '__setitem__'):
-            raise TypeError(f'{tm} has no __setitem__ method')
-        tm[name] = value
+        try:
+            tm[name] = value
+        except KeyError as ex:
+            raise KeyError(*ex.args) from None
 
     def delitem(self, name):
         tm = cast(MutableMapping[str,V], self.target)
-        if not hasattr(tm, '__delitem__'):
-            raise TypeError(f'{tm} has no __delitem__ method')
-        del tm[name]
+        try:
+            del tm[name]
+        except KeyError as ex:
+            raise KeyError(*ex.args) from None
 
     def setattr(self, name: str, value):
         target = self.target
-        if not hasattr(target, '__setattr__'):
-            raise TypeError(f'{target} has no __setattr__ method')
-        return setattr(target, name, value)
+        try:
+            setattr(target, name, value)
+        except AttributeError as ex:
+            raise AttributeError(*ex.args) from None
 
     def getattr(self, name):
         if name in ProxyMetadata._no_pass_through:
             return super().__getattribute__(name)
         t = self.target
-        return getattr(t, name)
+        try:
+            return getattr(t, name)
+        except AttributeError as ex:
+            raise AttributeError(*ex.args) from None
 
     def contains(self, name):
         target = self.target
@@ -348,16 +347,23 @@ class AttributeAdapter(ObjectAdaptor[T, V]):
     This adaptor maps dictionary keys on the target object to attributes on the proxy object.
     """
     def getitem(self, name):
-        return self.getattr(name)
+        try:
+            return self.getattr(name)
+        except AttributeError as ex:
+            raise KeyError(f'{name} not found') from None
 
     def setitem(self, name, value):
-        self.setattr(name, value)
+        try:
+            self.setattr(name, value)
+        except AttributeError as ex:
+            raise KeyError(f'{name} not found') from None
 
     def delitem(self, name):
         target = self.target
-        if not hasattr(target, '__delattr__'):
-            raise TypeError(f'{target} has no __delattr__ method')
-        delattr(target, name)
+        try:
+            delattr(target, name)
+        except AttributeError as ex:
+            raise KeyError(f'{name} not found') from None
 
     def contains(self, name):
         return self.hasattr(name)
@@ -369,13 +375,22 @@ class MappingAdapter(ObjectAdaptor[T, V]):
     to attributes on the target object.
     """
     def getattr(self, name):
-        return self.getitem(name)
+        try:
+            return self.getitem(name)
+        except KeyError as ex:
+            raise AttributeError(f'{name} not found') from None
 
     def setattr(self, name, value):
-        self.setitem(name, value)
+        try:
+            self.setitem(name, value)
+        except KeyError as ex:
+            raise AttributeError(f'{name} not found') from None
 
     def delattr(self, name):
-        self.delitem(name)
+        try:
+            self.delitem(name)
+        except KeyError as ex:
+            raise AttributeError(f'{name} not found') from None
 
     def hasattr(self, name):
         return self.contains(name)
@@ -508,13 +523,8 @@ class ContextLocalAccessor(ObjectTargetAccessor[ContextLocal, ContextLocal, Cont
     A reference to the target object for a proxy object, with the target living in a context variable.
     """
     def __get__(self, proxy: 'XGitProxy[ContextLocal, V]', objtype) -> ContextLocal:
-        try:
-            return getattr(self.descriptor, self.key)
-        except AttributeError:
-            ctx = ContextLocal()
-            ctx = cast(ContextLocal, ctx)
-            self.__set__(proxy, ctx)
-            return ctx
+        meta(proxy)._init()
+        return getattr(self.descriptor, self.key)
 
 
 class ContextMapAccessor(MappingTargetAccessor[K, V, ContextMap]):
@@ -522,15 +532,8 @@ class ContextMapAccessor(MappingTargetAccessor[K, V, ContextMap]):
     A reference to the target object for a proxy object, with the target living in a context variable.
     """
     def __get__(self, proxy: 'XGitProxy[ContextMap, V]', objtype) -> ContextMap:
-        try:
-            return cast(ContextMap, self.descriptor[self.key])
-            return cast(ContextMap, getattr(self.descriptor, self.key))
-        except KeyError:
-            ctx = ContextMap()
-            ctx = cast(ContextMap, ctx)
-            self.__set__(proxy, ctx)
-            return ctx
-
+        meta(proxy)._init()
+        return cast(ContextMap, self.descriptor[self.key])
 
 class AttributeTargetAccessor(TargetAccessor[object, object, T, V]):
     """
@@ -616,7 +619,7 @@ class XGitProxy(Generic[T,V]):
 
     def __repr__(self):
         try:
-            name = meta(self).accessor.name
+            name = meta(self).name
         except Exception:
             name = "<unbound>"
         try:
@@ -710,7 +713,7 @@ def proxy(name: str,
     accessor.__set_name__(proxy, name)
     adaptor = adaptor_factory(accessor, **kwargs)
     ProxyMetadata._metadata[proxy] = ProxyMetadata(
-        namespace, accessor, adaptor, proxy, initializer,
+        name, namespace, accessor, adaptor, proxy, initializer,
         )
     return proxy
 
@@ -726,6 +729,11 @@ class ProxyMetadata(Generic[T, V]):
             '_target', '__class__', '__dict__', '__dir__', '__doc__',
             '__module__', '__weakref__', '__orig_class__', '__orig_bases__',
         }
+
+    _name: str
+    @property
+    def name(self):
+        return self._name
 
     __namespace: object
     @property
@@ -775,7 +783,8 @@ class ProxyMetadata(Generic[T, V]):
     def init(self) -> 'ProxyMetadata[T, V]':
         return self._init()
 
-    def __init__(self, namespace: Any,
+    def __init__(self, name: str,
+                 namespace: Any,
                  accessor: TargetAccessor[D, M, T, V],
                  adaptor: ObjectAdaptor[T, V],
                  proxy: XGitProxy[T, V],
@@ -890,3 +899,32 @@ def target(proxy: 'T|XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete
             case _, _:
                 d.target = value
         return None
+
+def json_proxy(p: XGitProxy[T, V]):
+    """
+    Describe a proxy object as JSON, for debugging/test purposes.
+    """
+    def _errchk(f: Callable, *args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as ex:
+            exl = []
+            while ex is not None:
+                exl.append([type(ex).__name__, str(ex)])
+                ex = ex.__cause__
+            return exl
+    def attr(x, attr: str) -> str|list:
+        return _errchk(lambda: getattr(x, attr))
+    def item(x, item: str) -> str|list:
+        return _errchk(lambda: x[item])
+    m = meta(p)
+    return {
+        "_cls": type(p).__name__,
+        "metadata": {
+            "name": m.name
+        }
+    }
+    meta = ProxyMetadata._metadata[p]
+    if meta is None:
+        raise AttributeError(f'No metadata for {p}')
+    return f'{p} -> {meta.namespace}.{meta.accessor.name}'

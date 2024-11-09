@@ -9,7 +9,7 @@ def test_xsh(with_xgit):
     '''
     Test the xsh proxy.
     '''
-    xgit, xsh = with_xgit
-    assert xsh is not None
-    assert isinstance(xsh.env, MutableMapping), \
-        f"XSH.env not a MutableMapping {xsh.env!r}"
+    def _t(*_, XSH, **__):
+        assert isinstance(XSH.env, MutableMapping), \
+            f"XSH.env not a MutableMapping {XSH.env!r}"
+    with_xgit(_t)
