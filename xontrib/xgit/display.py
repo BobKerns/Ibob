@@ -92,7 +92,7 @@ def _xgit_on_predisplay(value: Any):
         count = _xgit_count()
         ivar = f"_i{count}"
         ovar = f"_{count}"
-        XSH.ctx[ivar] = XSH.ctx["-"]
+        XSH.ctx[ivar] = XSH.ctx.get("-")
         XSH.ctx[ovar] = value
         print(f"{ovar}: ", end="")
 
@@ -104,8 +104,8 @@ def _xgit_on_postdisplay(value: Any):
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
         setattr(builtins, ",", value)
-        XSH.ctx["__"] = XSH.ctx["+"]
-        XSH.ctx["___"] = XSH.ctx["++"]
+        XSH.ctx["__"] = XSH.ctx.get("+")
+        XSH.ctx["___"] = XSH.ctx.get("++")
 
 
 @events.on_precommand
