@@ -201,10 +201,21 @@ class JsonDescriber:
         ref = self._ref(obj)
         if ref:
             return ref
-
+        special_type = next(
+            (t
+                for t in type(obj).__mro__
+                if t in self.special_types),
+            None
+        )
         match obj:
             case str() | int() | float() | bool() | None:
                 return obj
+            case _ if special_type and special_type in self.special_types:
+                with self.depth as depth:
+                    if depth <0:
+                        return self._max_depth(obj)
+                    handler: JsonHandler[JsonKV] = self.special_types[special_type]
+                    return self._instance(obj, handler)
             case obj if is_sequence(obj):
                 with self.depth as depth:
                     if depth < 0:
@@ -222,12 +233,6 @@ class JsonDescriber:
                         '_id': id(obj),
                         '_map': items
                     }
-            case a if type(a) in self.special_types:
-                with self.depth as depth:
-                    if depth <0:
-                        return self._max_depth(obj)
-                    handler: JsonHandler[JsonKV] = self.special_types[type(a)]
-                    return self._instance(obj, handler)
             case type():
                 with self.depth as depth:
                     if depth < 0:
@@ -328,7 +333,7 @@ def remap_ids(obj: JsonReturn, argname: str) -> JsonReturn:
                     '_cls': _cls,
                     '_attrs': {
                         k:_remap_ids(attrs[k])
-                        for k,v in sorted(attrs.keys())
+                        for k in sorted(attrs.keys())
                     }
                 }
             case {'_id': _id, '_type_class': _type_class, '_attrs': attrs}:
