@@ -74,7 +74,7 @@ def session_active(module, xonsh_session):
 
 @pytest.fixture()
 def with_xgit(xonsh_session, module, monkeypatch, ):
-    def _t(module, *, _load_xontrib_, _unload_xontrib_, **kwargs):
+    def _t(module, *, _load_xontrib_, _unload_xontrib_, XSH=xonsh_session, **kwargs):
         assert module is not None
         assert callable(_load_xontrib_)
         assert callable(_unload_xontrib_)

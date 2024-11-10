@@ -3,7 +3,7 @@ A module to create description of an object for debugging or tests.
 """
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Generic, Iterable, Literal, Mapping, Optional, Protocol, Sequence, TypeAlias, TypeVar, TypedDict
+from typing import Any, Generic, Iterable, Literal, Mapping, Optional, Protocol, Sequence, TypeAlias, TypeVar, TypedDict, cast
 
 def is_sequence(obj):
     return isinstance(obj, Sequence)
@@ -280,3 +280,71 @@ def to_json(obj: Any,
             include_private=include_private,
             )
     return describer.to_json(obj)
+
+
+class RemapError(ValueError):
+    ...
+
+def remap_ids(obj: JsonReturn, argname: str) -> JsonReturn:
+    "Canonicalize ID's for comparison"
+    _cnt: int = 0
+    _id_map: dict[int,int] = dict()
+    def remap_id(id: int):
+        nonlocal _cnt
+        if id in _id_map:
+            return _id_map[id]
+        _new_id = _cnt
+        _cnt += 1
+        _id_map[id] = _new_id
+        return _new_id
+    def _remap_ids(obj: JsonReturn) -> JsonReturn:
+        match obj:
+            case None|int()|float()|bool()|str():
+                return obj
+            case {'_id': _id, '_map': kwargs}:
+                return {
+                    '_id': remap_id(_id),
+                    '_map': {
+                        k:_remap_ids(kwargs[k])
+                        for k in sorted(kwargs.keys())
+                    }
+                }
+            case {'_id': _id, '_list': lst}:
+                return {
+                    '_id': remap_id(_id),
+                    '_list': [
+                        _remap_ids(v)
+                        for v in lst
+                    ]
+                }
+            case {'_id': _id, '_cls': _cls, '_attrs': attrs}:
+                return {
+                    '_id': remap_id(_id),
+                    '_cls': _cls,
+                    '_attrs': {
+                        k:_remap_ids(attrs[k])
+                        for k,v in sorted(attrs.keys())
+                    }
+                }
+            case {'_id': _id, '_type_class': _type_class, '_attrs': attrs}:
+                return {
+                    '_id': remap_id(_id),
+                    '_type_class': _type_class,
+                    '_attrs': {
+                        k:_remap_ids(attrs[k])
+                        for k in sorted(attrs.keys())
+                    }
+                }
+            case {'_id': _id, '_maxdepth': _maxdepth}:
+                return {
+                    '_id': remap_id(_id),
+                    '_maxdepth': _maxdepth,
+                }
+            case {'_ref': _ref}:
+                return cast(JsonRef, {'_ref': remap_id(_ref)})
+            case _:
+                raise ValueError(f'Unrecognized JSON: {obj}')
+    try:
+        return _remap_ids(obj)
+    except ValueError as ex:
+        raise RemapError(f'Failed to parse {argname}: {obj}') from ex

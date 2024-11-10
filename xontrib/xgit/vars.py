@@ -26,17 +26,21 @@ from xontrib.xgit.types import (
     _NoValue, _NO_VALUE,
 )
 from xontrib.xgit.proxy import (
-    ContextLocalAccessor, MappingAdapter, proxy, target,
+    ContextLocalAccessor, IdentityTargetAccessor, MappingAdapter, meta, proxy, target,
     ModuleTargetAccessor, ObjectTargetAccessor,
     T, V,
 )
 
 
 def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
-    return proxy(name, XSH, ObjectTargetAccessor, MappingAdapter,
+    def init_user_proxy(p):
+        def on_xsh(xsh_proxy, xsh: XonshSession):
+            target(p, xsh.env)
+        meta(XSH).on_init(on_xsh)
+    return proxy(name, None, IdentityTargetAccessor, MappingAdapter,
                  key='env',
                  type=type,
-                 initializer=lambda p: target(p, value)
+                 initializer=init_user_proxy
             )
 
 def xgit_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
@@ -69,7 +73,7 @@ The xonsh session object, via a `ContextLocal` stored in the xgit module
 to allow persistence of the `ContextLocal` across reloads.
 """
 
-XGIT: GitContext|None = user_proxy('XGIT', GitContext, None)
+XGIT: GitContext|None = user_proxy('XGIT', GitContext)
 """
 Set the xgit context, making it available in the xonsh context,
 and storing it in the context map.
