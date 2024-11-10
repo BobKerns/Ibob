@@ -10,7 +10,7 @@ def test_displayhook_simple(with_xgit, capsys):
         _xgit_displayhook(42)
         out = capsys.readouterr()
         text = out.out
-        assert re.match(r'_\d+: 42', text)
+        assert re.match(r'_\d+: 42', text), f"Expected _<number>: 42, got: {text}"
         assert out.err == ""
     with_xgit(_t)
 

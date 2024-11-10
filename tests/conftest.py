@@ -74,6 +74,11 @@ def session_active(module, xonsh_session):
 
 @pytest.fixture()
 def with_xgit(xonsh_session, module, monkeypatch, ):
+    # This import may appear to be unused, but it is necessary to
+    # ensure the xontrib is reloaded properly. I'm not sure why.
+    # Without it, test_displayhook_simple fails (pre/post events
+    # do not fire) unless something else is run first.
+    import xontrib.xgit.main
     def _t(module, *, _load_xontrib_, _unload_xontrib_, XSH=xonsh_session, **kwargs):
         assert module is not None
         assert callable(_load_xontrib_)
