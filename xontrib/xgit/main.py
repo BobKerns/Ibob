@@ -90,6 +90,7 @@ def git_cd(path: str = "", stderr=sys.stderr) -> None:
 
 @command(
     for_value=True,
+    export=True,
 )
 def git_pwd():
     """
