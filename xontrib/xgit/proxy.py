@@ -823,6 +823,7 @@ class ProxyMetadata(Generic[T, V]):
                  /,
                 initializer: Optional[ProxyInitializer] = None
         ) -> None:
+        self._name = name
         self.__namespace = namespace
         self.__accessor = accessor # type: ignore
         self.__adaptor = adaptor
