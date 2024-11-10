@@ -17,7 +17,7 @@ def proxy_to_json(obj: Any) -> JsonReturn:
             m = meta(proxy)
             rest = {'_target': to_json(t)} if t is not _NO_VALUE else {}
             return {
-                    '_metadata': to_json(m),
+                    '_metadata': proxy_to_json(m),
                     **rest
                 }
         return {}
