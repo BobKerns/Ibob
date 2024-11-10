@@ -12,8 +12,9 @@ def test_pwd(with_xgit, capsys, chdir):
     '''
     Test the xsh proxy.
     '''
-    def _t(*_, XSH: XonshSession, git_pwd, **__):
-        chdir(Path('/'))
+    def _t(*_, XSH: XonshSession, git_pwd, **__) -> None:
+        root = Path('/').resolve()
+        chdir(root)
         git_pwd()
         output = capsys.readouterr()
         env = XSH.env
@@ -22,6 +23,6 @@ def test_pwd(with_xgit, capsys, chdir):
 
         lines = output.out.strip().split('\n')
         assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}: {lines}"
-        assert lines[0] == 'cwd: /'
+        assert lines[0] == f'cwd: {root}'
         assert lines[1] == 'Not in a git repository'
     with_xgit(_t)
