@@ -46,6 +46,7 @@ procs
 proxied
 PYPI
 pyproject
+pyreadline3
 pytest
 pythonic
 setenv
