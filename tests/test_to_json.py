@@ -78,3 +78,24 @@ def test_to_json_nested_max():
                 'x': {'_id': 2, '_map': {
                     'y': {'_id': 4, '_maxdepth': 2}}}}}
     cmp(result, expected)
+
+def test_to_json_special():
+    class Special:
+        pass
+    sut = [Special()]
+    expected = {
+        '_id': 1, '_list': [
+                {
+                    '_id': 2,
+                    '_cls': 'Special',
+                    '_attrs': {
+                        'special': 'K'
+                    }
+                }
+             ]
+    }
+    actual = to_json(sut, special_types={
+        Special: lambda s, _: ({'special': 'K'}),
+        }
+    )
+    cmp(actual, expected)
