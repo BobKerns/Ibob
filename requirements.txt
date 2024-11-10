@@ -3,4 +3,5 @@ prompt-toolkit
 xonsh
 python-extracontext>=1.0.0
 colorama>=0.4.6
-gnureadline>=8.2.13
+pyreadline3>=3.5.4
+
