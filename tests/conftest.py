@@ -1,10 +1,11 @@
 from contextlib import contextmanager
 import keyword
+from threading import RLock
 from types import ModuleType as Module
 from functools import wraps
 import pytest
 from importlib import import_module
-from typing import Callable, Any, NamedTuple, TypeAlias, cast
+from typing import Callable, Any, Generator, NamedTuple, TypeAlias, cast
 import sys
 
 from xonsh.built_ins import XonshSession
@@ -97,4 +98,23 @@ def with_xgit(xonsh_session, module, monkeypatch, ):
         yield _with_xgit
     yield from module('xontrib.xgit', _t)
 
-
+CWD_LOCK = RLock()
+@pytest.fixture()
+def chdir():
+    '''
+    Change the working directory for the duration of the test.
+    Locks to prevent simultaneous changes.
+    '''
+    from pathlib import Path
+    import os
+    def chdir(path) -> Path:
+        path = Path(path)
+        os.chdir(path)
+        return path
+    
+    with CWD_LOCK:
+        old = Path.cwd()
+        try:
+            yield chdir
+        finally:
+            os.chdir(old)

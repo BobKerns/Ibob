@@ -7,6 +7,8 @@ bobkerns
 bset
 bstring
 capsys
+chdir
+contextlib
 decscriptor
 deinit
 deinitialized
@@ -44,6 +46,7 @@ procs
 proxied
 PYPI
 pyproject
+pytest
 pythonic
 setenv
 sorteddict
