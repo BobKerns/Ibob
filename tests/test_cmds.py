@@ -2,22 +2,19 @@
 Test the XGit commands.
 '''
 
-from contextlib import chdir
 from pathlib import Path
 from typing import MutableMapping
 
 from xonsh.built_ins import XonshSession
 
-from xontrib.xgit.proxy_json import proxy_to_json
-from xontrib.xgit.vars import XSH
 
-def test_pwd(with_xgit, capsys):
+def test_pwd(with_xgit, capsys, chdir):
     '''
     Test the xsh proxy.
     '''
     def _t(*_, XSH: XonshSession, git_pwd, **__):
-        with chdir(Path('/')):
-            git_pwd()
+        chdir(Path('/'))
+        git_pwd()
         output = capsys.readouterr()
         env = XSH.env
         assert isinstance(env, MutableMapping), \
