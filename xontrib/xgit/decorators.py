@@ -5,7 +5,6 @@ Various decorators for xgit commands and functions.
 
 from typing import Any, MutableMapping, Optional, Callable
 from inspect import signature, Signature
-from functools import partial
 import sys
 
 from xontrib.xgit import vars as xv
