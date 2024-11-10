@@ -5,7 +5,7 @@ A utility to inspect `XGitProxy` objects in JSON format.
 from typing import Any
 
 from xontrib.xgit.types import _NO_VALUE
-from xontrib.xgit.proxy import XGitProxy, meta, target
+from xontrib.xgit.proxy import ProxyMetadata, XGitProxy, meta, target
 from xontrib.xgit.to_json import to_json, JsonReturn, JsonDescriber, JsonKV
 
 
@@ -21,5 +21,16 @@ def proxy_to_json(obj: Any) -> JsonReturn:
                     **rest
                 }
         return {}
-    describer = JsonDescriber(special_types={XGitProxy: handle_proxy})
+    #
+    def handle_metadata(meta: ProxyMetadata, describer: JsonDescriber) -> JsonKV:
+        if isinstance(meta, ProxyMetadata):
+            print(meta)
+            keys = ('name', 'namespace', 'accessor', 'adaptor', 'target', '_initialized')
+
+            return {k: to_json(getattr(meta, k)) for k in keys}
+        return {}
+    describer = JsonDescriber(special_types={
+        XGitProxy: handle_proxy,
+        ProxyMetadata: handle_metadata,
+        })
     return to_json(obj, describer=describer)
