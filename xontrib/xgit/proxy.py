@@ -867,9 +867,10 @@ def meta(proxy: XGitProxy[T,V]|Any) -> ProxyMetadata[T, V]:
     """
     Get the metadata for a proxy object.
     """
-    meta = ProxyMetadata._metadata[proxy]
-    if meta is None:
-        raise AttributeError(f'No metadata for {proxy}')
+    try:
+        meta = ProxyMetadata._metadata[proxy]
+    except KeyError:
+        raise AttributeError(f'No metadata for {proxy}') from None
     return meta
 
 
