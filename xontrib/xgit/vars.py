@@ -33,15 +33,14 @@ from xontrib.xgit.proxy import (
 
 
 def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
-    def init_user_proxy(p):
-        def on_xsh(xsh_proxy, xsh: XonshSession):
-            target(p, xsh.env)
-        meta(XSH).on_init(on_xsh)
-    return proxy(name, None, IdentityTargetAccessor, MappingAdapter,
+    def on_xsh(xsh_proxy, xsh: XonshSession):
+        target(p, xsh.env)
+    meta(XSH).on_init(on_xsh)
+    p = proxy(name, None, IdentityTargetAccessor, MappingAdapter,
                  key='env',
                  type=type,
-                 initializer=init_user_proxy
             )
+    return p
 
 def xgit_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
     return proxy(name, 'xontrib.xgit', ModuleTargetAccessor,

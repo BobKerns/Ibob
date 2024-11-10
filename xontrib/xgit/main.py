@@ -206,9 +206,14 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         set_unload(aliases, name, value)
         aliases[name] = value
 
+    # Assertions are to flag bad test
     env = xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is a MutableMapping {env!r}"
+
+    ctx: MutableMapping[str, Any] = xsh.ctx
+    assert isinstance(ctx, MutableMapping),\
+        f"XSH.ctx is not a MutableMapping: {ctx!r}"
 
     # Set the initial context on loading.
     target(XGIT, None)
@@ -221,6 +226,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     hook = _xonsh_displayhook
     target(XSH, xsh)
 
+    ctx['-']  = None
     def unhook_display():
         sys.displayhook = hook
 
