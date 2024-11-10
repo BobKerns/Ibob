@@ -125,7 +125,12 @@ class JsonDescriber:
         """
         Get the valid attributes for an object.
         """
-        return ((k, self._attr(x,k)) for k  in vars(x) if self.valid_key(k))
+        keys = []
+        try:
+            keys = vars(x)
+        except TypeError:
+            pass
+        return ((k, self._attr(x,k)) for k  in keys if self.valid_key(k))
 
     def _instance(self, x: Any, handler: JsonHandler[JsonKV]) -> JsonReturn:
         """
