@@ -9,6 +9,7 @@ bstring
 capsys
 decscriptor
 deinit
+deinitialized
 Deinitializer
 deinitializers
 dfmt

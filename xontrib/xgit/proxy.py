@@ -234,7 +234,7 @@ class BaseObjectAdaptor(Generic[T, V]):
         try:
             return getattr(t, name)
         except AttributeError as ex:
-            raise AttributeError(*ex.args) from None
+            raise AttributeError(f'Could not get {t!r}.{name}') from ex
 
     def contains(self, name):
         target = self.target
@@ -479,9 +479,9 @@ class ObjectTargetAccessor(KeyedTargetAccessor[D, str, M, T, V]):
     def __get__(self, _, objtype) -> T:
         try:
             return getattr(self.mapping, self.key)
-        except AttributeError:
+        except AttributeError as ex:
             if self.default is _NO_VALUE:
-                raise
+                raise AttributeError(f'Could not get target attribute {self.key!r} on {self.mapping!r}') from ex
             default = cast(T, self.default)
             self.__set__(objtype, default)
             return default
@@ -650,6 +650,12 @@ or to restore the unloaded state.
 """
 
 
+ProxyCallback: TypeAlias = Callable[[XGitProxy[T, V], T], ProxyDeinitializer|None]
+"""
+Called with the new target object when the proxy object is initialized.
+"""
+
+
 class TargetAccessorFactory(Generic[D, M, T, V], Protocol):
     """
     A factory function that creates a `TargetDescriptor` object.
@@ -757,8 +763,28 @@ class ProxyMetadata(Generic[T, V]):
         assert proxy is not None, 'Proxy has been deleted.'
         return proxy
 
+    @property
+    def target(self) -> T:
+        return self.accessor.target
+
+    _on_init: set[ProxyCallback[T, V]]
+    def on_init(self, callback: ProxyCallback[T, V]):
+        """
+        Register a callback to be called when the proxy object is initialized.
+        """
+        if self._initialized:
+            callback(self.proxy, self.target)
+        else:
+            self._on_init.add(callback)
+
+    _initialized: bool = False
+
     __initializer: ProxyInitializer|None
     def _init(self) -> 'ProxyMetadata[T, V]':
+        """
+        Initialize the proxy object if necessary and return the metadata.
+        """
+        self._initialized = True
         if self.__initializer is None:
             return self
         try:
@@ -768,15 +794,21 @@ class ProxyMetadata(Generic[T, V]):
             deinit = None
         finally:
             self.__initializer = None
-        if deinit is None or not callable(deinit):
-            return self
-        def run_deinit():
+        if callable(deinit):
+            def run_deinit():
+                with ProxyMetadata.lock:
+                    try:
+                        deinit()
+                    except Exception as ex:
+                        print(f'Error cleaning up proxy {self.__proxy}: {ex}', file=sys.stderr)
+            ProxyMetadata.__deinitializers.append(run_deinit)
+        t = self.target
+        for callback in self._on_init:
             with ProxyMetadata.lock:
                 try:
-                    deinit()
+                    callback(self.proxy, t)
                 except Exception as ex:
-                    print(f'Error cleaning up proxy {self.__proxy}: {ex}')
-        ProxyMetadata.__deinitializers.append(run_deinit)
+                    print(f'Error initializing proxy {self.__proxy}: {ex}', file=sys.stderr)
         return self
 
     @property
@@ -798,6 +830,9 @@ class ProxyMetadata(Generic[T, V]):
         if ProxyMetadata.__loaded and initializer is not None:
             self._init()
         self.__initializer = initializer
+        self._on_init = set()
+        self._on_deinit = set()
+        self._initialized = False
 
     __loaded: bool = False
     """
@@ -828,7 +863,7 @@ class ProxyMetadata(Generic[T, V]):
                     print(f'Error cleaning up proxy: {ex}')
 
 
-def meta(proxy: XGitProxy[T,V]) -> ProxyMetadata[T, V]:
+def meta(proxy: XGitProxy[T,V]|Any) -> ProxyMetadata[T, V]:
     """
     Get the metadata for a proxy object.
     """
@@ -899,32 +934,3 @@ def target(proxy: 'T|XGitProxy[T, V]', value: _NoValue|T=_NO_VALUE, /, *, delete
             case _, _:
                 d.target = value
         return None
-
-def json_proxy(p: XGitProxy[T, V]):
-    """
-    Describe a proxy object as JSON, for debugging/test purposes.
-    """
-    def _errchk(f: Callable, *args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except Exception as ex:
-            exl = []
-            while ex is not None:
-                exl.append([type(ex).__name__, str(ex)])
-                ex = ex.__cause__
-            return exl
-    def attr(x, attr: str) -> str|list:
-        return _errchk(lambda: getattr(x, attr))
-    def item(x, item: str) -> str|list:
-        return _errchk(lambda: x[item])
-    m = meta(p)
-    return {
-        "_cls": type(p).__name__,
-        "metadata": {
-            "name": m.name
-        }
-    }
-    meta = ProxyMetadata._metadata[p]
-    if meta is None:
-        raise AttributeError(f'No metadata for {p}')
-    return f'{p} -> {meta.namespace}.{meta.accessor.name}'
