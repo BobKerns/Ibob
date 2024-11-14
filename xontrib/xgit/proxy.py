@@ -197,8 +197,11 @@ class BaseObjectAdaptor(Generic[T, V]):
     @property
     def target(self) -> T:
         d = self.__getattribute__('descriptor')
-        return d.target
-
+        t = d.target
+        if t is self:
+            raise AttributeError('Recursive target set to self')
+        return t
+    
     def getitem(self, name):
         tm = cast(Mapping[str,V], self.target)
         try:
