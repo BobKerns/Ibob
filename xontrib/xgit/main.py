@@ -245,6 +245,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Loaded xontrib-xgit", file=sys.stderr)
+    target(XGIT, _git_context())
     return _exports
 
 

@@ -14,8 +14,7 @@ different threads or asyncio tasks.
 from pathlib import Path
 from threading import Lock
 import sys
-
-from extracontext import ContextLocal
+from typing import Optional
 
 from xonsh.built_ins import XonshSession
 
@@ -27,42 +26,25 @@ from xontrib.xgit.types import (
     _NoValue, _NO_VALUE,
 )
 from xontrib.xgit.proxy import (
-    ContextLocalAccessor, IdentityTargetAccessor, MappingAdapter, meta, proxy, target,
-    ModuleTargetAccessor, ObjectTargetAccessor,
+    IdentityTargetAccessor, MappingAdapter, ObjectAdaptor, proxy, target,
+    ModuleTargetAccessor, ProxyInitializer, BaseObjectAdaptor,
+    MappingTargetAccessor,
     T, V,
 )
 
 
-def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
-    def on_xsh(xsh_proxy, xsh: XonshSession):
-        target(p, xsh.env)
-    meta(XSH).on_init(on_xsh)
-    p = proxy(name, None, IdentityTargetAccessor, MappingAdapter,
-                 key='ctx',
+def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE,
+               adaptor: Optional[type[BaseObjectAdaptor]]=ObjectAdaptor,
+               initializer: Optional[ProxyInitializer]=None) -> V|T:
+    if initializer is None:
+        initializer = lambda x: target(x, value)
+    p = proxy(name, XSH.ctx, MappingTargetAccessor, ObjectAdaptor,
+                 key=name,
                  type=type,
+                 initializer=initializer,
             )
     return p
 
-def xgit_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
-    return proxy(name, 'xontrib.xgit', ModuleTargetAccessor,
-                 key=name,
-                 type=type,
-                 initializer=lambda p: target(p, value)
-            )
-
-_CONTEXT = proxy('_CONTEXT', 'xontrib.xgit', ModuleTargetAccessor,
-                 key='_CONTEXT',
-                 initializer=lambda p: target(p, ContextLocal())
-            )
-"""
-We store a `ContextLocal` object in the xgit module, to allow persistence + session separation.
-
-xonsh does not currently support multiple sessions in the same process, notably the `XSH`
-global variable. But to avoid future problems, let's attempt to be thread safe.
-
-Note that the `extracontext` module handles async tasks and generators, avoiding the issue
-with threading.ContextVar, which is not inherited to new threads.
-"""
 
 XSH: XonshSession = proxy('XSH', 'xonsh.built_ins', ModuleTargetAccessor,
                         key='XSH',
@@ -73,7 +55,7 @@ The xonsh session object, via a `ContextLocal` stored in the xgit module
 to allow persistence of the `ContextLocal` across reloads.
 """
 
-XGIT: GitContext|None = user_proxy('XGIT', GitContext)
+XGIT: GitContext|None = user_proxy('XGIT', GitContext, None)
 """
 Set the xgit context, making it available in the xonsh context,
 and storing it in the context map.
@@ -82,7 +64,8 @@ and storing it in the context map.
 XGIT_CONTEXTS: dict[Path, GitContext] = user_proxy(
     'XGIT_CONTEXTS',
     dict,
-    {}
+    {},
+    adaptor=MappingAdapter,
 )
 """
 A map of git contexts by worktree, or by repository if the worktree is not available.
@@ -94,7 +77,8 @@ looking at in each one.
 XGIT_OBJECTS: dict[str, GitObject] = user_proxy(
     'XGIT_OBJECTS',
     dict,
-    {}
+    {},
+    adaptor=MappingAdapter,
 )
 """
 A map from the hash of a git object to the object itself.
@@ -104,7 +88,8 @@ Stored here to persist across reloads.
 XGIT_REFERENCES: dict[str, set[GitObjectReference]] = user_proxy(
     'XGIT_REFERENCES',
     dict,
-    {}
+    {},
+    adaptor=MappingAdapter,
 )
 """
 A map to where an object is referenced.
