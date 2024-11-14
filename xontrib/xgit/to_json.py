@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
     Any, Generic, Iterable, Mapping, Optional, Protocol,
-    Sequence, TypeAlias, TypeVar, TypedDict, cast, override
+    Sequence, TypeAlias, TypeVar, TypedDict, cast
 )
 from types import GenericAlias
 
