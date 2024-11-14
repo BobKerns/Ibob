@@ -15,6 +15,7 @@ import sys
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
+from xontrib.xgit.to_json import JsonDescriber
 from xontrib.xgit.types import (
     GitContext,
     ContextKey,
@@ -43,6 +44,18 @@ class _GitRepository(GitRepository):
     The path to the common part of the repository. This is the same for all worktrees.
     """
 
+    def to_json(self, describer: JsonDescriber):
+        return {
+            "repository": describer.to_json(self.repository),
+            "common": describer.to_json(self.common),
+        }
+
+    @staticmethod
+    def from_json(data: dict, describer: JsonDescriber):
+        return _GitRepository(
+            repository=describer.from_json(data["repository"]),
+            common=describer.from_json(data["common"]),
+        )
 
 @dataclass
 class _GitWorktree(_GitRepository, GitWorktree):
@@ -51,6 +64,21 @@ class _GitWorktree(_GitRepository, GitWorktree):
     """
 
     worktree: Path | None = Path(".")
+
+    def to_json(self, describer: JsonDescriber):
+        return {
+            "worktree": describer.to_json(self.worktree),
+            "repository": describer.to_json(self.repository),
+            "common": describer.to_json(self.common),
+        }
+
+    @staticmethod
+    def from_json(data: dict, describer: JsonDescriber):
+        return _GitWorktree(
+            worktree=describer.from_json(data["worktree"]),
+            repository=describer.from_json(data["repository"]),
+            common=describer.from_json(data["common"]),
+        )
 
 
 @dataclass
@@ -123,6 +151,27 @@ class _GitContext(_GitWorktree, GitContext):
                 p.break_()
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
 
+    def to_json(self, describer: JsonDescriber):
+        return {
+            "worktree": describer.to_json(self.worktree),
+            "repository": describer.to_json(self.repository),
+            "common": describer.to_json(self.common),
+            "git_path": describer.to_json(self.git_path),
+            "branch": describer.to_json(self.branch),
+            "commit": describer.to_json(self.commit),
+        }
+
+    @staticmethod
+    def from_json(data: dict, describer: JsonDescriber):
+        return _GitContext(
+            worktree=describer.from_json(data["worktree"]),
+            repository=describer.from_json(data["repository"]),
+            common=describer.from_json(data["common"]),
+            git_path=describer.from_json(data["git_path"]),
+            branch=describer.from_json(data["branch"]),
+            commit=describer.from_json(data["commit"]),
+        )
+
 
 def _relative_to_home(path: Path) -> Path:
     """
@@ -140,6 +189,31 @@ def _relative_to_home(path: Path) -> Path:
         return path
 
 
+@overload
+def multi_params(params: str, /) -> str: ...
+@overload
+def multi_params(param: str, *_params: str) -> Sequence[str]: ...
+def multi_params(param: str, *params: str) -> Sequence[str] | str:
+    """
+    Use `git rev-parse` to get multiple parameters at once.
+    """
+    all_params = [param, *params]
+    val = _run_stdout(["git", "rev-parse", *all_params])
+    if val:
+        # Drop the last line, which is empty.
+        result = val.split("\n")[:-1]
+    else:
+        # Try running them individually.
+        result = [_run_stdout(["git", "rev-parse", param]) for param in all_params]
+    if len(params)+1 == 1:
+        # Otherwise we have to assign like `value, = multi_params(...)`
+        # The comma is` necessary to unpack the single value
+        # but is confusing and easy to forget
+        # (or not understand if you don't know the syntax).
+        return result[0]
+    return result
+
+
 def _git_context():
     """
     Get the git context based on the current working directory,
@@ -147,31 +221,6 @@ def _git_context():
 
     The result should generally be passed to `_set_xgit`.
     """
-
-    @overload
-    def multi_params(params: str, /) -> str: ...
-
-    @overload
-    def multi_params(param: str, *_params: str) -> Sequence[str]: ...
-
-    def multi_params(param: str, *params: str) -> Sequence[str] | str:
-        """
-        Use `git rev-parse` to get multiple parameters at once.
-        """
-        val = _run_stdout(["git", "rev-parse", *params])
-        if val:
-            result = val.strip().split("\n")
-        else:
-            # Try running them individually.
-            result = [_run_stdout(["git", "rev-parse", param]) for param in params]
-        if len(result) == 1:
-            # Otherwise we have to assign like `value, = multi_params(...)`
-            # The comma is` necessary to unpack the single value
-            # but is confusing and easy to forget
-            # (or not understand if you don't know the syntax).
-            return result[0]
-        return result
-
     in_tree, in_git = multi_params("--is-inside-work-tree", "--is-inside-git-dir")
     try:
         if in_tree == "true":

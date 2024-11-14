@@ -20,16 +20,20 @@ from xontrib.xgit.proxy import XGitProxy, target
 # Our events:
 
 events.doc(
-    "xgit_on_predisplay",
+    "on_xgit_predisplay",
     "Runs before displaying the result of a command with the value to be displayed.",
 )
 events.doc(
-    "xgit_on_postdisplay",
+    "on_xgit_postdisplay",
     "Runs after displaying the result of a command with the value displayed.",
 )
 
 
 _xonsh_displayhook = sys.displayhook
+
+while hasattr(_xonsh_displayhook, "original"):
+    _xonsh_displayhook = _xonsh_displayhook.original
+
 """
 Xonsh's original displayhook.
 """
@@ -66,17 +70,18 @@ def _xgit_displayhook(value: Any):
         )
         sys.stderr.flush()
     try:
-        events.xgit_on_predisplay.fire(value=value)
+        events.on_xgit_predisplay.fire(value=value)
         sys.stdout.flush()
         _xonsh_displayhook(value)
-        events.xgit_on_postdisplay.fire(value=value)
+        events.on_xgit_postdisplay.fire(value=value)
     except Exception as ex:
         print(ex, file=sys.stderr)
         sys.stderr.flush()
 
+setattr(_xgit_displayhook, "original", _xonsh_displayhook)
 
-@events.xgit_on_predisplay
-def _xgit_on_predisplay(value: Any):
+@events.on_xgit_predisplay
+def _xgit_on_predisplay(value: Any, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
@@ -97,8 +102,8 @@ def _xgit_on_predisplay(value: Any):
         print(f"{ovar}: ", end="")
 
 
-@events.xgit_on_postdisplay
-def _xgit_on_postdisplay(value: Any):
+@events.on_xgit_postdisplay
+def _xgit_on_postdisplay(value: Any, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
@@ -109,7 +114,7 @@ def _xgit_on_postdisplay(value: Any):
 
 
 @events.on_precommand
-def _on_precommand(cmd: str):
+def _on_precommand(cmd: str, **_):
     """
     Before running a command, save our temporary variables.
     We associate them with the session rather than the module.

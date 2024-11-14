@@ -6,8 +6,8 @@
         "**/CVS": true,
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
-        "**/.ruby-lsp": true,
-        "**/*.crswap": true
+        "**/*.crswap": true,
+        "**/.ruby-lsp": true
     },
     "hide-files.files": [],
     "python.analysis.typeCheckingMode": "basic",
