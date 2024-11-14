@@ -23,6 +23,7 @@ from xontrib.xgit.types import (
     GitContext,
     GitObjectReference,
     GitObject,
+    GitEntryKey, GitTreeEntry,
     _NoValue, _NO_VALUE,
 )
 from xontrib.xgit.proxy import (
@@ -76,6 +77,17 @@ looking at in each one.
 
 XGIT_OBJECTS: dict[str, GitObject] = user_proxy(
     'XGIT_OBJECTS',
+    dict,
+    {},
+    adaptor=MappingAdapter,
+)
+"""
+A map from the hash of a git object to the object itself.
+Stored here to persist across reloads.
+"""
+
+XGIT_ENTRIES: dict[GitEntryKey, GitTreeEntry] = user_proxy(
+    'XGIT_ENTRIES',
     dict,
     {},
     adaptor=MappingAdapter,

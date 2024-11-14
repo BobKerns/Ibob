@@ -51,6 +51,7 @@ GitObjectType: TypeAlias = Literal["blob", "tree", "commit", "tag"]
 Valid types for a git object.
 """
 
+GitEntryKey: TypeAlias = tuple[Path, str, str, str|None]
 
 GitObjectReference: TypeAlias = tuple[ContextKey, str | None]
 """

@@ -95,7 +95,8 @@ class _GitObject(_GitId, GitObject):
     def size(self) -> int:
         if callable(self._size):
             self._size()
-            return self.size
+            assert isinstance(self._size, int), f"Loader did not updates _size {self._size!r}"
+            return self._size
         return self._size
 
     def __init__(
@@ -161,27 +162,40 @@ def _git_entry(
     """
     assert isinstance(XSH.env, MutableMapping),\
         f"XSH.env not a MutableMapping: {XSH.env!r}"
+        
+    key = (
+           context.repository,
+           hash,
+           mode,
+           parent)
+    entry = xv.XGIT_ENTRIES.get(key)
+    if entry is not None:
+        return name, entry
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
         print(msg)
-
-    entry = xv.XGIT_OBJECTS.get(hash)
-    if type == "tree":
-        obj = _GitTree(hash, context=context)
-    elif type == "blob":
-        obj = _GitBlob(hash, int(size), context=context)
-    elif type == "commit":
-        obj = _GitCommit(hash, context=context)
-    elif type == "tag":
-        obj = _GitTagObject(hash, context=context)
-    else:
-        raise ValueError(f"Unknown type {type}")
-    xv.XGIT_OBJECTS[hash] = obj
+        
+    obj = xv.XGIT_OBJECTS.get(hash)
+    if obj is None:
+        if type == "tree":
+            obj = _GitTree(hash, context=context)
+        elif type == "blob":
+            obj = _GitBlob(hash, int(size), context=context)
+        elif type == "commit":
+            obj = _GitCommit(hash, context=context)
+        elif type == "tag":
+            obj = _GitTagObject(hash, context=context)
+        else:
+            raise ValueError(f"Unknown type {type}")
+        xv.XGIT_OBJECTS[hash] = obj
     entry = _GitTreeEntry(obj, name, mode)
+    xv.XGIT_ENTRIES[key] = entry
+    if hash not in xv.XGIT_REFERENCES:
+        xv.XGIT_REFERENCES[hash] = set()
     if context is not None:
-        key = (context.reference(name), parent)
-        xv.XGIT_REFERENCES[hash].add(key)
+        ref_key = (context.reference(name), parent)
+        xv.XGIT_REFERENCES[hash].add(ref_key)
     return name, entry
 
 
@@ -212,6 +226,7 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
                     if line:
                         name, entry = _parse_git_entry(line, context, tree)
                         dict.__setitem__(self, name, entry)
+            self._size = dict.__len__(self)
             self._lazy_loader = None
         self._lazy_loader = _lazy_loader
 
@@ -222,6 +237,10 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
             loader=_lazy_loader,
             context=context,
         )
+    
+    @property
+    def type(self) -> Literal["tree"]:
+        return "tree"
 
     def __hash__(self):
         _GitObject.__hash__(self)
@@ -604,6 +623,10 @@ class _GitTagObject(_GitObject, GitTagObject):
     A tag in a git repository.
     This is an actual signed tag object, not just a reference.
     """
+
+    @property    
+    def type(self) -> Literal["tag"]:
+        return "tag"
 
     _object: GitObject|GitLoader
     @property
