@@ -2,51 +2,54 @@
 Tests of the `xontrib.xgit.proxy` module.
 '''
 
-from typing import Any, cast
+from typing import Any, Callable, cast
 from types import SimpleNamespace
 from functools import wraps
 
 from extracontext import ContextLocal, ContextMap
 
-def test_proxy_loads(module):
-    def _t(module, /, **__):
-        assert module is not None
-    module('xontrib.xgit.proxy', _t)
+from xontrib import xgit
+from xontrib.xgit.proxy import MappingTargetAccessor, ModuleTargetAccessor, ObjectTargetAccessor
 
-def test_simple_proxy_map(module):
-    def _t(_, proxy, target, **__):
+def test_proxy_loads(modules):
+    with modules('xontrib.xgit.proxy') as ((m_proxy,), vars):
+        assert m_proxy is not None
+
+proxy: Callable[..., Any]
+target: Callable[..., Any]
+def test_simple_proxy_map(modules):
+    with modules('xontrib.xgit.proxy'):
         val = {}
         p = proxy('P', val)
         p['x'] = 42
         assert val['x'] == 42
         assert target(p) is val
         assert p['x'] == 42
-    module('xontrib.xgit.proxy', _t)
 
-def test_simple_proxy_object(module):
-    def _t(_, proxy, target, **__):
+def test_simple_proxy_object(modules):
+    with modules('xontrib.xgit.proxy'):
         val = SimpleNamespace()
         p = proxy('P', val)
         p.x = 42
         assert val.x == 42
         assert target(p) is val
         assert p.x == 42
-    module('xontrib.xgit.proxy', _t)
 
-def test_module_var(module, debug_env):
-    def _t(xgit, /, **__):
-        def _t(_, proxy, target, ModuleTargetAccessor, **__):
-            assert callable(proxy)
-            assert callable(ModuleTargetAccessor)
+xgit: Any
+ModuleTargetAccessor: Any
+def test_module_var(modules, debug_env):
+    with modules('xontrib.xgit.proxy', 'xontrib.xgit') as ((_proxy, _xgit), vars):
+        assert callable(proxy)
+        assert callable(ModuleTargetAccessor)
 
-            p1 = proxy('XGIT', 'xontrib.xgit', ModuleTargetAccessor, key='fish')
-            target(p1, 'foo')
-            assert 'fish' in xgit.__dict__
-            assert xgit.__dict__['fish'] == 'foo'
-    module('xontrib.xgit', _t)
+        p1 = proxy('XGIT', 'xontrib.xgit', ModuleTargetAccessor, key='fish')
+        target(p1, 'foo')
+        assert 'fish' in _xgit.__dict__
+        assert _xgit.__dict__['fish'] == 'foo'
 
-def test_identity_var(module, debug_env ):
-    def _t(_, *, proxy, target, IdentityTargetAccessor, **__):
+IdentityTargetAccessor: Any
+def test_identity_var(modules, debug_env ):
+    with modules('xontrib.xgit.proxy'):
         val = {}
         p = proxy('P', val, IdentityTargetAccessor)
         p['bar'] = 'foo'
@@ -57,11 +60,10 @@ def test_identity_var(module, debug_env ):
         p[0] = 'foo'
         assert val2[0] == 'foo'
         assert target(p) is val2
-    module('xontrib.xgit.proxy', _t)
 
-
-def test_mapping_var(module, debug_env):
-    def _t(_, *, proxy, target, MappingTargetAccessor, **__):
+MappingTargetAccessor: Any
+def test_mapping_var(modules, debug_env):
+    with modules('xontrib.xgit.proxy'):
         val = {}
         p = proxy('P', val, MappingTargetAccessor, key='bar')
         target(p, 'foo')
@@ -73,22 +75,20 @@ def test_mapping_var(module, debug_env):
         assert val2['foo'] == 42
         assert cast(dict,val['bar'])['foo'] == 42
         assert target(p) is val2
-    module('xontrib.xgit.proxy', _t)
 
-
-def test_object_var(module, debug_env):
-    def _t(_, /, proxy, target, ObjectTargetAccessor, **__):
+ObjectTargetAccessor: Any
+def test_object_var(modules, debug_env):
+    with modules('xontrib.xgit.proxy'):
         val = SimpleNamespace()
         p = proxy('P', val, ObjectTargetAccessor, key='bar')
         t = SimpleNamespace()
         target(p, t)
         assert val.bar is t
         assert target(p) is t
-    module('xontrib.xgit.proxy', _t)
 
-
-def test_context_local_var(module, debug_env):
-    def _t(_, proxy, target, ContextLocalAccessor, **__):
+ContextLocalAccessor: Any
+def test_context_local_var(modules, debug_env):
+    with modules('xontrib.xgit.proxy', 'extracontext') as ((_, _proxy), vars):
         val: Any = ContextLocal()
         p = proxy('P', val, ContextLocalAccessor, key='bar')
         t = SimpleNamespace()
@@ -98,12 +98,11 @@ def test_context_local_var(module, debug_env):
         p.baz = 'buzz'
         assert t.baz == 'buzz'
         assert p.baz == 'buzz'
-    module('xontrib.xgit.proxy', _t)
 
 
-def test_context_map_var(module, debug_env):
-    @wraps(test_context_map_var)
-    def _t(_, proxy, target, ContextMapAccessor, **__):
+ContextMapAccessor: Any
+def test_context_map_var(modules, debug_env):
+    with modules('xontrib.xgit.proxy', 'extracontext') as ((_, _proxy), vars):
         val: Any = ContextMap()
         p = proxy('P', val, ContextMapAccessor, key='bar')
         t = {}
@@ -112,4 +111,3 @@ def test_context_map_var(module, debug_env):
         assert target(p) is t
         p['baz'] = 'buzz'
         assert t['baz'] == 'buzz'
-    module('xontrib.xgit.proxy', _t)

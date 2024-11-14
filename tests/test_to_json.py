@@ -2,6 +2,7 @@
 Tests of the to_json module.
 """
 
+from pathlib import Path
 from typing import Any
 
 from xontrib.xgit.to_json import to_json, JsonReturn, remap_ids
@@ -98,4 +99,14 @@ def test_to_json_special():
         Special: lambda s, _: ({'special': 'K'}),
         }
     )
+    cmp(actual, expected)
+
+def test_to_json_special2():
+    sut = [Path('foo')]
+    expected = {
+        '_id': 1, '_list': [
+                'foo'
+             ]
+    }
+    actual = to_json(sut)
     cmp(actual, expected)

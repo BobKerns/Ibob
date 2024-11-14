@@ -18,6 +18,7 @@ import sys
 from extracontext import ContextLocal
 
 from xonsh.built_ins import XonshSession
+
 import xontrib.xgit as xgit
 from xontrib.xgit.types import (
     GitContext,
@@ -37,7 +38,7 @@ def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE) -> V|T:
         target(p, xsh.env)
     meta(XSH).on_init(on_xsh)
     p = proxy(name, None, IdentityTargetAccessor, MappingAdapter,
-                 key='env',
+                 key='ctx',
                  type=type,
             )
     return p
@@ -63,7 +64,7 @@ Note that the `extracontext` module handles async tasks and generators, avoiding
 with threading.ContextVar, which is not inherited to new threads.
 """
 
-XSH: XonshSession = proxy('XSH', _CONTEXT, ContextLocalAccessor,
+XSH: XonshSession = proxy('XSH', 'xonsh.built_ins', ModuleTargetAccessor,
                         key='XSH',
                         type=XonshSession,
                 )

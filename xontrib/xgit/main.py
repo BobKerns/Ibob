@@ -225,7 +225,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     # Install our displayhook
     global _xonsh_displayhook
     hook = _xonsh_displayhook
-    target(XSH, xsh)
+    #target(XSH, xsh)
 
     ctx['-']  = None
     def unhook_display():

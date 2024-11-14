@@ -1,6 +1,5 @@
 from importlib import import_module
 
-def test_xgit_loads(module):
-    def _t(module, **__):
-        assert module is not None
-    module('xontrib.xgit', _t)
+def test_xgit_loads(modules):
+    with modules('xontrib.xgit') as ((m_xgit,), vars):
+        assert m_xgit is not None
