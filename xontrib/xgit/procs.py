@@ -5,7 +5,7 @@ Utilities for running git commands.
 from typing import Sequence, MutableMapping, Generator, cast, Any
 import sys
 
-from xonsh.procs.pipelines import HiddenCommandPipeline
+from xonsh.procs.pipelines import CommandPipeline
 from xontrib.xgit import vars as xv
 
 
@@ -22,7 +22,7 @@ def _run_stdout(cmd: Sequence[str]) -> str:
         print(f"Running {cmdline}", file=sys.stderr)
     return cast(str, xv.XSH.subproc_captured_stdout([*cmd, ("2>", "/dev/null")]))
 
-def _run_object(cmd: Sequence[str]) -> HiddenCommandPipeline:
+def _run_object(cmd: Sequence[str]) -> CommandPipeline:
     env = xv.XSH.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env not a MutableMapping: {env!r}"
@@ -32,7 +32,7 @@ def _run_object(cmd: Sequence[str]) -> HiddenCommandPipeline:
         print(f'Running {cmdline}', file=sys.stderr)
     result = xv.XSH.subproc_captured_object(
         [*cmd, ("2>", "/dev/null")])
-    if not isinstance(result, HiddenCommandPipeline):
+    if not isinstance(result, CommandPipeline):
         cmdline = " ".join(cmd)
         raise RuntimeError(f"Failed to run {cmdline}")
     return result
