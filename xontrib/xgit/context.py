@@ -35,16 +35,40 @@ class _GitRepository(GitRepository):
     A git repository.
     """
 
-    repository: Path = Path(".git")
+    _repository: Path = Path(".git")
+    @property
+    def repository(self) -> Path:
+        return self._repository
+
+    @repository.setter
+    def repository(self, value: Path|str):
+        self._repository = Path(value)
     """
     The path to the repository. If this is a worktree,
     it is the path to the worktree-specific part.
     For the main worktree, this is the same as `common`.
     """
-    common: Path = Path(".git")
+
+    _common: Path = Path(".git")
+    @property
+    def common(self) -> Path:
+        return self._common
+    @common.setter
+    def common(self, value: Path|str):
+        self._common = Path(value)
+
+
     """
     The path to the common part of the repository. This is the same for all worktrees.
     """
+
+    def __init__(self, *args,
+                 repository: Path = Path(".git"),
+                 common: Path = Path('.git'),
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.repository = repository
+        self.common = common
 
     def to_json(self, describer: JsonDescriber):
         return {
@@ -65,7 +89,19 @@ class _GitWorktree(_GitRepository, GitWorktree):
     A git worktree. This is the root directory of where the files are checked out.
     """
 
-    worktree: Path | None = Path(".")
+    _worktree: Path | None = Path(".")
+    @property
+    def worktree(self) -> Path | None:
+        return self._worktree
+    @worktree.setter
+    def worktree(self, value: Path | str | None):
+        self._worktree = Path(value) if value else None
+
+    def __init__(self, *args,
+                    worktree: Path | None = Path("."),
+                    **kwargs):
+            super().__init__(*args, **kwargs)
+            self.worktree = worktree
 
     def to_json(self, describer: JsonDescriber):
         return {
@@ -92,7 +128,15 @@ class _GitContext(_GitWorktree, GitContext):
     tree.
     """
 
-    git_path: Path = Path(".")
+    _git_path: Path = Path(".")
+    @property
+    def git_path(self) -> Path:
+        return self._git_path
+
+    @git_path.setter
+    def git_path(self, value: Path|str):
+        self._git_path = Path(value)
+
     branch: str = ""
     _commit: GitCommit|None = None
     @property
@@ -110,7 +154,7 @@ class _GitContext(_GitWorktree, GitContext):
                 self._commit = value
             case _:
                 raise ValueError(f'Not a commit: {value}')
-            
+
     def __init__(self, *args,
                  git_path: Path = Path("."),
                  branch: str = "",
@@ -118,24 +162,27 @@ class _GitContext(_GitWorktree, GitContext):
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.commit = commit
-        self.git_path = git_path
+        self._git_path = git_path
         self.branch = branch
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         subpath = Path(subpath) if subpath else None
-        key = self.worktree or self.repository
+        key = self.worktree or self._repository
         commit = self.commit
         hash = '''
         if commit is not None:
             hash = commit.hash
         '''
         if subpath is None:
-            return (key, self.git_path, self.branch, hash)
+            return (key, self._git_path, self.branch, hash)
         return (key, subpath, self.branch, hash)
 
     @property
     def cwd(self) -> Path:
         return Path.cwd()
+    @cwd.setter
+    def cwd(self, value: Path|str):
+        chdir(Path(value))
 
     def new_context(
         self,
@@ -148,16 +195,16 @@ class _GitContext(_GitWorktree, GitContext):
         commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
         worktree = worktree or self.worktree
-        repository = repository or self.repository
+        repository = repository or self._repository
         common = common or self.common
-        git_path = git_path or self.git_path
+        git_path = git_path or self._git_path
         branch = branch if branch is not None else self.branch
         if isinstance(commit, str):
             commit = _git_object(commit, 'commit', self)
         commit = commit or self.commit
         return _GitContext(
             worktree=worktree,
-            repository=repository,
+            _repository=repository,
             common=common,
             git_path=git_path,
             branch=branch,
@@ -166,7 +213,7 @@ class _GitContext(_GitWorktree, GitContext):
 
     def _repr_pretty_(self, p: PrettyPrinter, cycle: bool):
         if cycle:
-            p.text(f"GitContext({self.worktree} {self.git_path}")
+            p.text(f"GitContext({self.worktree} {self._git_path}")
         else:
             assert self.commit is not None, "Commit has not been set"
             with p.group(4, "GitTree:"):
@@ -175,7 +222,7 @@ class _GitContext(_GitWorktree, GitContext):
                 p.text(f"worktree: {wt}")
                 with p.group(2):
                     p.break_()
-                    p.text(f"repository: {_relative_to_home(self.repository)}")
+                    p.text(f"repository: {_relative_to_home(self._repository)}")
                     p.break_()
                     p.text(f"common: {_relative_to_home(self.common)}")
                     p.break_()
@@ -196,7 +243,7 @@ class _GitContext(_GitWorktree, GitContext):
         assert self.commit is not None, "Commit has not been set"
         return {
             "worktree": describer.to_json(self.worktree),
-            "repository": describer.to_json(self.repository),
+            "repository": describer.to_json(self._repository),
             "common": describer.to_json(self.common),
             "git_path": describer.to_json(self.git_path),
             "branch": describer.to_json(self.branch),
@@ -207,7 +254,7 @@ class _GitContext(_GitWorktree, GitContext):
     def from_json(data: dict, describer: JsonDescriber):
         return _GitContext(
             worktree=describer.from_json(data["worktree"]),
-            repository=describer.from_json(data["repository"]),
+            _repository=describer.from_json(data["repository"]),
             common=describer.from_json(data["common"]),
             git_path=describer.from_json(data["git_path"]),
             branch=describer.from_json(data["branch"]),
@@ -290,7 +337,7 @@ def _git_context():
             else:
                 gctx = _GitContext(
                     worktree=worktree,
-                    repository=repository,
+                    _repository=repository,
                     common=common,
                     git_path=git_path,
                     commit=_git_object(commit, 'commit'),
@@ -321,7 +368,7 @@ def _git_context():
             else:
                 return _GitContext(
                     worktree=worktree,
-                    repository=repository,
+                    _repository=repository,
                     common=common,
                     git_path=Path("."),
                     commit=_git_object(commit, 'commit'),
