@@ -55,13 +55,13 @@ def _run_binary(cmd: Sequence[str]):
     return _run_object(cmd).stdout.raw
 
 
-def _run_text(cmd: Sequence[str]):
+def _run_text(cmd: Sequence[str]) -> str:
     """
     Run a command and return the standard output as text.
 
     Throws an exception if the command fails.
     """
-    return _run_object(cmd).stdout.text
+    return cast(str, _run_object(cmd).out)
 
 
 def _run_stream(cmd: Sequence[str]):
