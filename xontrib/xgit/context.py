@@ -12,6 +12,7 @@ from typing import MutableMapping, Optional, Sequence, overload
 from pathlib import Path
 import sys
 
+from tomlkit import comment
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
@@ -21,11 +22,13 @@ from xontrib.xgit.types import (
     ContextKey,
     GitRepository,
     GitWorktree,
+    GitCommit,
 )
 from xontrib.xgit.vars import XGIT_CONTEXTS, XSH
 from xontrib.xgit.procs import (
     _run_stdout
 )
+from xontrib.xgit.objects import _git_object
 
 @dataclass
 class _GitRepository(GitRepository):
@@ -92,14 +95,19 @@ class _GitContext(_GitWorktree, GitContext):
 
     git_path: Path = Path(".")
     branch: str = ""
-    commit: str = ""
+    commit: GitCommit|None = None
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         subpath = Path(subpath) if subpath else None
         key = self.worktree or self.repository
+        commit = self.commit
+        hash = '''
+        if commit is not None:
+            hash = commit.hash
+        '''
         if subpath is None:
-            return (key, self.git_path, self.branch, self.commit)
-        return (key, subpath, self.branch, self.commit)
+            return (key, self.git_path, self.branch, hash)
+        return (key, subpath, self.branch, hash)
 
     @property
     def cwd(self) -> Path:
@@ -113,13 +121,15 @@ class _GitContext(_GitWorktree, GitContext):
         common: Optional[Path] = None,
         git_path: Optional[Path] = None,
         branch: Optional[str] = None,
-        commit: Optional[str] = None,
+        commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
         worktree = worktree or self.worktree
         repository = repository or self.repository
         common = common or self.common
         git_path = git_path or self.git_path
         branch = branch if branch is not None else self.branch
+        if isinstance(commit, str):
+            commit = _git_object(commit, 'commit', self)
         commit = commit or self.commit
         return _GitContext(
             worktree=worktree,
@@ -134,31 +144,39 @@ class _GitContext(_GitWorktree, GitContext):
         if cycle:
             p.text(f"GitContext({self.worktree} {self.git_path}")
         else:
+            assert self.commit is not None, "Commit has not been set"
             with p.group(4, "GitTree:"):
                 p.break_()
                 wt = _relative_to_home(self.worktree) if self.worktree else None
                 p.text(f"worktree: {wt}")
+                with p.group(2):
+                    p.break_()
+                    p.text(f"repository: {_relative_to_home(self.repository)}")
+                    p.break_()
+                    p.text(f"common: {_relative_to_home(self.common)}")
+                    p.break_()
+                    p.text(f"git_path: {self.git_path}")
+                    p.break_()
+                    p.text(f"branch: {self.branch}")
                 p.break_()
-                p.text(f"repository: {_relative_to_home(self.repository)}")
-                p.break_()
-                p.text(f"common: {_relative_to_home(self.common)}")
-                p.break_()
-                p.text(f"path: {self.git_path}")
-                p.break_()
-                p.text(f"branch: {self.branch}")
-                p.break_()
-                p.text(f"commit: {self.commit}")
+                p.text(f"commit: {self.commit.hash}")
+                with p.group(2):
+                    p.break_()
+                    p.text(f'{self.commit.author} {self.commit.author_date}')
+                    p.break_()
+                    p.text(self.commit.message)
                 p.break_()
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
 
     def to_json(self, describer: JsonDescriber):
+        assert self.commit is not None, "Commit has not been set"
         return {
             "worktree": describer.to_json(self.worktree),
             "repository": describer.to_json(self.repository),
             "common": describer.to_json(self.common),
             "git_path": describer.to_json(self.git_path),
             "branch": describer.to_json(self.branch),
-            "commit": describer.to_json(self.commit),
+            "commit": describer.to_json(self.commit.hash),
         }
 
     @staticmethod
@@ -251,7 +269,7 @@ def _git_context():
                     repository=repository,
                     common=common,
                     git_path=git_path,
-                    commit=commit,
+                    commit=_git_object(commit, 'commit'),
                     branch=branch,
                 )
                 XGIT_CONTEXTS[key] = gctx
@@ -282,7 +300,7 @@ def _git_context():
                     repository=repository,
                     common=common,
                     git_path=Path("."),
-                    commit=commit,
+                    commit=_git_object(commit, 'commit'),
                     branch=branch,
                 )
         else:

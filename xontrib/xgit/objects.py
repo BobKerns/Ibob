@@ -5,11 +5,13 @@ These are the core objects that represent the contents of a git repository.
 '''
 
 from typing import (
-    MutableMapping, Optional, Literal, Sequence, Any, Protocol, cast, TypeAlias,
-    Callable,
+    MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
+    Callable, overload,
 )
 from datetime import datetime
 import re
+from pathlib import Path
+
 
 from xonsh.built_ins import XSH
 from xonsh.tools import chdir
@@ -31,6 +33,7 @@ from xontrib.xgit.types import (
 from xontrib.xgit.entries import _GitTreeEntry
 # Avoid a circular import dependency by not looking
 # at the vars module until it is loaded.
+from xontrib.xgit.proxy import target
 from xontrib.xgit import vars as xv
 from xontrib.xgit.procs import (
     _run_binary, _run_text, _run_lines, _run_stream
@@ -145,6 +148,68 @@ parent: GitHash | None = None
     type = cast(GitObjectType, type)
     return _git_entry(hash, name, mode, type, size, context, parent)
 
+def default_context() -> GitContext:
+    return cast(GitContext, target(xv.XGIT))
+
+@overload
+def _git_object(hash: str,
+                type: Literal['tree'],
+                context: GitContext|GitContextFn=default_context,
+                ) -> GitTree: ...
+@overload
+def _git_object(hash: str,
+                type: Literal['blob'],
+                context: GitContext|GitContextFn=default_context,
+                size: int=-1,
+                ) -> GitBlob: ...
+@overload
+def _git_object(hash: str,
+                type: Literal['commit'],
+                context: GitContext|GitContextFn=default_context,
+                ) -> GitCommit: ...
+@overload
+def _git_object(hash: str,
+                type: Literal['tag'],
+                context: GitContext|GitContextFn=default_context,
+                ) -> GitTagObject: ...
+@overload
+def _git_object(hash: str,
+                type: GitObjectType,
+                context: GitContext|GitContextFn=default_context,
+                size: int|str=-1
+                ) -> GitObject: ...
+def _git_object(hash: str,
+                type: Optional[GitObjectType]=None,
+                context: GitContext|GitContextFn=default_context,
+                size: int|str=-1,
+                ) -> GitObject:
+    if callable(context):
+        context = context()
+    obj = xv.XGIT_OBJECTS.get(hash)
+    if obj is not None:
+        return obj
+    if type is None:
+        if context is None:
+            context = default_context()
+        if context is None:
+            worktree = Path.cwd()
+        else:
+            worktree = context.worktree
+        with chdir(worktree):
+            type = cast(GitObjectType, _run_text(["git", "cat-file", "-t", hash]).strip())
+    match type:
+        case "tree":
+            obj = _GitTree(hash, context=context)
+        case "blob":
+            obj = _GitBlob(hash, int(size), context=context)
+        case "commit":
+            obj = _GitCommit(hash, context=context)
+        case "tag":
+            obj = _GitTagObject(hash, context=context)
+        case _:
+            raise ValueError(f"Unknown type {type}")
+    xv.XGIT_OBJECTS[hash] = obj
+    return obj
 
 def _git_entry(
     hash: GitHash,
@@ -152,7 +217,7 @@ def _git_entry(
     mode: GitEntryMode,
     type: GitObjectType,
     size: str|int,
-    context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
+    context: GitContext|GitContextFn = default_context,
     parent: str | None = None,
 ) -> tuple[str, GitTreeEntry]:
     if callable(context):
@@ -175,20 +240,9 @@ def _git_entry(
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
         print(msg)
-        
-    obj = xv.XGIT_OBJECTS.get(hash)
-    if obj is None:
-        if type == "tree":
-            obj = _GitTree(hash, context=context)
-        elif type == "blob":
-            obj = _GitBlob(hash, int(size), context=context)
-        elif type == "commit":
-            obj = _GitCommit(hash, context=context)
-        elif type == "tag":
-            obj = _GitTagObject(hash, context=context)
-        else:
-            raise ValueError(f"Unknown type {type}")
-        xv.XGIT_OBJECTS[hash] = obj
+    if callable(context):
+        context = context()
+    obj = _git_object(hash, type, context, size=size)
     entry = _GitTreeEntry(obj, name, mode)
     xv.XGIT_ENTRIES[key] = entry
     if hash not in xv.XGIT_REFERENCES:
@@ -219,6 +273,8 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
     ):
         if callable(context):
             context = context()
+        if context is None:
+            context = default_context()
         context = context.new_context()
         def _lazy_loader():
             with chdir(context.worktree):
@@ -417,7 +473,7 @@ class _GitBlob(_GitObject, GitBlob):
     def text(self):
         return _run_text(["git", "cat-file", "blob", self.hash])
 
-_RE_AUTHOR = re.compile(r"^(([^<]+) [<]([^>+])[>]) (\d+) ([+-]\d{4})$")
+_RE_AUTHOR = re.compile(r"^(([^<]+) [<]([^>]+)[>]) (\d+) ([+-]\d{4})$")
 
 def _parse_author_date(line: str) -> tuple[str, str, str, datetime]:
     """
@@ -552,61 +608,74 @@ class _GitCommit(_GitObject, GitCommit):
         self._committer_email = email
         self._committer_date = date
 
-    def __init__(self, hash: str, /, *, context: GitContext|GitContextFn = lambda: cast(GitContext, xv.XGIT)):
+    def __init__(self, hash: str, /, *, context: GitContext|GitContextFn = default_context):
         if callable(context):
             context = context()
-        context = context.new_context(commit=hash)
+        if context is None:
+            context = default_context()
 
         def loader():
-            with chdir(context.worktree):
+            if context is not None:
+                worktree = context.worktree
+            else:
+                worktree = Path.cwd()
+            with chdir(worktree):
                 lines = _run_lines(["git", "cat-file", "commit", hash])
                 tree = next(lines).split()[1]
-                self._tree = _GitTree(tree, context=context)
+                self._tree = _git_object(tree, 'tree', context=context)
                 self._parents = []
+                in_sig = False
+                sig_lines = []
                 for line in lines:
+                    line = line.strip()
                     if line.startswith("parent"):
-                        self._parents.append(_GitCommit(line.split()[1], context=context))
+                        self._parents.append(_git_object(line.split()[1], 'commit', context=context))
                     elif line.startswith("author"):
-                        author_loader = lambda: self._update_author(line.split(maxsplit=1)[1])
+                        author_line = line.split(maxsplit=1)[1]
+                        author_loader = lambda: self._update_author(author_line)
                         self._author = author_loader
                         self._author_name = author_loader
                         self._author_email = author_loader
                         self._author_date = author_loader
                     elif line.startswith("committer"):
-                        committer_loader = lambda: self._update_committer(line.split(maxsplit=1)[1])
+                        committer_line = line.split(maxsplit=1)[1]
+                        committer_loader = lambda: self._update_committer(committer_line)
                         self._committer = committer_loader
                         self._committer_name = committer_loader
                         self._committer_email = committer_loader
                         self._committer_date = committer_loader
+                    elif line == 'gpgsig -----BEGIN PGP SIGNATURE-----':
+                        in_sig = True
+                        sig_lines.append(line)
+                    elif in_sig:
+                        sig_lines.append(line)
+                        if line == "-----END PGP SIGNATURE-----":
+                            self._signature = "\n".join(sig_lines)
+                            in_sig = False
                     elif line == "":
                         break
                     else:
                         raise ValueError(f"Unexpected line: {line}")
                 msg_lines = []
-                sig_lines = []
                 for line in lines:
-                    if line == "-----BEGIN PGP SIGNATURE-----":
-                        sig_lines.append(line)
-                        break
-                    msg_lines.append(line)
+                    msg_lines.append(line.rstrip())
                 self._message = "\n".join(msg_lines)
                 sig_lines.extend(lines)
                 self._signature = "\n".join(sig_lines)
-            self._tree = loader
-            self._parents = loader
-            self._author = loader
-            self._author_name = loader
-            self._author_email = loader
-            self._author_date = loader
-            self._committer = loader
-            self._committer_name = loader
-            self._committer_email = loader
-            self._committer_date = loader
-            self._message = loader
-            self._signature = loader
-
-
+                self._size = 0
         _GitObject.__init__(self, hash, context=context, loader=loader)
+        self._tree = loader
+        self._parents = loader
+        self._author = loader
+        self._author_name = loader
+        self._author_email = loader
+        self._author_date = loader
+        self._committer = loader
+        self._committer_name = loader
+        self._committer_email = loader
+        self._committer_date = loader
+        self._message = loader
+        self._signature = loader
 
     def __str__(self):
         return f"commit {self.hash}"
