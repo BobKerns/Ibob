@@ -23,6 +23,7 @@ extracontext
 frozendict
 gctx
 Gitter
+gpgsig
 itercheck
 ivar
 MAXDEPTH
