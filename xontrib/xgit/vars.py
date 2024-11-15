@@ -39,11 +39,12 @@ def user_proxy(name: str, type: type[T], value: V|_NoValue=_NO_VALUE,
                initializer: Optional[ProxyInitializer]=None) -> V|T:
     if initializer is None:
         initializer = lambda x: target(x, value)
-    p = proxy(name, XSH.ctx, MappingTargetAccessor, ObjectAdaptor,
-                 key=name,
-                 type=type,
-                 initializer=initializer,
-            )
+    p = proxy(name, XSH.ctx, MappingTargetAccessor,
+            adaptor=adaptor,
+            key=name,
+            type=type,
+            initializer=initializer,
+        )
     return p
 
 
