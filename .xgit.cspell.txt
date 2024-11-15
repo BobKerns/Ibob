@@ -50,6 +50,7 @@ pyproject
 pyreadline3
 pytest
 pythonic
+Redirections
 setenv
 sorteddict
 subproc
