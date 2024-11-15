@@ -12,7 +12,6 @@ from typing import MutableMapping, Optional, Sequence, overload
 from pathlib import Path
 import sys
 
-from tomlkit import comment
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
