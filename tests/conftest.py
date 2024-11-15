@@ -49,7 +49,7 @@ def sysdisplayhook(with_events):
             yield
         finally:
             sys.displayhook = old_displayhook
-            
+
 class LoadedModules(NamedTuple):
     modules: list[Module]
     variables: dict[str, Any]
@@ -121,7 +121,7 @@ def debug_env(monkeypatch  ):
     monkeypatch.setenv("XGIT_TRACE_TARGET", "1")
     monkeypatch.setenv("XONSH_SHOW_TRACEBACK", "1")
     monkeypatch.setenv("XONSH_TRACE_SUBPROC", "1")
-    
+
 @pytest.fixture(autouse=True)
 def clean_modules():
     """
@@ -179,8 +179,17 @@ def with_xgit(xonsh_session, modules, sysdisplayhook):
         load = cast(Loader, _load_xontrib_)
         unload = cast(Loader, _unload_xontrib_)
 
-        def _with_xgit(t: Callable):
-             with session_active(module, xonsh_session) as xontrib_module:
+        def _with_xgit(t: Callable, *more_modules):
+            if more_modules:
+                with modules(*more_modules) as (m, more_kwargs):
+                    with session_active(module, xonsh_session) as xontrib_module:
+                        params = {
+                            **xontrib_module._asdict(),
+                            **kwargs,
+                            **more_kwargs
+                        }
+                        return t(xontrib_module, **params)
+            with session_active(module, xonsh_session) as xontrib_module:
                 return t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
         yield _with_xgit
 
@@ -220,4 +229,4 @@ def with_events():
     for k in dir(events):
         if k.startswith('on_') and hasattr(getattr(events, k), '_handlers'):
             if k not in existing:
-                delattr(events, k)    
+                delattr(events, k)
