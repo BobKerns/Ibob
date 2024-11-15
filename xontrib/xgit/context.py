@@ -25,7 +25,7 @@ from xontrib.xgit.types import (
 )
 from xontrib.xgit.vars import XGIT_CONTEXTS, XSH
 from xontrib.xgit.procs import (
-    _run_stdout
+    _run_stdout, _run_text,
 )
 from xontrib.xgit.objects import _git_object
 
@@ -94,7 +94,32 @@ class _GitContext(_GitWorktree, GitContext):
 
     git_path: Path = Path(".")
     branch: str = ""
-    commit: GitCommit|None = None
+    _commit: GitCommit|None = None
+    @property
+    def commit(self) -> GitCommit:
+        assert self._commit is not None, "Commit has not been set."
+        return self._commit
+
+    @commit.setter
+    def commit(self, value: str|GitCommit):
+        match value:
+            case str():
+                hash = _run_text(['git', 'rev-parse', value]).strip()
+                self._commit = _git_object(hash, 'commit', self)
+            case GitCommit():
+                self._commit = value
+            case _:
+                raise ValueError(f'Not a commit: {value}')
+            
+    def __init__(self, *args,
+                 git_path: Path = Path("."),
+                 branch: str = "",
+                 commit: str|GitCommit = 'HEAD',
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.commit = commit
+        self.git_path = git_path
+        self.branch = branch
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         subpath = Path(subpath) if subpath else None
