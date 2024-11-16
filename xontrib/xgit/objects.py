@@ -174,7 +174,7 @@ def _git_object(hash: str,
                 ) -> GitTagObject: ...
 @overload
 def _git_object(hash: str,
-                type: GitObjectType,
+                type: GitObjectType|None=None,
                 context: GitContext|GitContextFn=default_context,
                 size: int|str=-1
                 ) -> GitObject: ...
@@ -227,7 +227,7 @@ def _git_entry(
     """
     assert isinstance(XSH.env, MutableMapping),\
         f"XSH.env not a MutableMapping: {XSH.env!r}"
-        
+
     key = (
            context.repository,
            hash,
@@ -293,7 +293,7 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
             loader=_lazy_loader,
             context=context,
         )
-    
+
     @property
     def type(self) -> Literal["tree"]:
         return "tree"
@@ -392,7 +392,8 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
                     else:
                         rw = "-"
                     size = str(e.size) if e.size >= 0 else '-'
-                    l = f'{rw} {self.hash} {size:>8s} {e.name}'
+                    suffix = '/' if e.type == 'tree' else ''
+                    l = f'{rw} {self.hash} {size:>8s} {e.name}{suffix}'
                     p.text(l)
 
 
@@ -693,7 +694,7 @@ class _GitTagObject(_GitObject, GitTagObject):
     This is an actual signed tag object, not just a reference.
     """
 
-    @property    
+    @property
     def type(self) -> Literal["tag"]:
         return "tag"
 
