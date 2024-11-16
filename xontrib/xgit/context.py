@@ -8,6 +8,7 @@ Implementation of the `GitContext` class and related types.
 '''
 
 from dataclasses import dataclass
+from pydoc import resolve
 from typing import MutableMapping, Optional, Sequence, cast, overload
 from pathlib import Path
 import sys
@@ -47,7 +48,7 @@ class _GitRepository(GitRepository):
 
     @repository.setter
     def repository(self, value: Path|str):
-        self._repository = Path(value)
+        self._repository = Path(value).resolve()
     """
     The path to the repository. If this is a worktree,
     it is the path to the worktree-specific part.
@@ -60,7 +61,7 @@ class _GitRepository(GitRepository):
         return self._common
     @common.setter
     def common(self, value: Path|str):
-        self._common = Path(value)
+        self._common = Path(value).resolve()
 
 
     """
@@ -241,7 +242,7 @@ class _GitContext(_GitWorktree, GitContext):
             p.text(f"GitContext({self.worktree} {self._git_path}")
         else:
             assert self.commit is not None, "Commit has not been set"
-            with p.group(4, "GitTree:"):
+            with p.group(4, "Context:"):
                 p.break_()
                 wt = _relative_to_home(self.worktree) if self.worktree else None
                 p.text(f"worktree: {wt}")
@@ -259,8 +260,9 @@ class _GitContext(_GitWorktree, GitContext):
                 with p.group(2):
                     p.break_()
                     p.text(f'{self.commit.author} {self.commit.author_date}')
-                    p.break_()
-                    p.text(self.commit.message)
+                    for line in self.commit.message.splitlines():
+                        p.break_()
+                        p.text(line)
                 p.break_()
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
 
@@ -346,8 +348,9 @@ def _git_context():
                 "HEAD",
             )
             worktree = Path(worktree).resolve()
-            repository = Path(repository)
-            common = repository / common
+            repository = Path(repository).resolve()
+            common = Path(common).resolve()
+            
             git_path = Path.cwd().relative_to(worktree)
             branch = _run_stdout(
                 ["git", "name-rev", "--name-only", commit]
@@ -362,7 +365,7 @@ def _git_context():
             else:
                 gctx = _GitContext(
                     worktree=worktree,
-                    _repository=repository,
+                    repository=repository,
                     common=common,
                     git_path=git_path,
                     commit=_git_object(commit, 'commit'),
