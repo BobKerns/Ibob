@@ -8,7 +8,7 @@ Implementation of the `GitContext` class and related types.
 '''
 
 from dataclasses import dataclass
-from typing import MutableMapping, Optional, Sequence, overload
+from typing import MutableMapping, Optional, Sequence, cast, overload
 from pathlib import Path
 import sys
 
@@ -21,6 +21,7 @@ from xontrib.xgit.types import (
     GitContext,
     ContextKey,
     GitRepository,
+    GitTagObject,
     GitWorktree,
     GitCommit,
 )
@@ -159,13 +160,21 @@ class _GitContext(_GitWorktree, GitContext):
         return self._commit
 
     @commit.setter
-    def commit(self, value: str|GitCommit):
+    def commit(self, value: str|GitCommit|Ref|GitTagObject):
         match value:
             case str():
                 hash = _run_text(['git', 'rev-parse', value]).strip()
                 self._commit = _git_object(hash, 'commit', self)
             case GitCommit():
                 self._commit = value
+            case GitTagObject():
+                # recurse if necessary to get the commit
+                # or error if the tag doesn't point to a commit
+                self.commit = cast(GitCommit, value.object)
+            case Ref():
+                # recurse if necessary to get the commit
+                # or error if the ref doesn't point to a commit
+                self.commit = cast(GitCommit, value.target)
             case _:
                 raise ValueError(f'Not a commit: {value}')
 
