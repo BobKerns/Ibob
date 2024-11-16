@@ -20,17 +20,19 @@ def test_context_simple(with_xgit, sysdisplayhook):
         assert ctx is not NonCallableMock
     with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.vars')
 
-def test_context_json(with_xgit, sysdisplayhook):
-    def _t(*_, _GitContext, to_json, from_json, **__):
+def test_context_json(with_xgit, sysdisplayhook, test_branch):
+    def _t(*_, _GitContext, to_json, from_json, _run_text, **__):
+        ref = f'refs/heads/{test_branch}'
+        head = _run_text(['git', 'rev-parse', 'HEAD'])
         ctx = _GitContext()
-        ctx.commit = "ab35f88"
-        ctx.branch = "refs/heads/main"
+        ctx.commit = head
+        ctx.branch = ref
         j = to_json(ctx, _GitContext)
         assert j == {
-            'branch': 'refs/heads/main',
+            'branch': ref,
             'common': '.git',
             'git_path': '.',
-            'commit': 'ab35f88',
+            'commit': head,
             'worktree': '.',
             'repository': '.git'
         }

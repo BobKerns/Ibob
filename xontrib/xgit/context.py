@@ -32,6 +32,8 @@ from xontrib.xgit.procs import (
 from xontrib.xgit.objects import _git_object
 from xontrib.xgit.ref import Ref
 
+DEFAULT_BRANCH="HEAD"
+
 @dataclass
 class _GitRepository(GitRepository):
     """
@@ -140,7 +142,7 @@ class _GitContext(_GitWorktree, GitContext):
     def git_path(self, value: Path|str):
         self._git_path = Path(value)
 
-    _branch: Ref = Ref("HEAD")
+    _branch: Ref = Ref(DEFAULT_BRANCH)
     @property
     def branch(self) -> Ref:
         return self._branch
@@ -180,8 +182,8 @@ class _GitContext(_GitWorktree, GitContext):
 
     def __init__(self, *args,
                  git_path: Path = Path("."),
-                 branch: str|Ref = "HEAD",
-                 commit: str|GitCommit = 'HEAD',
+                 branch: str|Ref = DEFAULT_BRANCH,
+                 commit: str|GitCommit = DEFAULT_BRANCH,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.commit = commit
