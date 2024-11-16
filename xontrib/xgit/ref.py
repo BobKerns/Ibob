@@ -6,6 +6,7 @@ from typing import Any, Optional, TypeVar
 
 from xonsh.lib.pretty import PrettyPrinter
 
+from xontrib.xgit.to_json import JsonDescriber, JsonData
 from xontrib.xgit.types import GitObject
 from xontrib.xgit.objects import _git_object
 from xontrib.xgit.procs import _run_text
@@ -19,10 +20,13 @@ class Ref:
     _name: str
     @property
     def name(self) -> str:
+        if self._name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+            # Dereference on first use.
+            self._name = _run_text(['git', 'symbolic-ref', self._name])
         return self._name
 
 
-    _target: GitObject|None
+    _target: GitObject|None = None
     @property
     def target(self) -> GitObject:
         if self._target is None:
@@ -46,20 +50,27 @@ class Ref:
         If `target` is provided, it is used as the target.
         Otherwise the target is resolved from the ref on demand and cached.
         '''
-        if not no_check:
-            _name = _run_text(['git', 'check-ref-format', '--normalize', name])
-            if not _name:
-                # Try it as a branch name
-                _name = _run_text(['git', 'check-ref-format', '--branch', name])
-            if not _name:
-                raise ValueError(f"Invalid ref name: {name!r}")
-        if no_exists_ok:
+        if name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+            # Dereference on first use.
             self._name = name
+            return
         else:
-            result = _run_text(['git', 'show-ref', '--verify', name])
-            target, name = result.split()
-            if not result:
-                raise ValueError(f"Ref not found: {name!r}")
+            if not no_check:
+                _name = _run_text(['git', 'check-ref-format', '--normalize', name])
+                if not _name:
+                    # Try it as a branch name
+                    _name = _run_text(['git', 'check-ref-format', '--branch', name])
+                if not _name:
+                    raise ValueError(f"Invalid ref name: {name!r}")
+            if no_exists_ok:
+                self._name = name
+            else:
+                result = _run_text(['git', 'show-ref', '--verify', name])
+                if not result:
+                    result = _run_text(['git', 'show-ref', '--verify', f'refs/heads/{name}'])
+                if not result:
+                    raise ValueError(f"Ref not found: {name!r}")
+                target, name = result.split()
         if target is not None:
             if isinstance(target, str):
                 self._target = _git_object(target)
@@ -96,3 +107,13 @@ class Ref:
             # No valid target.
             return self.name
 
+    def to_json(self, desc: JsonDescriber) -> JsonData:
+        return self.name
+
+    @staticmethod
+    def from_json(data: JsonData, desc: JsonDescriber):
+        match data:
+            case str():
+                return Ref(data)
+            case _:
+                raise ValueError("Invalid branch in JSON")
