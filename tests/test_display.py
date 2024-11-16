@@ -22,7 +22,12 @@ def test_displayhook_events(with_xgit, modules, with_events, capsys):
     with_xgit(_t0)
     with_xgit(_t)
 
-def test_displayhook_simple(xonsh_session, with_xgit, modules, sysdisplayhook, capsys):
+def test_displayhook_simple(xonsh_session,
+                            with_xgit,
+                            modules,
+                            sysdisplayhook,
+                            capsys,
+                            test_branch):
     #import sys
     #for k in list(sys.modules.keys()):
     #    if k.startswith('xontrib.xgit'):
@@ -39,10 +44,12 @@ def test_displayhook_simple(xonsh_session, with_xgit, modules, sysdisplayhook, c
         assert xonsh_session.env.get('XGIT_ENABLE_NOTEBOOK_HISTORY')
         assert re.match(r'_\d+: 42', text), f"Expected _<number>: 42, got: {text}"
         assert out.err == ""
-    #with_xgit(_t0)
     with_xgit(_t)
 
-def test_displayhook_None(with_xgit, modules, capsys):
+def test_displayhook_None(with_xgit,
+                          modules,
+                          capsys,
+                          test_branch):
     def _t(*_, **__):
         with modules('xontrib.xgit.display'):
             _xgit_displayhook(None)

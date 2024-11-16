@@ -230,3 +230,19 @@ def with_events():
         if k.startswith('on_') and hasattr(getattr(events, k), '_handlers'):
             if k not in existing:
                 delattr(events, k)
+
+@pytest.fixture()
+def test_branch(modules):
+    '''
+    Fixture to create a test branch.
+    '''
+    from subprocess import run
+    from secrets import token_hex
+    name = f'test/{token_hex(8)}'
+    with modules('xontrib.xgit.context') as ((m_ctx,), vars):
+        try:
+            run(['git', 'branch', name])
+            m_ctx.__dict__['DEFAULT_BRANCH'] = name
+            yield name
+        finally:
+            run(['git', 'branch', '-D', name])
