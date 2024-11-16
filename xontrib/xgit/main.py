@@ -104,14 +104,17 @@ def git_pwd():
 
 
 @command(for_value=True, export=True)
-def git_ls(path: Path | str = ".", stderr=sys.stderr) -> GitTree:
+def git_ls(path: Path | str = Path('.'), stderr=sys.stderr) -> GitTree:
     """
     List the contents of the current directory or the directory provided.
     """
+    print('git_ls', path)
     if not XGIT:
         raise ValueError("Not in a git repository")
-    path = Path(path)
-    with chdir(XGIT.worktree or XGIT.repository):
+    worktree = XGIT.worktree or XGIT.repository
+    dir = worktree / XGIT.git_path / Path(path)
+    path = dir.relative_to(worktree)
+    def do_ls(path: Path):
         parent: str | None = None
         if path == Path("."):
             tree = _run_stdout(
@@ -119,12 +122,22 @@ def git_ls(path: Path | str = ".", stderr=sys.stderr) -> GitTree:
             )
         else:
             path_parent = path.parent
-            if path_parent != path:
-                nparent = git_ls(path.parent)
+            if path_parent != path and path != Path("."):
+                print(f"Path: {path} parent: {path_parent}")
+                nparent = do_ls(path.parent)
                 tree = nparent[path.name].hash
                 parent = nparent.hash
         _, dir = _git_entry(tree, path.name, "040000", "tree", "-", XGIT, parent)
         return cast(GitTree, dir.object)
+    if dir.is_dir():
+        with chdir(dir):
+            return do_ls(path)
+    elif dir.is_file():
+        with chdir(dir.parent):
+            return do_ls(path)
+    else:
+        with chdir(worktree):
+            return do_ls(path)
 
 
 @events.on_chdir
