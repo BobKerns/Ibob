@@ -19,6 +19,7 @@ from xontrib.xgit.proxy import XGitProxy, target
 
 # Our events:
 
+
 events.doc(
     "on_xgit_predisplay",
     "Runs before displaying the result of a command with the value to be displayed.",
@@ -27,6 +28,9 @@ events.doc(
     "on_xgit_postdisplay",
     "Runs after displaying the result of a command with the value displayed.",
 )
+
+events.on_xgit_predisplay.clear()
+events.on_xgit_postdisplay.clear()
 
 
 _xonsh_displayhook = sys.displayhook
