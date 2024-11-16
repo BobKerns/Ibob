@@ -15,6 +15,7 @@ import sys
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
+from xontrib.xgit.ref import Ref
 from xontrib.xgit.to_json import JsonDescriber
 from xontrib.xgit.types import (
     GitContext,
@@ -28,6 +29,7 @@ from xontrib.xgit.procs import (
     _run_stdout, _run_text,
 )
 from xontrib.xgit.objects import _git_object
+from xontrib.xgit.ref import Ref
 
 @dataclass
 class _GitRepository(GitRepository):
@@ -137,7 +139,19 @@ class _GitContext(_GitWorktree, GitContext):
     def git_path(self, value: Path|str):
         self._git_path = Path(value)
 
-    branch: str = ""
+    _branch: Ref = Ref("HEAD")
+    @property
+    def branch(self) -> Ref:
+        return self._branch
+    @branch.setter
+    def branch(self, value: str|Ref):
+        match value:
+            case Ref():
+                self._branch = value
+            case str():
+                self._branch = Ref(value)
+            case _:
+                raise ValueError(f"Invalid branch: {value!r}")
     _commit: GitCommit|None = None
     @property
     def commit(self) -> GitCommit:
@@ -157,7 +171,7 @@ class _GitContext(_GitWorktree, GitContext):
 
     def __init__(self, *args,
                  git_path: Path = Path("."),
-                 branch: str = "",
+                 branch: str|Ref = "HEAD",
                  commit: str|GitCommit = 'HEAD',
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -174,8 +188,8 @@ class _GitContext(_GitWorktree, GitContext):
             hash = commit.hash
         '''
         if subpath is None:
-            return (key, self._git_path, self.branch, hash)
-        return (key, subpath, self.branch, hash)
+            return (key, self._git_path, self.branch.name, hash)
+        return (key, subpath, self.branch.name, hash)
 
     @property
     def cwd(self) -> Path:
@@ -191,7 +205,7 @@ class _GitContext(_GitWorktree, GitContext):
         repository: Optional[Path] = None,
         common: Optional[Path] = None,
         git_path: Optional[Path] = None,
-        branch: Optional[str] = None,
+        branch: Optional[str|Ref] = None,
         commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
         worktree = worktree or self.worktree
@@ -225,10 +239,10 @@ class _GitContext(_GitWorktree, GitContext):
                     p.text(f"repository: {_relative_to_home(self._repository)}")
                     p.break_()
                     p.text(f"common: {_relative_to_home(self.common)}")
-                    p.break_()
-                    p.text(f"git_path: {self.git_path}")
-                    p.break_()
-                    p.text(f"branch: {self.branch}")
+                p.break_()
+                p.text(f"git_path: {self.git_path}")
+                p.break_()
+                p.text(f"branch: {self.branch}")
                 p.break_()
                 p.text(f"commit: {self.commit.hash}")
                 with p.group(2):

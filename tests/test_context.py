@@ -24,10 +24,10 @@ def test_context_json(with_xgit, sysdisplayhook):
     def _t(*_, _GitContext, to_json, from_json, **__):
         ctx = _GitContext()
         ctx.commit = "ab35f88"
-        ctx.branch = "fred"
+        ctx.branch = "refs/heads/main"
         j = to_json(ctx, _GitContext)
         assert j == {
-            'branch': 'fred',
+            'branch': 'refs/heads/main',
             'common': '.git',
             'git_path': '.',
             'commit': 'ab35f88',
