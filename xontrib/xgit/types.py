@@ -28,6 +28,8 @@ A key for uniquely identifying a `GitContext`
 GitLoader: TypeAlias = Callable[[], None]
 """
 A function that loads the contents of a git object.
+Use InitFn for loading a single attribute. This is for the case
+where the entire object is loaded.
 """
 
 GitEntryMode: TypeAlias = Literal[
@@ -65,6 +67,8 @@ _NO_VALUE = _NoValue()
 
 S = TypeVar('S', contravariant=True)
 V = TypeVar('V', covariant=True)
+
+
 class InitFn(Generic[S, V], Protocol):
     """
     A function that initializes a value from a source.
