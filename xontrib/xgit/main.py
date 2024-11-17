@@ -24,23 +24,15 @@ from xonsh.events import events
 from xonsh.tools import chdir
 from xonsh.execer import Execer
 
-from xontrib.xgit.types import (
-    GitTree,
-)
 from xontrib.xgit.decorators import (
     _exports,
     _export,
     _unload_actions,
     _do_unload_actions,
     _aliases,
-    command,
 )
 from xontrib.xgit.context import (
     _git_context,
-    _relative_to_home,
-)
-from xontrib.xgit.objects import (
-    _git_entry,
 )
 from xontrib.xgit.display import (
     _xgit_on_predisplay,
@@ -48,97 +40,14 @@ from xontrib.xgit.display import (
     _on_precommand,
 )
 from xontrib.xgit.vars import (
-    XSH,
     XGIT,
     xgit_version,
 )
-from xontrib.xgit import vars as xv
 from xontrib.xgit.display import (
     _xonsh_displayhook,
     _xgit_displayhook,
 )
-from xontrib.xgit.procs import _run_stdout
 from xontrib.xgit.proxy import target, ProxyMetadata
-
-
-@command(export=True)
-def git_cd(path: str = "", stderr=sys.stderr) -> None:
-    """
-    Change the current working directory to the path provided.
-    If no path is provided, change the current working directory
-    to the git repository root.
-    """
-    execer = XSH.execer
-    assert execer is not None, "No execer"
-    if not XGIT or XGIT.worktree is None:
-        execer.exec(f"cd {path}")
-        return
-    if path == "":
-        XGIT.git_path = Path(".")
-    elif path == ".":
-        pass
-    else:
-        git_path = (XGIT.worktree / XGIT.git_path / path).resolve()
-        git_path = git_path.relative_to(XGIT.worktree)
-        XGIT.git_path = git_path
-    fpath = XGIT.worktree / XGIT.git_path
-    try:
-        execer.exec(f"cd {fpath}")
-    except Exception as ex:
-        print(f"Could not change to {fpath}: {ex}", file=stderr)
-
-
-@command(
-    for_value=True,
-    export=True,
-)
-def git_pwd():
-    """
-    Print the current working directory and git context information if available.
-    """
-    if not XGIT:
-        print(f"cwd: {_relative_to_home(Path.cwd())}")
-        print("Not in a git repository")
-        return
-    return target(XGIT)
-
-
-@command(for_value=True, export=True)
-def git_ls(path: Path | str = Path('.'), stderr=sys.stderr) -> GitTree:
-    """
-    List the contents of the current directory or the directory provided.
-    """
-    print('git_ls', path)
-    if not XGIT:
-        raise ValueError("Not in a git repository")
-    worktree = XGIT.worktree or XGIT.repository
-    dir = worktree / XGIT.git_path / Path(path)
-    path = dir.relative_to(worktree)
-    def do_ls(path: Path):
-        parent: str | None = None
-        if path == Path("."):
-            tree = _run_stdout(
-                ["git", "log", "--format=%T", "-n", "1", "HEAD"]
-            )
-        else:
-            path_parent = path.parent
-            if path_parent != path and path != Path("."):
-                print(f"Path: {path} parent: {path_parent}")
-                nparent = do_ls(path.parent)
-                tree = nparent[path.name].hash
-                parent = nparent.hash
-        _, dir = _git_entry(tree, path.name, "040000", "tree", "-", XGIT, parent)
-        return cast(GitTree, dir.object)
-    if dir.is_dir():
-        with chdir(dir):
-            return do_ls(path)
-    elif dir.is_file():
-        with chdir(dir.parent):
-            return do_ls(path)
-    else:
-        with chdir(worktree):
-            return do_ls(path)
-
 
 @events.on_chdir
 def update_git_context(olddir, newdir):
@@ -152,14 +61,13 @@ def update_git_context(olddir, newdir):
     newpath = Path(newdir)
     if XGIT.worktree == newpath:
         # Going back to the worktree root
-        XGIT.git_path = Path(".")
-    if XGIT.worktree not in newpath.parents:
+        XGIT.path = Path(".")
+    if XGIT.worktree.path not in newpath.parents:
         # Not in the current worktree, so recompute the context.
         target(XGIT, _git_context())
-    elif XGIT.worktree:
+    else:
         # Fast move within the same worktree.
-        XGIT.git_path = Path(newdir).resolve().relative_to(XGIT.worktree)
-
+        XGIT.path = Path(newdir).resolve().relative_to(XGIT.worktree.path)
 
 # Export the functions and values we want to make available.
 

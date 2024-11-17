@@ -14,25 +14,30 @@ See https://xonsh.org/ for more information about `xonsh`.
 from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
-    GitHash,
+    GitHash,    
+)
+from xontrib.xgit.git_types import (
     GitId,
     GitObject,
     GitBlob,
     GitTree,
     GitCommit,
     GitTagObject,
+    GitTreeEntry,
+    GitRef,
+)
+from xontrib.xgit.context_types import (
     GitRepository,
     GitWorktree,
     GitContext,
-    GitTreeEntry,
 )
 from xontrib.xgit.main import (
     _load_xontrib_,
     _unload_xontrib_,
-    git_cd,
-    git_pwd,
-    git_ls,
 )
+from xontrib.xgit.xgit_cd import git_cd
+from xontrib.xgit.xgit_pwd import git_pwd
+from xontrib.xgit.xgit_ls import git_ls
 
 __all__ = (
     "_load_xontrib_",
@@ -53,4 +58,5 @@ __all__ = (
     "GitEntryMode",
     "GitObjectType",
     "GitTreeEntry",
+    "GitRef",
 )

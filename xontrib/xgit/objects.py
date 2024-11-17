@@ -21,8 +21,9 @@ from xontrib.xgit.types import (
     GitHash,
     GitEntryMode,
     GitObjectType,
+)
+from xontrib.xgit.git_types import (
     GitCommit,
-    GitContext,
     GitId,
     GitObject,
     GitTree,
@@ -30,6 +31,7 @@ from xontrib.xgit.types import (
     GitTagObject,
     GitTreeEntry,
 )
+from xontrib.xgit.context_types import GitContext
 from xontrib.xgit.entries import _GitTreeEntry
 # Avoid a circular import dependency by not looking
 # at the vars module until it is loaded.
@@ -229,7 +231,7 @@ def _git_entry(
         f"XSH.env not a MutableMapping: {XSH.env!r}"
 
     key = (
-           context.repository,
+           context.worktree.repository.path,
            hash,
            mode,
            parent)
@@ -277,7 +279,7 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
             context = default_context()
         context = context.new_context()
         def _lazy_loader():
-            with chdir(context.worktree):
+            with chdir(context.worktree.path):
                 for line in _run_lines(["git", "ls-tree", "--long", tree]):
                     if line:
                         name, entry = _parse_git_entry(line, context, tree)
@@ -393,7 +395,7 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
                         rw = "-"
                     size = str(e.size) if e.size >= 0 else '-'
                     suffix = '/' if e.type == 'tree' else ''
-                    l = f'{rw} {self.hash} {size:>8s} {e.name}{suffix}'
+                    l = f'{rw} {e.hash} {size:>8s} {e.name}{suffix}'
                     p.text(l)
 
 

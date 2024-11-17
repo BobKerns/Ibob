@@ -11,6 +11,8 @@ from pathlib import Path
 from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.types import (
     GitEntryMode,
+)
+from xontrib.xgit.git_types import (
     GitObject, GitTreeEntry,
 )
 
