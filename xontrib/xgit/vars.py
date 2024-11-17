@@ -20,14 +20,20 @@ from xonsh.built_ins import XonshSession
 
 import xontrib.xgit as xgit
 from xontrib.xgit.types import (
-    GitContext,
     GitObjectReference,
-    GitObject,
-    GitEntryKey, GitTreeEntry,
+    GitEntryKey,
     _NoValue, _NO_VALUE,
 )
+from xontrib.xgit.git_types import (
+    GitObject, GitTreeEntry,
+)
+from xontrib.xgit.context_types import (
+    GitRepository,
+    GitWorktree,
+    GitContext,
+)
 from xontrib.xgit.proxy import (
-    IdentityTargetAccessor, MappingAdapter, ObjectAdaptor, proxy, target,
+    MappingAdapter, ObjectAdaptor, proxy, target,
     ModuleTargetAccessor, ProxyInitializer, BaseObjectAdaptor,
     MappingTargetAccessor,
     T, V,
@@ -61,6 +67,33 @@ XGIT: GitContext|None = user_proxy('XGIT', GitContext, None)
 """
 Set the xgit context, making it available in the xonsh context,
 and storing it in the context map.
+"""
+
+XGIT_REPOSITORIES: dict[Path, GitRepository] = user_proxy(
+    'XGIT_REPOSITORIES',
+    dict,
+    {},
+    adaptor=MappingAdapter,
+)
+"""
+A map of git contexts by worktree, or by repository if the worktree is not available.
+
+This allows us to switch between worktrees without losing context of what we were
+looking at in each one.
+"""
+
+
+XGIT_WORKTREES: dict[Path, GitWorktree] = user_proxy(
+    'XGIT_REPOSITORIES',
+    dict,
+    {},
+    adaptor=MappingAdapter,
+)
+"""
+A map of git contexts by worktree, or by repository if the worktree is not available.
+
+This allows us to switch between worktrees without losing context of what we were
+looking at in each one.
 """
 
 XGIT_CONTEXTS: dict[Path, GitContext] = user_proxy(

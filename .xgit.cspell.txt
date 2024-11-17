@@ -8,6 +8,7 @@ bset
 bstring
 capsys
 chdir
+cmds
 contextlib
 decscriptor
 deinit
@@ -26,6 +27,7 @@ Gitter
 gpgsig
 itercheck
 ivar
+Jsonable
 MAXDEPTH
 maxlevels
 maxsplit

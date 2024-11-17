@@ -6,7 +6,8 @@ from typing import Any
 
 from xontrib.xgit.types import _NO_VALUE
 from xontrib.xgit.proxy import ProxyMetadata, XGitProxy, meta, target
-from xontrib.xgit.to_json import to_json, JsonReturn, JsonDescriber, JsonKV
+from xontrib.xgit.json_types import JsonDescriber, JsonReturn,JsonKV
+from xontrib.xgit.to_json import to_json, _JsonDescriber
 
 
 def proxy_to_json(obj: Any) -> JsonReturn:
@@ -29,7 +30,7 @@ def proxy_to_json(obj: Any) -> JsonReturn:
 
             return {k: to_json(getattr(meta, k)) for k in keys}
         return {}
-    describer = JsonDescriber(special_types={
+    describer = _JsonDescriber(special_types={
         XGitProxy: handle_proxy,
         ProxyMetadata: handle_metadata,
         })

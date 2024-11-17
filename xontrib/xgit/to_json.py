@@ -5,106 +5,24 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import (
-    Any, Generic, Iterable, Mapping, Optional, Protocol,
-    Sequence, TypeAlias, TypeVar, TypedDict, cast
+    Any, Iterable, Mapping, Optional,
+    Sequence, cast
 )
 from types import GenericAlias
+
+from xontrib.xgit.json_types import (
+   JsonData,
+   SequenceJson, MappingJson, InstanceJson, TypeJson, MaxDepthJson,
+   JsonJson, CircularRefJson, ErrorJson, ErrorMessageJson,
+   JsonHandler, JsonReturn, FromJsonOverride, ToJsonOverride,
+   JsonKV, JsonDescriber
+)
 
 def is_sequence(obj):
     return isinstance(obj, Sequence)
 
 def is_mapping(obj):
     return isinstance(obj, Mapping)
-
-JsonAtomic: TypeAlias = None|str|int|float|bool
-"JSON Atomic Datatypes"
-JsonArray: TypeAlias = list['JsonData']
-"JSON Array"
-JsonObject: TypeAlias = dict[str,'JsonData']
-"JSON Object"
-JsonData: TypeAlias = JsonAtomic|JsonArray|JsonObject
-"JSON Data"
-
-class JsonRepresentation(TypedDict):
-    '''
-    A JSON representation of an object, other than the atomic JSON types.
-
-    These are all distinguishable by the presence of specific sets of keys.
-    '''
-    pass
-
-class ErrorMessageJson(JsonRepresentation):
-    '''
-    A single error message, with a class name and message.
-    Part of a `JsonError` structure, not standalone
-    '''
-    _cls: str
-    _msg: str
-
-
-class ErrorJson(JsonRepresentation):
-    '''
-    A captured `Exception`, containing a list of error messages (nested causes)
-    '''
-    _error: list[ErrorMessageJson]
-
-
-class CircularRefJson(JsonRepresentation):
-    '''
-    A circular reference to another object that has already been described.
-    '''
-    _ref: int
-
-
-class ContainerJson(JsonRepresentation):
-    '''
-    Any value which contains other values.
-    '''
-    _id: int
-
-
-class SequenceJson(ContainerJson):
-    '''
-    A JSON List, from any Python `Sequence` (except strings)
-    '''
-    _list: list['JsonReturn']
-
-
-class MappingJson(ContainerJson):
-    '''
-    A JSON Object, from any Python `Mapping`.
-    '''
-    _map: 'JsonKV'
-
-
-class InstanceJson(ContainerJson):
-    '''
-    A python instance, with a class name and attributes.
-    '''
-    _cls: str
-    _attrs: 'JsonKV'
-
-
-class TypeJson(ContainerJson):
-    '''
-    An explicit reference to a Python `type` object.
-    '''
-    _class_name: str
-    _attrs: 'JsonKV'
-
-
-class JsonJson(ContainerJson):
-    '''
-    An instance self-describing via JSON via a `to_json` method.
-    '''
-    _json: JsonData
-
-class MaxDepthJson(ContainerJson):
-    '''
-    A marker indicating that the maximum recursion depth has been reached.
-    '''
-    _maxdepth: int
-
 
 def json_type(obj: Any, references: Optional[dict[int,Any]] = None) -> type:
     """
@@ -140,32 +58,8 @@ def json_type(obj: Any, references: Optional[dict[int,Any]] = None) -> type:
         case _:
             raise ValueError(f'Unrecognized JSON: {obj}')
 
-JsonReturn: TypeAlias = JsonAtomic|ErrorJson|SequenceJson|InstanceJson\
-    |MappingJson|TypeJson|CircularRefJson|JsonJson|MaxDepthJson
-'''
-Any valid return type from the `to_json` function.
-'''
-
-JsonKV: TypeAlias = dict[str, JsonReturn]
-'''
-Key-Value pairs for JSON objects, such as maps or instances.
-'''
-
-H = TypeVar('H', bound='JsonKV|JsonReturn', covariant=True)
-class JsonHandler(Generic[H], Protocol):
-    def __call__(self, x: Any, describer: 'JsonDescriber', /) -> H:
-        ...
-
-class ToJsonOverride(Protocol):
-    def __call__(self, x: Any, describer: 'JsonDescriber', /) -> JsonData:
-        ...
-
-class FromJsonOverride(Protocol):
-    def __call__(self, x: JsonData, describer: 'JsonDescriber', /) -> Any:
-        ...
-
 @dataclass
-class JsonDescriber:
+class _JsonDescriber(JsonDescriber):
     objects_by_id: dict[int,Any] = field(default_factory=dict)
     overrides_by_id: dict[int,JsonData] = field(default_factory=dict)
     references: dict[int, CircularRefJson] = field(default_factory=dict)
@@ -199,7 +93,7 @@ class JsonDescriber:
         def json_to_path(json: JsonData, _: 'JsonDescriber') -> Path:
             return Path(str(json))
         self.from_override_types.update({
-            Path: json_to_path,
+            Path: cast(FromJsonOverride, json_to_path),
             })
 
     @property
@@ -583,7 +477,7 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
         A dictionary of objects that have already been described, indexed by their ID.
     """
     if describer is None:
-        describer = JsonDescriber(
+        describer = _JsonDescriber(
             max_depth=max_levels,
             special_types=special_types,
             to_override_types=override_types,
@@ -615,7 +509,7 @@ def from_json(obj: JsonData, cls: Optional[type|str] = None, /, *,
         A mapping of class names to types, for use in instantiating instances.
     '''
     if describer is None:
-        describer = JsonDescriber(
+        describer = _JsonDescriber(
             objects_by_id=references,
             class_map=class_map,
             )

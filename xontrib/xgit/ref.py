@@ -2,18 +2,16 @@
 Any ref, usually a branch or tag, usually pointing to a commit.
 '''
 
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional
 
 from xonsh.lib.pretty import PrettyPrinter
 
 from xontrib.xgit.to_json import JsonDescriber, JsonData
-from xontrib.xgit.types import GitObject
+from xontrib.xgit.git_types import GitObject, GitRef
 from xontrib.xgit.objects import _git_object
 from xontrib.xgit.procs import _run_text
 
-T = TypeVar('T', bound=GitObject)
-
-class Ref:
+class _GitRef(GitRef):
     '''
     Any ref, usually a branch or tag, usually pointing to a commit.
     '''
@@ -24,7 +22,6 @@ class Ref:
             # Dereference on first use.
             self._name = _run_text(['git', 'symbolic-ref', self._name])
         return self._name
-
 
     _target: GitObject|None = None
     @property
@@ -81,9 +78,9 @@ class Ref:
         return f"{self.__class__.__name__}({self.name!r}, {self.target!r})"
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, Ref):
+        if not isinstance(other, GitRef):
             return False
-        return self.name == other.name and self.target == other._target
+        return self.name == other.name and self.target == other.target
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -114,6 +111,6 @@ class Ref:
     def from_json(data: JsonData, desc: JsonDescriber):
         match data:
             case str():
-                return Ref(data)
+                return _GitRef(data)
             case _:
                 raise ValueError("Invalid branch in JSON")
