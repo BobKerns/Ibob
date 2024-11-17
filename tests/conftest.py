@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from inspect import currentframe, stack
 from pathlib import Path
 from threading import RLock
@@ -272,36 +272,52 @@ def git():
                 ).stdout.rstrip()
     return git
 
+repository_lock = RLock()
 @pytest.fixture()
 def repository(with_xgit, git, chdir):
     '''
     Fixture to create a test repository.
     '''
-    from tempfile import TemporaryDirectory
-
-    def _t(*_, _GitRepository, **__):
-        with TemporaryDirectory() as tmp:
-            parent = Path(tmp)
-            config = parent / '.gitconfig'
-            with config.open('w') as f:
-                f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
-            repo = parent / 'test'
-            file= repo / 'test.txt'
-            git('init', 'test', cwd=parent)
-            git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
-            git('config', 'user.name', 'Fake Name', cwd=repo)
-            file.touch()
-            git('add', 'test.txt', cwd=repo)
-            git('commit', '-m', 'Initial commit', cwd=repo)
-            chdir(repo)
-            old = os.environ.get('GIT_CONFIG_GLOBAL')
-            os.environ['GIT_CONFIG_GLOBAL'] = str(config)
-            yield _GitRepository(path=repo / '.git')
-            if old is None:
-                del os.environ['GIT_CONFIG_GLOBAL']
-            else:
-                os.environ['GIT_CONFIG_GLOBAL'] = old
-    yield from with_xgit(_t, 'xontrib.xgit.context')
+    from tempfile import mkdtemp
+    from secrets import token_hex
+    from shutil import rmtree
+    with repository_lock:
+        tmpname = mkdtemp()
+        old = Path.cwd()
+        with chdir(tmpname):
+            tmp = Path.cwd()
+            def _t(*_, _GitRepository, **__):
+                    parent = Path(tmp)
+                    token = token_hex(16)
+                    config = parent / f'.gitconfig-{token}'
+                    with config.open('w') as f:
+                        f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
+                    repo = parent / f'test-{token}'
+                    file= repo / 'test.txt'
+                    git('init', repo.name, cwd=parent)
+                    git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
+                    git('config', 'user.name', 'Fake Name', cwd=repo)
+                    file.touch()
+                    git('add', 'test.txt', cwd=repo)
+                    git('commit', '-m', 'Initial commit', cwd=repo)
+                    chdir(repo)
+                    old = os.environ.get('GIT_CONFIG_GLOBAL')
+                    os.environ['GIT_CONFIG_GLOBAL'] = str(config)
+                    yield _GitRepository(path=repo / '.git')
+                    if old is None:
+                        del os.environ['GIT_CONFIG_GLOBAL']
+                    else:
+                        os.environ['GIT_CONFIG_GLOBAL'] = old
+            yield from with_xgit(_t, 'xontrib.xgit.context')
+        chdir(old)
+        # Clean up, or try to: Windows is a pain
+        with suppress(OSError):
+            rmtree(tmp)
+        try:
+            Path(tmpname).rmdir()
+        except OSError:
+            with suppress(OSError):
+                Path(tmpname).unlink()
 
 @pytest.fixture()
 def worktree(with_xgit, git, repository, chdir):

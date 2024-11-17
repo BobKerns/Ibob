@@ -63,6 +63,7 @@ subcmd
 subcmds
 subproc
 sysdisplayhook
+tmpname
 typecheck
 typeshed
 unloadable
