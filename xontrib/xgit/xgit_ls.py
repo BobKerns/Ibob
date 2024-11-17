@@ -8,12 +8,16 @@ import sys
 from xonsh.tools import chdir
 
 from xontrib.xgit.vars import XGIT
-from xontrib.xgit.decorators import command
+from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.objects import _git_entry
 from xontrib.xgit.git_types import GitTree
 from xontrib.xgit.procs import _run_stdout
 
-@command(for_value=True, export=True)
+@command(
+    for_value=True,
+    export=True,
+    prefix=(xgit, 'ls'),
+)
 def git_ls(path: Path | str = Path('.')) -> GitTree:
     """
     List the contents of the current directory or the directory provided.
