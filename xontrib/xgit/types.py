@@ -15,7 +15,14 @@ CleanupAction: TypeAlias = Callable[[], None]
 An action to be taken when the xontrib is unloaded.
 """
 
-GitHash: TypeAlias = str
+try:
+    type GitHash = str
+except:
+    
+    # Runtime compatibility back to 3.10.
+    # This won't be distinguishable from `str` until 3.12,
+    # but at least it won't error.
+    globals()['GitHash'] = str
 """
 A git hash. Defined as a string to make the code more self-documenting.
 """
