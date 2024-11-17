@@ -12,7 +12,7 @@ from datetime import datetime
 
 
 from xontrib.xgit.types import (
-    CleanupAction, GitHash, ContextKey, GitLoader, GitEntryMode, GitObjectType,
+    CleanupAction, GitHash, GitEntryMode, GitObjectType,
 )
 from xontrib.xgit.json_types import Jsonable
 
@@ -24,7 +24,6 @@ class GitId(Protocol):
     """
     @abstractmethod
     def __init__(self, hash: GitHash,
-                 loader: Optional[GitLoader] = None,
                  cleanup: Optional[CleanupAction] = None):
         ...
     @property
@@ -37,11 +36,6 @@ class GitObject(GitId, Protocol):
     """
     A git object.
     """
-    @abstractmethod
-    def __init__(self, hash: GitHash, size: int,
-                 loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
     @property
     @abstractmethod
     def type(self) -> GitObjectType:
@@ -57,10 +51,6 @@ class GitTree(GitObject, Protocol):
     """
     A git tree object.
     """
-    @abstractmethod
-    def __init__(self, hash: GitHash,
-                 loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None): ...
     @property
     def type(self) -> Literal['tree']:
         return 'tree'
@@ -100,11 +90,6 @@ class GitBlob(GitObject, Protocol):
     """
     A git blob object.
     """
-    @abstractmethod
-    def __init__(self, hash: GitHash,
-                 loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
     @property
     def type(self) -> Literal['blob']:
         return 'blob'
@@ -127,12 +112,6 @@ class GitCommit(GitObject, Protocol):
     """
     A git commit object.
     """
-    @abstractmethod
-    def __init__(self, hash: GitHash,
-                 loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
-
     @property
     def type(self) -> Literal['commit']:
         return 'commit'
@@ -190,11 +169,6 @@ class GitTagObject(GitObject, Protocol):
     """
     A git tag object.
     """
-    @abstractmethod
-    def __init__(self, hash: GitHash,
-                 loader: Optional[GitLoader] = None,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
     @property
     def type(self) -> Literal['tag']:
         return 'tag'
