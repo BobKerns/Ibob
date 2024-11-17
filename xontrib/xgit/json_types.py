@@ -5,15 +5,9 @@ from typing import (
     TypeAlias, TypeVar, Optional, TypedDict, Protocol, Generic, Any,
 )
 
-JsonAtomic: TypeAlias = None|str|int|float|bool
-"JSON Atomic Datatypes"
-JsonArray: TypeAlias = list['JsonData']
-"JSON Array"
-JsonObject: TypeAlias = dict[str,'JsonData']
-"JSON Object"
-JsonData: TypeAlias = JsonAtomic|JsonArray|JsonObject
-"JSON Data"
-
+from xontrib.xgit.types import (
+    JsonData, JsonAtomic,
+)
 
 class JsonRepresentation(TypedDict):
     '''

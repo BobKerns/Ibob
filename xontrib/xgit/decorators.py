@@ -5,8 +5,8 @@ Various decorators for xgit commands and functions.
 
 from re import sub
 from typing import (
-    Any, Generic, MutableMapping, Optional, Callable, Union, Literal,
-    TypeVar, TypeAlias,
+    Any, MutableMapping, Optional, Callable, Union,
+    TypeAlias,
 )
 from inspect import signature, Signature, Parameter
 import sys
@@ -15,7 +15,7 @@ from pathlib import Path
 from xonsh.completers.tools import (
     contextual_completer, ContextualCompleter, CompletionContext,
 )
-from xonsh.completers.completer import add_one_completer, RichCompletion
+from xonsh.completers.completer import add_one_completer
 from xonsh.completers.path import (
     complete_path,
     complete_dir as _complete_dir,
@@ -24,32 +24,15 @@ from xonsh.completers.path import (
 from xonsh.parsers.completion_context import CompletionContext
 
 from xontrib.xgit import vars as xv
-from xontrib.xgit.types import CleanupAction, GitHash
+from xontrib.xgit.types import (
+    CleanupAction, GitHash,
+    Directory, File, PythonFile,
+)
 from xontrib.xgit.vars import XSH, XGIT, XGIT_OBJECTS
 from xontrib.xgit.git_types import (
     Branch, Tag, RemoteBranch, GitRef,
 )
 from xontrib.xgit.procs import _run_lines
-
-_Suffix = TypeVar('_Suffix', bound=str)
-
-try:
-    type  Directory = Path|str
-    '''
-    A directory path.
-    '''
-    type File[_Suffix] = Path
-    type PythonFile = File[Literal['.py']]
-except:
-    # We typecheck with 3.12 or newer, but need runtime compatibility with 3.10
-    globals()['Directory'] = Path|str
-    class _FileMarker(Generic[_Suffix]):
-        "Marker to distinguish File from Path"
-        @classmethod
-        def suffix(cls) -> _Suffix:
-            ...
-    globals()['File'] = str|Path|_FileMarker
-    globals()['PythonFile'] = str|Path|_FileMarker[Literal['.py']]
 
 @contextual_completer
 def complete_hash(context: CompletionContext) -> set:
@@ -214,7 +197,7 @@ def command(
         env = XSH.env
         assert isinstance(env, MutableMapping),\
             f"XSH.env not a MutableMapping: {env!r}"
-            
+
         def type_completer(p: Parameter):
             match p.annotation:
                 case t if t == Path or t == Union[Path, str]:
@@ -236,13 +219,13 @@ def command(
                     return complete_hash
                 case t if isinstance(t, TypeAlias) and getattr(t, '__base__') == File:
                     return complete_path
-        
+
         for p in sig.parameters.values():
             def add_arg(value: Any):
                 match p.kind:
                     case p.POSITIONAL_ONLY:
                         n_args.append(value)
-                        
+
                     case p.POSITIONAL_OR_KEYWORD:
                         positional = len(args) > 0
                         if value == p.empty:

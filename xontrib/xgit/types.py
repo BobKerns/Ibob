@@ -6,61 +6,52 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 '''
 
 from typing import (
-    Callable, Generic, Protocol, TypeAlias, Literal, TypeVar,
+    Generic, Protocol, TypeVar,
 )
 from pathlib import Path
 
-CleanupAction: TypeAlias = Callable[[], None]
-"""
-An action to be taken when the xontrib is unloaded.
-"""
-
 try:
-    type GitHash = str
-except:
-    
-    # Runtime compatibility back to 3.10.
-    # This won't be distinguishable from `str` until 3.12,
-    # but at least it won't error.
-    globals()['GitHash'] = str
-"""
-A git hash. Defined as a string to make the code more self-documenting.
-"""
-
-ContextKey: TypeAlias = tuple[Path, Path, GitHash, GitHash]
-"""
-A key for uniquely identifying a `GitContext`
-"""
-
-GitLoader: TypeAlias = Callable[[], None]
-"""
-A function that loads the contents of a git object.
-Use InitFn for loading a single attribute. This is for the case
-where the entire object is loaded.
-"""
-
-GitEntryMode: TypeAlias = Literal[
-    "040000",  # directory
-    "100755",  # executable
-    "100644",  # normal file
-    "160000",  # submodule
-    "20000",  # symlink
-]
-"""
-The valid modes for a git tree entry.
-"""
-
-GitObjectType: TypeAlias = Literal["blob", "tree", "commit", "tag"]
-"""
-Valid types for a git object.
-"""
-
-GitEntryKey: TypeAlias = tuple[Path, str, str, str|None]
-
-GitObjectReference: TypeAlias = tuple[ContextKey, str | None]
-"""
-A reference to a git object in a tree in a repository.
-"""
+    from xontrib.xgit.type_aliases import (
+        CleanupAction,
+        ContextKey,
+        GitLoader,
+        GitEntryMode,
+        GitObjectType,
+        GitEntryKey,
+        GitObjectReference,
+        AdaptorMethod,
+        ProxyAction,
+        ProxyDeinitializer,
+        GitHash,
+        JsonArray,
+        JsonAtomic,
+        JsonObject,
+        JsonData,
+        Directory,
+        File,
+        PythonFile,
+    )
+except SyntaxError:
+    from xontrib.xgit.type_aliases_310 import (
+        CleanupAction,
+        ContextKey,
+        GitLoader,
+        GitEntryMode,
+        GitObjectType,
+        GitEntryKey,
+        GitObjectReference,
+        AdaptorMethod,
+        ProxyAction,
+        ProxyDeinitializer,
+        GitHash,
+        JsonArray,
+        JsonAtomic,
+        JsonObject,
+        JsonData,
+        Directory,
+        File,
+        PythonFile,
+    )
 
 class _NoValue:
     """A type for a marker for a value that is not passed in."""
