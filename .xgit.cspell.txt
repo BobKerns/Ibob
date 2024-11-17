@@ -16,6 +16,7 @@ deinitialized
 Deinitializer
 deinitializers
 dfmt
+downrev
 dpath
 dunder
 errchk
