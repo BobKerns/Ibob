@@ -196,7 +196,7 @@ def _git_object(hash: str,
         if context is None:
             worktree = Path.cwd()
         else:
-            worktree = context.worktree
+            worktree = context.worktree.path
         with chdir(worktree):
             type = cast(GitObjectType, _run_text(["git", "cat-file", "-t", hash]).strip())
     match type:
