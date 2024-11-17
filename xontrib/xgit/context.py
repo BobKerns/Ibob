@@ -8,8 +8,6 @@ Implementation of the `GitContext` class and related types.
 '''
 
 from dataclasses import dataclass, field
-from operator import call
-import re
 from typing import (
     MutableMapping, Optional, Sequence, TypeAlias, cast, overload, Mapping,
 )
