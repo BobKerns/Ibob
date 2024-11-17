@@ -21,6 +21,7 @@ dunder
 errchk
 execer
 extracontext
+filtfunc
 frozendict
 gctx
 Gitter
@@ -55,8 +56,11 @@ pythonic
 Redirections
 setenv
 sorteddict
+subcmd
+subcmds
 subproc
 sysdisplayhook
+typecheck
 typeshed
 unloadable
 worktree

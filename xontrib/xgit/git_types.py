@@ -219,8 +219,7 @@ class GitTreeEntry(GitObject, Protocol):
         ...
     @property
     @abstractmethod
-    def hash(self) -> GitHash:
-        ...
+    def hash(self) -> GitHash: ...
     @property
     @abstractmethod
     def mode(self) -> GitEntryMode: ...
@@ -254,3 +253,22 @@ class GitRef(Protocol):
     def name(self) -> str: ...
     @property
     def target(self) -> GitObject: ...
+
+class Branch(GitRef, Protocol):
+    """
+    A branch ref.
+    """
+    def branch_name(self) -> str: ...
+    
+
+class RemoteBranch(GitRef, Protocol):
+    """
+    A branch ref.
+    """
+    def remote_branch_name(self) -> str: ...
+
+class Tag(GitRef, Protocol):
+    """
+    A tag ref.
+    """
+    def tag_name(self) -> str: ...

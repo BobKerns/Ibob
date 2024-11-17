@@ -14,7 +14,7 @@ from xontrib.xgit.git_types import GitTree
 from xontrib.xgit.procs import _run_stdout
 
 @command(for_value=True, export=True)
-def git_ls(path: Path | str = Path('.'), stderr=sys.stderr) -> GitTree:
+def git_ls(path: Path | str = Path('.')) -> GitTree:
     """
     List the contents of the current directory or the directory provided.
     """

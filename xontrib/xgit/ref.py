@@ -7,7 +7,9 @@ from typing import Any, Optional
 from xonsh.lib.pretty import PrettyPrinter
 
 from xontrib.xgit.to_json import JsonDescriber, JsonData
-from xontrib.xgit.git_types import GitObject, GitRef
+from xontrib.xgit.git_types import (
+    GitObject, GitRef, RemoteBranch, Branch, Tag,
+)
 from xontrib.xgit.objects import _git_object
 from xontrib.xgit.procs import _run_text
 
@@ -74,6 +76,14 @@ class _GitRef(GitRef):
             else:
                 self._target = target
         self._name = name
+        
+        if name.startswith('refs/heads/'):
+            self.__class__ = _Branch
+        elif name.startswith('refs/tags/'):
+            self.__class__ = _Tag
+        elif name.startswith('refs/remotes/'):
+            self.__class__ = _RemoteBranch
+    
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name!r}, {self.target!r})"
 
@@ -114,3 +124,19 @@ class _GitRef(GitRef):
                 return _GitRef(data)
             case _:
                 raise ValueError("Invalid branch in JSON")
+
+
+class _Branch(Branch, _GitRef):
+    def branch_name(self) -> str:
+        return self.name[11:]
+    
+    
+class _RemoteBranch(RemoteBranch, _GitRef):
+    def remote_branch_name(self) -> str:
+        return self.name[13:]
+    
+
+class _Tag(Tag, _GitRef):
+    def tag_name(self) -> str:
+        return self.name[10:]
+    
