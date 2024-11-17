@@ -7,6 +7,7 @@ import pytest
 from importlib import import_module
 from typing import Callable, Any, Generator, NamedTuple, TypeAlias, cast
 import sys
+import os
 
 from xonsh.built_ins import XonshSession
 
@@ -266,29 +267,42 @@ def git():
                    check=True,
                    stdout=PIPE,
                    text=True,
+                   env={**os.environ},
                    **kwargs
                 ).stdout.rstrip()
     return git
-            
+
 @pytest.fixture()
 def repository(with_xgit, git, chdir):
     '''
     Fixture to create a test repository.
     '''
     from tempfile import TemporaryDirectory
+
     def _t(*_, _GitRepository, **__):
         with TemporaryDirectory() as tmp:
             parent = Path(tmp)
+            config = parent / '.gitconfig'
+            with config.open('w') as f:
+                f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
             repo = parent / 'test'
             file= repo / 'test.txt'
             git('init', 'test', cwd=parent)
+            git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
+            git('config', 'user.name', 'Fake Name', cwd=repo)
             file.touch()
             git('add', 'test.txt', cwd=repo)
             git('commit', '-m', 'Initial commit', cwd=repo)
             chdir(repo)
+            old = os.environ.get('GIT_CONFIG_GLOBAL')
+            os.environ['GIT_CONFIG_GLOBAL'] = str(config)
             yield _GitRepository(path=repo / '.git')
+            if old is None:
+                del os.environ['GIT_CONFIG_GLOBAL']
+            else:
+                os.environ['GIT_CONFIG_GLOBAL'] = old
     yield from with_xgit(_t, 'xontrib.xgit.context')
-            
+
 @pytest.fixture()
 def worktree(with_xgit, git, repository, chdir):
     '''
@@ -305,4 +319,3 @@ def worktree(with_xgit, git, repository, chdir):
                            commit=_GitCommit(commit),
                            )
     yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
-                              
