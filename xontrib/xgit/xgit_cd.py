@@ -19,15 +19,23 @@ def git_cd(path: str = "", stderr=sys.stderr) -> None:
     if not XGIT or XGIT.worktree is None:
         execer.exec(f"cd {path}")
         return
+
+    fpath = Path() / path
     if path == "":
         XGIT.path = Path(".")
+        if XGIT.worktree is not None:
+            fpath = XGIT.worktree.path
     elif path == ".":
         pass
     else:
-        git_path = (XGIT.worktree.path / XGIT.path / path).resolve()
-        git_path = git_path.relative_to(XGIT.worktree.path)
-        XGIT.path = git_path
-    fpath = XGIT.worktree.path / XGIT.path
+        try:
+            git_path = (XGIT.worktree.path / XGIT.path / path).resolve()
+            git_path = git_path.relative_to(XGIT.worktree.path)
+            XGIT.path = git_path
+            fpath = XGIT.worktree.path / XGIT.path
+        except ValueError:
+            # Leaving the worktree
+            pass
     try:
         execer.exec(f"cd {fpath}")
     except Exception as ex:
