@@ -122,7 +122,7 @@ def command(
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
-    prefix_cmd: Optional[Callable[..., Any]]=None,
+    prefix: Optional[tuple[Callable[..., Any], str]]=None,
 ) -> Callable:
     """
     Decorator/decorator factory to make a function a command. Command-line
@@ -161,6 +161,7 @@ def command(
             for_value=for_value,
             alias=alias,
             export=export,
+            prefix=prefix,
         )
     if alias is None:
         alias = cmd.__name__.replace("_", "-")
@@ -294,8 +295,9 @@ def command(
     _aliases[alias] = wrapper
     if export:
         _export(cmd)
-    if prefix_cmd is not None:
-        prefix_cmd._subcmds[alias] = wrapper
+    if prefix is not None:
+        prefix_cmd, prefix_alias = prefix
+        prefix_cmd._subcmds[prefix_alias] = wrapper
     return cmd
 
 def prefix_command(alias: str):
@@ -312,7 +314,7 @@ def prefix_command(alias: str):
             return
         subcmd = args[0]
         args = args[1:]
-        return subcmd(args, **kwargs)
+        return subcmds[subcmd](args, **kwargs)
     prefix_name = alias.replace("-", "_")
     import inspect
     module = inspect.stack()[1].__module__
@@ -326,7 +328,8 @@ def prefix_command(alias: str):
     @contextual_completer
     def completer(ctx: CompletionContext):
         return set(subcmds.keys())
-    add_one_completer(prefix_name, completer)
+    completer.__doc__ = f"Completer for {alias}"
+    add_one_completer(prefix_name, completer, "start")
     return prefix_cmd
 
 xgit = prefix_command("xgit")
