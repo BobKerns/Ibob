@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from inspect import currentframe, stack
+from pathlib import Path
 from threading import RLock
 from types import ModuleType as Module
 import pytest
@@ -9,6 +10,9 @@ import sys
 
 from xonsh.built_ins import XonshSession
 
+def run_stdout(args, **kwargs):
+    from subprocess import run, PIPE
+    run(args, check=True, stdout=PIPE, text=True, **kwargs).stdout
 
 def cleanup(target: dict[str, Any], before: dict[str, Any], loaded: dict[str, Any], after: dict[str, Any]):
     '''
@@ -246,3 +250,59 @@ def test_branch(modules):
             yield name
         finally:
             run(['git', 'branch', '-D', name])
+
+@pytest.fixture()
+def git():
+    '''
+    Fixture to run git commands.
+    '''
+    from subprocess import run, PIPE
+    from shutil import which
+    _git = which('git')
+    if _git is None:
+        raise ValueError("git is not installed")
+    def git(*args, **kwargs):
+        return run([_git, *args],
+                   check=True,
+                   stdout=PIPE,
+                   text=True,
+                   **kwargs
+                ).stdout.rstrip()
+    return git
+            
+@pytest.fixture()
+def repository(with_xgit, git, chdir):
+    '''
+    Fixture to create a test repository.
+    '''
+    from tempfile import TemporaryDirectory
+    def _t(*_, _GitRepository, **__):
+        with TemporaryDirectory() as tmp:
+            parent = Path(tmp)
+            repo = parent / 'test'
+            file= repo / 'test.txt'
+            git('init', 'test', cwd=parent)
+            file.touch()
+            git('add', 'test.txt', cwd=repo)
+            git('commit', '-m', 'Initial commit', cwd=repo)
+            chdir(repo)
+            yield _GitRepository(path=repo / '.git')
+    yield from with_xgit(_t, 'xontrib.xgit.context')
+            
+@pytest.fixture()
+def worktree(with_xgit, git, repository, chdir):
+    '''
+    Fixture to create a test worktree.
+    '''
+    def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
+        commit = git('rev-parse', 'HEAD', cwd=repository.path)
+        branch = git('symbolic-ref', 'HEAD', cwd=repository.path)
+        chdir(repository.path.parent)
+        yield _GitWorktree(repository=repository,
+                           path=repository.path.parent,
+                           repository_path=repository.path,
+                           branch=_GitRef(branch),
+                           commit=_GitCommit(commit),
+                           )
+    yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
+                              

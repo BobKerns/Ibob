@@ -29,6 +29,7 @@ from xontrib.xgit.context_types import (
     GitRepository,
     GitWorktree
 )
+from xontrib.xgit.objects import _git_object
 from xontrib.xgit.vars import (
     XGIT_CONTEXTS, XSH, XGIT_REPOSITORIES, XGIT_WORKTREES,
 )
@@ -160,15 +161,11 @@ class _GitRepository(GitRepository):
         self._objects = {}
 
     def to_json(self, describer: JsonDescriber):
-        return {
-            "path": describer.to_json(self.path),
-        }
+        return str(self.path)
 
     @staticmethod
-    def from_json(data: dict, describer: JsonDescriber):
-        return _GitRepository(
-            repository=describer.from_json(data["repository"]),
-        )
+    def from_json(data: str, describer: JsonDescriber):
+        return _GitRepository(data)
 
 class _GitWorktree(GitWorktree):
     """
@@ -200,14 +197,15 @@ class _GitWorktree(GitWorktree):
     prunable: str
 
     def __init__(self, *args,
-                    repository: GitRepository,
-                    path: Path ,
-                    repository_path: Path,
-                    branch: GitRef|None,
-                    commit: GitCommit,
-                    locked: str,
-                    prunable: str,
-                    **kwargs):
+                repository: GitRepository,
+                path: Path,
+                repository_path: Path,
+                branch: GitRef|None,
+                commit: GitCommit,
+                locked: str = '',
+                prunable: str = '',
+                **kwargs
+            ):
             super().__init__(*args, **kwargs)
             self._repository = repository
             self._path = path
@@ -218,26 +216,27 @@ class _GitWorktree(GitWorktree):
             self.prunable = prunable
 
     def to_json(self, describer: JsonDescriber):
+        branch = self.branch.name if self.branch else None
         return {
-            "repository": describer.to_json(self.repository),
-            "repository_path": describer.to_json(self.repository_path),
-            "path": describer.to_json(self.path),
-            "branch": describer.to_json(self.branch),
-            "commit": describer.to_json(self.commit),
-            "locked": describer.to_json(self.locked),
-            "prunable": describer.to_json(self.prunable),
+            "repository": str(self.repository.path),
+            "repository_path": str(self.repository_path),
+            "path": str(self.path),
+            "branch": branch,
+            "commit": self.commit.hash,
+            "locked": self.locked,
+            "prunable": self.prunable,
         }
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
         return _GitWorktree(
-            repository=describer.from_json(data["repository"]),
-            repository_path=describer.from_json(data["repository_path"]),
-            path=describer.from_json(data["path"]),
-            branch=describer.from_json(data["branch"]),
-            commit=describer.from_json(data["commit"]),
-            locked=describer.from_json(data["locked"]),
-            prunable=describer.from_json(data["prunable"]),
+            repository=_GitRepository(Path(data['repository'])),
+            repository_path=Path(data["repository_path"]),
+            path=Path(data["path"]),
+            branch=_GitRef(data["branch"]),
+            commit=_git_object(data["commit"], 'commit'),
+            locked=data["locked"],
+            prunable=data["prunable"],
         )
 
 
@@ -385,11 +384,12 @@ class _GitContext(GitContext):
 
     def to_json(self, describer: JsonDescriber):
         assert self.commit is not None, "Commit has not been set"
+        branch = self.branch.name if self.branch else None
         return {
             "worktree": describer.to_json(self.worktree),
-            "path": describer.to_json(self.path),
-            "branch": describer.to_json(self.branch),
-            "commit": describer.to_json(self.commit.hash),
+            "path": str(self.path),
+            "branch": branch,
+            "commit": self.commit.hash,
         }
 
     @staticmethod
