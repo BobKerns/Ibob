@@ -55,6 +55,8 @@ pyreadline3
 pytest
 pythonic
 Redirections
+remodularization
+remodularizations
 setenv
 sorteddict
 subcmd

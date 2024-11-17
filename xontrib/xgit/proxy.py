@@ -39,11 +39,12 @@ from threading import RLock
 from weakref import WeakKeyDictionary
 from typing import (
     Callable, Literal, Mapping, MutableMapping, Optional, Protocol, TypedDict, cast, Any, overload,
-    Generic, TypeAlias, TypeVar, runtime_checkable,
+    Generic, TypeAlias, TypeVar,
 )
 from collections import deque
 
 from xontrib.xgit.types import (
+    ProxyAction, AdaptorMethod, ProxyDeinitializer,
     _NoValue, _NO_VALUE,
 )
 
@@ -182,10 +183,6 @@ class IdentityTargetAccessor(TargetAccessor[T, T, T, V]):
     def __delete__(self, _):
         del self.descriptor
 
-AdaptorMethod: TypeAlias = Literal[
-    'getitem', 'setitem', 'delitem', 'setattr', 'getattr', 'contains', 'hasattr', 'bool'
-]
-
 
 class BaseObjectAdaptor(Generic[T, V]):
     """
@@ -263,13 +260,6 @@ class ObjectAdaptor(BaseObjectAdaptor[T,V]):
                  descriptor: TargetAccessor[Any, Any, T, V],
                  **kwargs):
         setattr(self, 'descriptor', descriptor)
-
-
-ProxyAction: TypeAlias = Literal['get', 'set', 'delete', 'bool']
-"""
-Flags indicating the action being undertaken at the time of proxy access.
-"""
-
 
 class AdaptorWrapperFn(Generic[V], Protocol):
     """
@@ -630,14 +620,6 @@ class XGitProxy(Generic[T,V]):
         except Exception:
             t = "<unbound>"
         return str(f'{type(self).__name__}({name=!r}, target={t})')
-
-
-ProxyDeinitializer: TypeAlias = Callable[[], None]
-"""
-A function returned from a `ProxyInitializer` that cleans up resources associated with the proxy object
-on plugin unload.
-
-"""
 
 
 ProxyInitializer: TypeAlias = Callable[[XGitProxy[T, V]], ProxyDeinitializer|None]
