@@ -6,7 +6,7 @@ These are the core objects that represent the contents of a git repository.
 
 from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
-    Callable, overload,
+    Callable, overload, Iterable, Iterator,
 )
 from datetime import datetime
 import re
@@ -21,6 +21,7 @@ from xontrib.xgit.types import (
     GitHash,
     GitEntryMode,
     GitObjectType,
+    InitFn,
 )
 from xontrib.xgit.git_types import (
     GitCommit,
@@ -48,7 +49,6 @@ class _GitId(GitId):
     Anything that has a hash in a git repository.
     """
 
-    _lazy_loader: GitLoader | None
     _hash: GitHash
     @property
     def hash(self) -> GitHash:
@@ -58,20 +58,9 @@ class _GitId(GitId):
         self,
         hash: GitHash,
         /,
-        *,
-        loader: Optional[GitLoader] = None,
         **kwargs,
     ):
         self._hash = hash
-        self._lazy_loader = loader
-
-    def _expand(self):
-        """
-        Load the contents of the object.
-        """
-        if self._lazy_loader:
-            self._lazy_loader()
-        return self
 
     def __hash__(self):
         return hash(self.hash)
@@ -95,34 +84,28 @@ class _GitObject(_GitId, GitObject):
     """
     Any object stored in a git repository. Holds the hash and type of the object.
     """
-    _size: int|GitLoader
+    _size: int|InitFn['_GitObject', int]
     @property
     def size(self) -> int:
         if callable(self._size):
-            self._size()
-            assert isinstance(self._size, int), f"Loader did not updates _size {self._size!r}"
-            return self._size
+            self._size = self._size(self)
         return self._size
 
     def __init__(
         self,
         hash: GitHash,
-        size=-1,
+        size: int|InitFn['_GitObject',int]=-1,
         /,
-        loader: Optional[GitLoader] = None,
         context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
     ):
+        if size == -1:
+            size = int(_run_text(["git", "cat-file", "-s", hash]))
+        self._size = size
         _GitId.__init__(
             self,
             hash,
-            loader=loader,
             context=context,
         )
-        if size >= 0:
-            self._size = size
-        else:
-            assert loader is not None, "Size must be provided if no loader"
-            self._size = loader
 
     @property
     def type(self):
@@ -255,7 +238,7 @@ def _git_entry(
     return name, entry
 
 
-class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
+class _GitTree(_GitObject, GitTree, dict[str, GitObject]):
     """
     A directory ("tree") stored in a git repository.
 
@@ -265,7 +248,7 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
     Updates would make no sense, as this would invalidate the hash.
     """
 
-    _lazy_loader: GitLoader | None
+    _lazy_loader: InitFn['_GitTree',Iterable[tuple[str,GitTreeEntry]]] | None
     def __init__(
         self,
         tree: GitHash,
@@ -278,48 +261,51 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
         if context is None:
             context = default_context()
         context = context.new_context()
-        def _lazy_loader():
+        def _lazy_loader(self: '_GitTree'):
             with chdir(context.worktree.path):
                 for line in _run_lines(["git", "ls-tree", "--long", tree]):
                     if line:
                         name, entry = _parse_git_entry(line, context, tree)
-                        dict.__setitem__(self, name, entry)
+                        yield name, entry
             self._size = dict.__len__(self)
             self._lazy_loader = None
         self._lazy_loader = _lazy_loader
-
+        
         dict.__init__(self)
         _GitObject.__init__(
             self,
             tree,
-            loader=_lazy_loader,
+            lambda _: len(self._expand()),
             context=context,
         )
+    
+    def _expand(self):
+        if self._lazy_loader is not None:
+            i = self._lazy_loader(self)
+            dict.update(self, i)
+        return self
 
     @property
     def type(self) -> Literal["tree"]:
         return "tree"
 
     def __hash__(self):
-        _GitObject.__hash__(self)
+        _GitObject.__hash__(self._expand())
 
     def __eq__(self, other):
-        return _GitObject.__eq__(self, other)
+        return _GitObject.__eq__(self._expand(), other)
 
     def __repr__(self):
         return f"GitTree(hash={self.hash})"
 
     def __len__(self):
-        self._expand()
-        return dict.__len__(self)
+        return dict.__len__(self._expand())
 
     def __contains__(self, key):
-        self._expand()
-        return dict.__contains__(self, key)
+        return dict.__contains__(self._expand(), key)
 
     def __getitem__(self, key: str) -> _GitObject:
-        self._expand()
-        return dict.__getitem__(self, key)
+        return dict.__getitem__(self._expand(), key)
 
     def __setitem__(self, key: str, value: _GitObject):
         raise NotImplementedError("Cannot set items in a GitTree")
@@ -327,35 +313,30 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
     def __delitem__(self, key: str):
         raise NotImplementedError("Cannot delete items in a GitTree")
 
-    def __iter__(self):
-        self._expand()
-        return dict.__iter__(self)
+    def __iter__(self) -> Iterator[str]:
+        return dict.__iter__(self._expand())
 
     def __bool__(self):
-        return len(self) > 0
+        return len(self._expand()) > 0
 
-    def __reversed__(self):
+    def __reversed__(self) -> Iterator[str]:
         self._expand()
         return super().__reversed__()
 
     def items(self):
-        self._expand()
-        return dict.items(self)
+        return dict.items(self._expand())
 
     def keys(self):
-        self._expand()
-        return dict.keys(self)
+        return dict.keys(self._expand())
 
     def values(self):
-        self._expand()
-        return dict.values(self)
+        return dict.values(self._expand())
 
     def get(self, key: str, default: Any = None):
-        self._expand()
-        return dict.get(self, key, default)
+        return dict.get(self._expand(), key, default)
 
     def __str__(self):
-        return f"D {self.hash} {len(self):>8d}"
+        return f"D {self.hash} {len(self._expand()):>8d}"
 
     def __format__(self, fmt: str):
         """
@@ -371,16 +352,17 @@ class _GitTree(_GitObject, GitTree, dict[str, _GitObject]):
         """
         if "l" in fmt and "d" not in fmt:
             return "\n".join(
-                e.__format__(f"d{fmt}") for e in self.values()
+                e.__format__(f"d{fmt}") for e in self._expand().values()
             )
         hash = self.hash[:8] if "a" in fmt else self.hash
-        return f"D {hash} {len(self):>8d}"
+        return f"D {hash} {len(self._expand()):>8d}"
 
     def _repr_pretty_(self, p, cycle):
         if cycle:
             p.text(f"GitTree({self.hash})")
         else:
-            with p.group(4, f"GitTree({self.hash!r}, len={len(self)}, '''", "\n''')"):
+            l = len(self._expand())
+            with p.group(4, f"GitTree({self.hash!r}, len={l}, '''", "\n''')"):
                 for e in self.values():
                     p.break_()
                     if e.type == "tree":
@@ -666,7 +648,7 @@ class _GitCommit(_GitObject, GitCommit):
                 sig_lines.extend(lines)
                 self._signature = "\n".join(sig_lines)
                 self._size = 0
-        _GitObject.__init__(self, hash, context=context, loader=loader)
+        _GitObject.__init__(self, hash, context=context)
         self._tree = loader
         self._parents = loader
         self._author = loader
@@ -824,7 +806,7 @@ class _GitTagObject(_GitObject, GitTagObject):
             self._message = loader
             self._signature = loader
 
-        _GitObject.__init__(self, hash, context=context, loader=loader)
+        _GitObject.__init__(self, hash, context=context)
 
     def __str__(self):
         return f"tag {self.hash}"
