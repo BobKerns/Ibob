@@ -27,46 +27,46 @@ def cmp(result: Any, expected: Any):
 
     assert remapped_actual == remapped_expected, f"{remapped_actual} != {remapped_expected}"
 
-def test_to_json_None():
-    cmp(to_json(None), None)
+def test_to_json_None(repository):
+    cmp(to_json(None, repository=repository), None)
 
-def test_to_json_True():
-    cmp(to_json(True), True)
+def test_to_json_True(repository):
+    cmp(to_json(True, repository=repository), True)
 
-def test_to_json_False():
-    cmp(to_json(False), False)
+def test_to_json_False(repository):
+    cmp(to_json(False, repository=repository), False)
 
-def test_to_json_int():
-    cmp(to_json(42), 42)
+def test_to_json_int(repository):
+    cmp(to_json(42,repository=repository), 42)
 
-def test_to_json_float():
-    cmp(to_json(42.0), 42.0)
+def test_to_json_float(repository):
+    cmp(to_json(42.0, repository=repository), 42.0)
 
-def test_to_json_str():
-    cmp(to_json('foo'), 'foo')
+def test_to_json_str(repository):
+    cmp(to_json('foo', repository=repository), 'foo')
 
-def test_to_json_list():
-    cmp(to_json([1, 2, 3]), {'_id': 1, '_list': [1, 2, 3]})
+def test_to_json_list(repository):
+    cmp(to_json([1, 2, 3], repository=repository), {'_id': 1, '_list': [1, 2, 3]})
 
-def test_to_json_dict():
-    cmp(to_json({'x': 42}), {'_id': 1, '_map': {'x': 42}})
+def test_to_json_dict(repository):
+    cmp(to_json({'x': 42}, repository=repository), {'_id': 1, '_map': {'x': 42}})
 
-def test_to_json_nested():
-    cmp(to_json({'x': [1, 2, 3]}), {'_id': 1, '_map': {'x': {'_id': 2, '_list': [1, 2, 3]}}})
+def test_to_json_nested(repository):
+    cmp(to_json({'x': [1, 2, 3]}, repository=repository), {'_id': 1, '_map': {'x': {'_id': 2, '_list': [1, 2, 3]}}})
 
-def test_to_json_nested2():
-    cmp(to_json({'x': {'y': 42}}), {'_id': 1, '_map': {'x': {'_id': 2, '_map': {'y': 42}}}})
+def test_to_json_nested2(repository):
+    cmp(to_json({'x': {'y': 42}}, repository=repository), {'_id': 1, '_map': {'x': {'_id': 2, '_map': {'y': 42}}}})
 
-def test_to_json_nested3():
-    a1 = to_json({'x': {'y': [1, 2, 3]}})
+def test_to_json_nested3(repository):
+    a1 = to_json({'x': {'y': [1, 2, 3]}}, repository=repository)
     a2a = {'_id': 4, '_list': [1, 2, 3]}
     a2b = {'_id': 2, '_map': {'y': a2a}}
     a2 = {'_id': 0, '_map': {'x': a2b}}
     a2 = cmp(a1, a2)
 
-def test_to_json_nested_max():
+def test_to_json_nested_max(repository):
     value = {'x': {'y': {'z': 42}}}
-    result = to_json(value, max_levels=2)
+    result = to_json(value, max_levels=2, repository=repository)
     if 0:
         expected = {
             '_id': 1, '_map': {
@@ -80,7 +80,7 @@ def test_to_json_nested_max():
                     'y': {'_id': 4, '_maxdepth': 2}}}}}
     cmp(result, expected)
 
-def test_to_json_special():
+def test_to_json_special(repository):
     class Special:
         pass
     sut = [Special()]
@@ -95,18 +95,20 @@ def test_to_json_special():
                 }
              ]
     }
-    actual = to_json(sut, special_types={
+    actual = to_json(sut,
+                     repository=repository,
+                     special_types={
         Special: lambda s, _: ({'special': 'K'}),
         }
     )
     cmp(actual, expected)
 
-def test_to_json_special2():
+def test_to_json_special2(repository):
     sut = [Path('foo')]
     expected = {
         '_id': 1, '_list': [
                 'foo'
              ]
     }
-    actual = to_json(sut)
+    actual = to_json(sut, repository=repository)
     cmp(actual, expected)

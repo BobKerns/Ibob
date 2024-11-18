@@ -287,31 +287,31 @@ def repository(with_xgit, git, chdir):
     with repository_lock:
         tmpname = mkdtemp()
         old = Path.cwd()
-        with chdir(tmpname):
-            tmp = Path.cwd()
-            def _t(*_, _GitRepository, **__):
-                    parent = Path(tmp)
-                    token = token_hex(16)
-                    config = parent / f'.gitconfig-{token}'
-                    with config.open('w') as f:
-                        f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
-                    repo = parent / f'test-{token}'
-                    file= repo / 'test.txt'
-                    git('init', repo.name, cwd=parent)
-                    git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
-                    git('config', 'user.name', 'Fake Name', cwd=repo)
-                    file.touch()
-                    git('add', 'test.txt', cwd=repo)
-                    git('commit', '-m', 'Initial commit', cwd=repo)
-                    chdir(repo)
-                    old = os.environ.get('GIT_CONFIG_GLOBAL')
-                    os.environ['GIT_CONFIG_GLOBAL'] = str(config)
-                    yield _GitRepository(path=repo / '.git')
-                    if old is None:
-                        del os.environ['GIT_CONFIG_GLOBAL']
-                    else:
-                        os.environ['GIT_CONFIG_GLOBAL'] = old
-            yield from with_xgit(_t, 'xontrib.xgit.context')
+        chdir(tmpname)
+        tmp = Path.cwd()
+        def _t(*_, _GitRepository, **__):
+                parent = Path(tmp)
+                token = token_hex(16)
+                config = parent / f'.gitconfig-{token}'
+                with config.open('w') as f:
+                    f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
+                repo = parent / f'test-{token}'
+                file= repo / 'test.txt'
+                git('init', repo.name, cwd=parent)
+                git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
+                git('config', 'user.name', 'Fake Name', cwd=repo)
+                file.touch()
+                git('add', 'test.txt', cwd=repo)
+                git('commit', '-m', 'Initial commit', cwd=repo)
+                chdir(repo)
+                old = os.environ.get('GIT_CONFIG_GLOBAL')
+                os.environ['GIT_CONFIG_GLOBAL'] = str(config)
+                yield _GitRepository(path=repo / '.git')
+                if old is None:
+                    del os.environ['GIT_CONFIG_GLOBAL']
+                else:
+                    os.environ['GIT_CONFIG_GLOBAL'] = old
+        yield from with_xgit(_t, 'xontrib.xgit.context')
         chdir(old)
         # Clean up, or try to: Windows is a pain
         with suppress(OSError):
@@ -334,7 +334,7 @@ def worktree(with_xgit, git, repository, chdir):
         yield _GitWorktree(repository=repository,
                            path=repository.path.parent,
                            repository_path=repository.path,
-                           branch=_GitRef(branch),
-                           commit=_GitCommit(commit),
+                           branch=_GitRef(branch, repository=repository),
+                           commit=_GitCommit(commit, repository=repository),
                            )
     yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
