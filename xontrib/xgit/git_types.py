@@ -14,6 +14,7 @@ from datetime import datetime
 from xontrib.xgit.types import (
     CleanupAction, GitHash, GitEntryMode, GitObjectType,
 )
+from xontrib.xgit.context_types import GitRepository
 
 
 @runtime_checkable
@@ -239,6 +240,9 @@ class GitTreeEntry(GitObject, Protocol):
     def object(self) -> GitObject: ...
     @property
     @abstractmethod
+    def repository(self) -> GitRepository: ...
+    @property
+    @abstractmethod
     def parent_object(self) -> Optional[GitObject]: ...
     @property
     @abstractmethod
@@ -255,9 +259,14 @@ class GitRef(Protocol):
     Any ref, usually a branch or tag, usually pointing to a commit.
     """
     @property
+    @abstractmethod
     def name(self) -> str: ...
     @property
+    @abstractmethod
     def target(self) -> GitObject: ...
+    @property
+    @abstractmethod
+    def repository(self) -> GitRepository: ...
 
 class Branch(GitRef, Protocol):
     """

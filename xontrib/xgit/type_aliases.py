@@ -51,7 +51,7 @@ Valid types for a git object.
 
 type GitEntryKey = tuple[Path, Path|None, str, str, str|None]
 
-type GitObjectReference = tuple[ContextKey, str | None]
+type GitObjectReference = tuple[Path, str | None]
 """
 A reference to a git object in a tree in a repository.
 """

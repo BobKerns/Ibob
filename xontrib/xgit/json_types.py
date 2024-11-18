@@ -5,6 +5,7 @@ from typing import (
     TypeAlias, TypeVar, Optional, TypedDict, Protocol, Generic, Any,
 )
 
+import xontrib.xgit.context_types as ct
 from xontrib.xgit.types import (
     JsonData, JsonAtomic,
 )
@@ -123,6 +124,7 @@ class JsonDescriber(Protocol):
     class_map: dict[str,type]
     class_names: dict[type,str]
     include_private: bool
+    repository: ct.GitRepository
     def to_json(self, obj: Any, cls: Optional[type|str]=None) -> JsonReturn:
         """
         Perform the conversion to JSON.
@@ -136,7 +138,9 @@ class JsonDescriber(Protocol):
         - obj: Any
             The object to convert to JSON.
         """
-    def from_json(self, obj: Any, cls: Optional[type|str] = None, /, *,
+    def from_json(self, obj: Any,
+                    cls: Optional[type|str] = None, /, *,
+              repository: ct.GitRepository,
               describer: Optional['JsonDescriber'] = None,
               references: dict[int,Any] = dict(),
               class_map: dict[str,type] = dict(),
@@ -156,7 +160,7 @@ class JsonDescriber(Protocol):
         - class_map: Optional[dict,type] = None
             A mapping of class names to types, for use in instantiating instances.
         '''
-        
+
 
 class Jsonable(Protocol):
     """

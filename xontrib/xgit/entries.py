@@ -9,6 +9,7 @@ from typing import Any, Optional
 from pathlib import Path
 
 from xonsh.lib.pretty import RepresentationPrinter
+from xontrib.xgit.context_types import GitRepository
 import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
     GitEntryMode,
@@ -31,6 +32,7 @@ class _GitTreeEntry(GitTreeEntry):
     _path: Optional[Path]
     _parent_object: Optional[GitObject]
     _parent: Optional[GitTreeEntry]
+    _repository: GitRepository
 
     @property
     def type(self):
@@ -81,6 +83,10 @@ class _GitTreeEntry(GitTreeEntry):
         return self._parent
 
     @property
+    def repository(self):
+        return self._repository
+
+    @property
     def entry(self):
         rw = self.prefix
         return f"{rw} {self.type} {self.hash}\t{self.name}"
@@ -99,6 +105,7 @@ class _GitTreeEntry(GitTreeEntry):
                  object: GitObject,
                  name: str,
                  mode: GitEntryMode,
+                 repository: GitRepository,
                  parent_object: Optional[GitObject|GitHash]=None,
                  parent: Optional[GitTreeEntry]=None,
                  path: Optional[Path] = None):
@@ -106,8 +113,9 @@ class _GitTreeEntry(GitTreeEntry):
         self._name = name
         self._mode = mode
         self._path = path
+        self._repository = repository
         if isinstance(parent_object, str):
-            parent_object = xo._git_object(parent_object)
+            parent_object = xo._git_object(parent_object, repository)
         if parent is not None and parent_object is None:
             parent_object = parent.object
         self._parent_object = parent_object
@@ -127,9 +135,10 @@ class _GitTreeEntry(GitTreeEntry):
         obj = self._object[name] # type: ignore
         path = self._path / name if self._path else None
         _, entry = xo._git_entry(obj.object, name, self._mode, obj.type, obj.size,
-                             path=path,
-                             parent_entry=self,
-                             parent=self._object)
+                                repository=self._repository,
+                                path=path,
+                                parent_entry=self,
+                                parent=self._object)
         return entry
 
     def __contains__(self, name):

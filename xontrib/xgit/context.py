@@ -7,7 +7,9 @@ Implementation of the `GitContext` class and related types.
 * `GitWorktree` - a class that represents a git worktree.
 '''
 
+from contextlib import suppress
 from dataclasses import dataclass, field
+from tkinter import NO
 from typing import (
     MutableMapping, Optional, Sequence, TypeAlias, cast, overload, Mapping,
 )
@@ -40,7 +42,7 @@ from xontrib.xgit.ref import _GitRef
 DEFAULT_BRANCH="HEAD"
 
 WorktreeMap: TypeAlias = dict[Path, GitWorktree]
-@dataclass
+
 class _GitRepository(GitRepository):
     """
     A git repository.
@@ -63,6 +65,41 @@ class _GitRepository(GitRepository):
             self._worktrees = self._worktrees(self)
         return MappingProxyType(self._worktrees)
 
+    _preferred_worktree: GitWorktree|None = None
+    @property
+    def worktree(self) -> GitWorktree:
+        """
+        Get the preferred worktree.
+        """
+        if self._preferred_worktree is not None:
+            return self._preferred_worktree
+        if callable(self._worktrees):
+            self._worktrees = self._worktrees(self)
+        if self.path.name == ".git":
+            worktree = self.get(self.path.parent)
+            if worktree is not None:
+                self._preferred_worktree = worktree
+                return worktree
+            worktree = _GitWorktree(
+                            path=self.path.parent,
+                            repository=self,
+                            repository_path=self.path,
+                            branch=None,
+                            commit=_git_object('HEAD', self, 'commit'),
+                            locked='',
+                            prunable='',
+                        )
+            self._preferred_worktree = worktree
+            self._worktrees[self.path.parent] = worktree
+            return cast(GitWorktree, worktree)
+
+        with suppress(StopIteration):
+            worktree = next(iter(self.worktrees.values()))
+            if worktree is not None:
+                self._preferred_worktree = worktree
+                return worktree
+        raise ValueError("No worktrees found for repository")
+
     def __getitem__(self, key: Path|str) -> GitWorktree:
         if callable(self._worktrees):
             self._worktrees = self._worktrees(self)
@@ -70,8 +107,10 @@ class _GitRepository(GitRepository):
         worktree = self._worktrees.get(key)
         if worktree is None:
             branch_name = _run_stdout(['git', 'symbolic-ref', 'q', 'HEAD']).rstrip()
-            branch = _GitRef(branch_name) if branch_name else None
-            commit = _git_object('HEAD', 'commit')  # Should be the same as branch.target
+            branch: GitRef|None = None
+            if branch_name:
+                branch = _GitRef(branch_name, repository=self)
+            commit = _git_object('HEAD', self, 'commit')  # Should be the same as branch.target
             worktree = _GitWorktree(
                 path=Path(key),
                 repository=self,
@@ -114,12 +153,12 @@ class _GitRepository(GitRepository):
                     case ['worktree', wt]:
                         worktree = Path(wt)
                     case ['HEAD', c]:
-                        commit = _git_object(c, 'commit')
+                        commit = _git_object(c, self, 'commit')
                         self._objects[commit.hash] = commit
                     case ['branch', b]:
                         b = b.strip()
                         if b:
-                            branch = _GitRef(b)
+                            branch = _GitRef(b, repository=self)
                         else:
                             branch = None
                     case ['locked', l]:
@@ -205,7 +244,7 @@ class _GitWorktree(GitWorktree):
             case str():
                 value = value.strip()
                 if value:
-                    self._branch = _GitRef(value)
+                    self._branch = _GitRef(value, repository=self._repository)
                 else:
                     self._branch = None
             case None:
@@ -223,7 +262,7 @@ class _GitWorktree(GitWorktree):
             case str():
                 value = value.strip()
                 hash = _run_text(['git', 'rev-parse', value]).strip()
-                self._commit = _git_object(hash, 'commit')
+                self._commit = _git_object(hash, self.repository, 'commit')
             case GitCommit():
                 self._commit = value
             case _:
@@ -264,12 +303,13 @@ class _GitWorktree(GitWorktree):
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
+        repository = _GitRepository(Path(data['repository']))
         return _GitWorktree(
-            repository=_GitRepository(Path(data['repository'])),
+            repository=repository,
             repository_path=Path(data["repository_path"]),
             path=Path(data["path"]),
-            branch=_GitRef(data["branch"]),
-            commit=_git_object(data["commit"], 'commit'),
+            branch=_GitRef(data["branch"], repository=describer.repository),
+            commit=_git_object(data["commit"], repository, 'commit'),
             locked=data["locked"],
             prunable=data["prunable"],
         )
@@ -298,7 +338,7 @@ class _GitContext(GitContext):
     def path(self, value: Path|str):
         self._path = Path(value)
 
-    _branch: GitRef|None = _GitRef(DEFAULT_BRANCH)
+    _branch: GitRef|None = None
     @property
     def branch(self) -> GitRef|None:
         return self._branch
@@ -310,7 +350,7 @@ class _GitContext(GitContext):
             case str():
                 value = value.strip()
                 if value:
-                    self._branch = _GitRef(value)
+                    self._branch = _GitRef(value, repository=self.worktree.repository)
                 else:
                     self._branch = None
             case None:
@@ -329,7 +369,7 @@ class _GitContext(GitContext):
             case str():
                 value = value.strip()
                 hash = _run_text(['git', 'rev-parse', value]).strip()
-                self._commit = _git_object(hash, 'commit', self)
+                self._commit = _git_object(hash, self.worktree.repository, 'commit')
             case GitCommit():
                 self._commit = value
             case GitTagObject():
@@ -348,9 +388,9 @@ class _GitContext(GitContext):
         """
         Get the root tree entry.
         """
-        tree = _git_object(self.commit.tree.hash, 'tree', self)
+        tree = _git_object(self.commit.tree.hash, self.worktree.repository, 'tree')
         name, entry = _git_entry(tree, "", "040000", "tree", "-",
-                                 context=self,
+                                 repository=self.worktree.repository,
                                  parent=self.commit,
                                  path=Path("."))
         return entry
@@ -369,7 +409,8 @@ class _GitContext(GitContext):
             case str():
                 branch = branch.strip()
                 if branch:
-                    self.branch = _GitRef(branch)
+                    self.branch = _GitRef(branch,
+                                          repository=self.worktree.repository)
                 else:
                     self.branch = None
             case GitRef():
@@ -408,13 +449,13 @@ class _GitContext(GitContext):
         path = path or self._path
         branch = branch if branch is not None else self.branch
         if isinstance(commit, str):
-            commit = _git_object(commit, 'commit', self)
+            commit = _git_object(commit, worktree.repository, 'commit')
         commit = commit or self.commit
         if isinstance(branch, str):
             if branch == '':
                 branch = None
             else:
-                branch = _GitRef(branch)
+                branch = _GitRef(branch, repository=worktree.repository)
         return _GitContext(
             worktree=worktree,
             path=path,
@@ -463,11 +504,12 @@ class _GitContext(GitContext):
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
+        repository = describer.repository
         return _GitContext(
-            worktree=describer.from_json(data["worktree"]),
-            path=describer.from_json(data["git_path"]),
-            branch=describer.from_json(data["branch"]),
-            commit=describer.from_json(data["commit"]),
+            worktree=describer.from_json(data["worktree"], repository=repository),
+            path=describer.from_json(data["git_path"], repository=repository),
+            branch=describer.from_json(data["branch"], repository=repository),
+            commit=describer.from_json(data["commit"], repository=repository),
         )
 
 
@@ -555,7 +597,7 @@ def _git_context():
                     gctx = _GitContext(
                         worktree=worktree,
                         path=path,
-                        commit=_git_object(commit, 'commit'),
+                        commit=_git_object(commit, repository, 'commit'),
                         branch=branch,
                     )
                     XGIT_CONTEXTS[key] = gctx
@@ -567,7 +609,7 @@ def _git_context():
                         repository=repository,
                         repository_path=repository_path,
                         branch=branch,
-                        commit=_git_object(commit, 'commit'),
+                        commit=_git_object(commit, repository, 'commit'),
                         locked='',
                         prunable='',
                     )
@@ -575,7 +617,7 @@ def _git_context():
                     gctx = _GitContext(
                         worktree=worktree,
                         path=path,
-                        commit=_git_object(commit, 'commit'),
+                        commit=_git_object(commit, repository, 'commit'),
                         branch=branch,
                     )
                     XGIT_CONTEXTS[key] = gctx
@@ -588,7 +630,7 @@ def _git_context():
                         repository=repository,
                         repository_path=repository_path,
                         branch=branch,
-                        commit=_git_object(commit, 'commit'),
+                        commit=_git_object(commit, repository, 'commit'),
                         locked='',
                         prunable='',
                     )
@@ -596,7 +638,7 @@ def _git_context():
                     xgit = _GitContext(
                         worktree=worktree,
                         path=path,
-                        commit=_git_object(commit, 'commit'),
+                        commit=_git_object(commit, repository, 'commit'),
                         branch=branch,
                     )
                     XGIT_CONTEXTS[key] = xgit
@@ -628,7 +670,7 @@ def _git_context():
                 xgit = _GitContext(
                     worktree=worktree,
                     path=Path("."),
-                    commit=_git_object(commit, 'commit'),
+                    commit=_git_object(commit, worktree.repository, 'commit'),
                     branch=branch,
                 )
                 XGIT_CONTEXTS[worktree_path] = xgit
@@ -645,8 +687,8 @@ def _git_context():
                     path=worktree_path,
                     repository=repository,
                     repository_path=repository_path,
-                    branch=_GitRef(branch),
-                    commit=_git_object(commit, 'commit'),
+                    branch=_GitRef(branch, repository=repository),
+                    commit=_git_object(commit, repository, 'commit'),
                     locked='',
                     prunable='',
                 )
@@ -654,7 +696,7 @@ def _git_context():
                 xgit = _GitContext(
                     worktree=worktree,
                     path=Path("."),
-                    commit=_git_object(commit, 'commit'),
+                    commit=_git_object(commit, repository, 'commit'),
                     branch=branch,
                 )
                 XGIT_CONTEXTS[worktree_path] = xgit
