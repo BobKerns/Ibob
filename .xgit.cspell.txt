@@ -37,6 +37,7 @@ mypy
 myxontrib
 newdir
 newpath
+noendl
 nparent
 objtype
 olddir

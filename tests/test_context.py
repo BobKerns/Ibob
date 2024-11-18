@@ -22,10 +22,10 @@ def test_context_simple(with_xgit, worktree, sysdisplayhook):
     with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.vars')
 
 def test_context_json(with_xgit, worktree, git, sysdisplayhook, test_branch):
-    def _t(*_, to_json, from_json, _run_text, **__):
+    def _t(*_, to_json, **__):
         import xontrib.xgit.context as ctx
-        head = git('rev-parse', 'HEAD', cwd=worktree.path)
-        branch = git('symbolic-ref', 'HEAD', cwd=worktree.path)
+        head = worktree.git('rev-parse', 'HEAD')
+        branch = worktree.git('symbolic-ref', 'HEAD')
         ctx = ctx._GitContext(worktree=worktree)
         j = to_json(ctx, repository=worktree.repository)
         path = worktree.path

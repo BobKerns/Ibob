@@ -19,14 +19,13 @@ from typing import Optional
 from xonsh.built_ins import XonshSession
 
 import xontrib.xgit as xgit
+import xontrib.xgit.person as person
 from xontrib.xgit.types import (
     GitObjectReference,
     GitEntryKey,
     _NoValue, _NO_VALUE,
 )
-from xontrib.xgit.git_types import (
-    GitObject, GitTreeEntry,
-)
+import xontrib.xgit.object_types as ot
 from xontrib.xgit.context_types import (
     GitRepository,
     GitWorktree,
@@ -109,7 +108,7 @@ This allows us to switch between worktrees without losing context of what we wer
 looking at in each one.
 """
 
-XGIT_OBJECTS: dict[str, GitObject] = user_proxy(
+XGIT_OBJECTS: dict[str, ot.GitObject] = user_proxy(
     'XGIT_OBJECTS',
     dict,
     {},
@@ -120,7 +119,7 @@ A map from the hash of a git object to the object itself.
 Stored here to persist across reloads.
 """
 
-XGIT_ENTRIES: dict[GitEntryKey, GitTreeEntry] = user_proxy(
+XGIT_ENTRIES: dict[GitEntryKey, ot.GitTreeEntry] = user_proxy(
     'XGIT_ENTRIES',
     dict,
     {},
@@ -139,6 +138,16 @@ XGIT_REFERENCES: dict[str, set[GitObjectReference]] = user_proxy(
 )
 """
 A map to where an object is referenced.
+"""
+
+XGIT_PEOPLE: dict[str, person.Person] = user_proxy(
+    'XGIT_PEOPLE',
+    dict,
+    {},
+    adaptor=MappingAdapter,
+)
+"""
+A map of people by name and email address.
 """
 
 _count_lock = Lock()

@@ -9,15 +9,15 @@ from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
     Callable, overload, Iterable, Iterator,
 )
-from datetime import datetime
-import re
 from pathlib import Path
 
 
 from xonsh.built_ins import XSH
 from xonsh.tools import chdir
+from xonsh.lib.pretty import RepresentationPrinter
 
 from tests.conftest import repository
+from xontrib.xgit.person import CommittedBy
 from xontrib.xgit.types import (
     GitLoader,
     GitHash,
@@ -26,7 +26,7 @@ from xontrib.xgit.types import (
     GitEntryKey,
     InitFn,
 )
-from xontrib.xgit.git_types import (
+from xontrib.xgit.object_types import (
     GitCommit,
     GitId,
     GitObject,
@@ -35,15 +35,12 @@ from xontrib.xgit.git_types import (
     GitTagObject,
     GitTreeEntry,
 )
-from xontrib.xgit.context_types import GitContext, GitRepository, GitWorktree
+from xontrib.xgit.context_types import GitCmd, GitContext, GitRepository
 from xontrib.xgit.entries import _GitTreeEntry
 # Avoid a circular import dependency by not looking
 # at the vars module until it is loaded.
 from xontrib.xgit.proxy import target
 from xontrib.xgit import vars as xv
-from xontrib.xgit.procs import (
-    _run_binary, _run_stdout, _run_text, _run_lines, _run_stream
-)
 
 GitContextFn: TypeAlias = Callable[[], GitContext]
 
@@ -100,13 +97,20 @@ class _GitObject(_GitId, GitObject):
         size: int|InitFn['_GitObject',int]=-1,
         /,
     ):
-        if size == -1:
-            size = int(_run_text(["git", "cat-file", "-s", hash]))
         self._size = size
         _GitId.__init__(
             self,
             hash
         )
+
+    def _size_loader(self, repository: GitCmd) -> InitFn['_GitObject',int]:
+        '''
+        Subclasses can call this when they don't know the size of the object
+        '''
+        def loader(self: _GitObject):
+            size = repository.git("cat-file", "-s", self.hash)
+            return int(size)
+        return loader
 
     @property
     def type(self):
@@ -172,13 +176,12 @@ def _git_object(hash: str,
     if obj is not None:
         return obj
     if type is None:
-        with chdir(repository.worktree.path):
-            type = cast(GitObjectType, _run_text(["git", "cat-file", "-t", hash]).strip())
+        type = cast(GitObjectType, repository.git("cat-file", "-t", hash))
     match type:
         case "tree":
             obj = _GitTree(hash, repository=repository)
         case "blob":
-            obj = _GitBlob(hash, int(size))
+            obj = _GitBlob(hash, int(size), repository=repository)
         case "commit":
             obj = _GitCommit(hash, repository=repository)
         case "tag":
@@ -264,7 +267,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
     ):
         def _lazy_loader(self: '_GitTree'):
             with chdir(repository.worktree.path):
-                for line in _run_lines(["git", "ls-tree", "--long", tree]):
+                for line in repository.git_lines("ls-tree", "--long", tree):
                     if line:
                         name, entry = _parse_git_entry(line, repository, tree)
                         yield name, entry
@@ -386,6 +389,13 @@ class _GitBlob(_GitObject, GitBlob):
     A file ("blob") stored in a git repository.
     """
 
+    __repository: GitRepository
+    '''
+    A repository that contains the blob. Any repository with the blob will do,
+    this does not constitute part of the blob's identity. We just need a repo
+    with an object database containing it, to access the data.
+    '''
+
     @property
     def type(self) -> Literal["blob"]:
         return "blob"
@@ -393,14 +403,19 @@ class _GitBlob(_GitObject, GitBlob):
     def __init__(
         self,
         hash: GitHash,
-        size: int=-1,
+        size: int|InitFn[_GitObject,int]=-1,
         /,
+        *,
+        repository: GitRepository,
     ):
+        if isinstance(size, int) and size < 0:
+            size = self._size_loader(repository)
         _GitObject.__init__(
             self,
             hash,
             size,
         )
+        self.__repository = repository
 
     def __str__(self):
         return f"{self.type} {self.hash} {self.size:>8d}"
@@ -438,218 +453,113 @@ class _GitBlob(_GitObject, GitBlob):
         """
         Return the contents of the file.
         """
-        return _run_binary(["git", "cat-file", "blob", self.hash]).stdout
+        return self.__repository.git_binary("cat-file", "blob", self.hash)
 
     @property
     def stream(self):
         """
         Return the contents of the file.
         """
-        return _run_stream(["git", "cat-file", "blob", self.hash])
+        return self.__repository.git_stream("cat-file", "blob", self.hash)
 
     @property
     def lines(self):
-        return _run_lines(["git", "cat-file", "blob", self.hash])
+        return self.__repository.git_lines("cat-file", "blob", self.hash)
 
     @property
     def text(self):
-        return _run_text(["git", "cat-file", "blob", self.hash])
-
-_RE_AUTHOR = re.compile(r"^(([^<]+) [<]([^>]+)[>]) (\d+) ([+-]\d{4})$")
-
-def _parse_author_date(line: str) -> tuple[str, str, str, datetime]:
-    """
-    Parse a line from a git commit and return the author info and the date.
-
-    returns: author, name, email, date
-    """
-    m = _RE_AUTHOR.match(line)
-    if m is None:
-        raise ValueError(f"Could not parse author line: {line}")
-    author, name, email, _date, _tz = m.groups()
-    tz = datetime.strptime(_tz, "%z").tzinfo
-    date = datetime.fromtimestamp(int(_date), tz=tz)
-    return author, name, email, date
+        lines = self.__repository.git_lines("cat-file", "blob", self.hash)
+        return "\n".join(lines)
 
 class _GitCommit(_GitObject, GitCommit):
     """
     A commit in a git repository.
     """
-
+    __loader: GitLoader|None
     @property
     def type(self) -> Literal["commit"]:
         return "commit"
 
-    _tree: GitTree|GitLoader
+    __tree: GitTree|InitFn[GitCommit, GitTree]
     @property
     def tree(self) -> GitTree:
-        if callable(self._tree):
-            self._tree()
-            return self.tree
-        return self._tree
+        if self.__loader:
+            self.__loader()
+        if callable(self.__tree):
+            self.__tree = self.__tree(self)
+        return self.__tree
 
-    _parents: Sequence[GitCommit]|GitLoader
+    __parents: Sequence[GitCommit]
     @property
     def parents(self) -> Sequence[GitCommit]:
-        if callable(self._parents):
-            self._parents()
-            return self.parents
-        return self._parents
+        if self.__loader:
+            self.__loader()
+        return self.__parents
 
-    _message: str|GitLoader
+    __message: str
     @property
     def message(self) -> str:
-        if callable(self._message):
-            self._message()
-            return self.message
-        return self._message
+        if self.__loader:
+            self.__loader()
+        return self.__message
 
-    _author: str|GitLoader
+    __author: CommittedBy
+    __committer: CommittedBy
     @property
-    def author(self) -> str:
-        if callable(self._author):
-            self._author()
-            return self.author
-        return self._author
-
-    _author_date: datetime|GitLoader
+    def author(self):
+        if self.__loader:
+            self.__loader()
+        return self.__author
     @property
-    def author_date(self) -> datetime:
-        if callable(self._author_date):
-            self._author_date()
-            return self.author_date
-        return self._author_date
+    def committer(self):
+        if self.__loader:
+            self.__loader()
+        return self.__committer
 
-    _author_email: str|GitLoader
-    @property
-    def author_email(self) -> str:
-        if callable(self._author_email):
-            self._author_email()
-            return self.author_email
-        return self._author_email
-
-    _author_name: str|GitLoader
-    @property
-    def author_name(self) -> str:
-        if callable(self._author_name):
-            self._author_name()
-            return self.author_name
-        return self._author_name
-
-    _committer: str|GitLoader
-    @property
-    def committer(self) -> str:
-        if callable(self._committer):
-            self._committer()
-            return self.committer
-        return self._committer
-
-    _committer_date: datetime|GitLoader
-    @property
-    def committer_date(self) -> datetime:
-        if callable(self._committer_date):
-            self._committer_date()
-            return self.committer_date
-        return self._committer_date
-
-    _committer_email: str|GitLoader
-    @property
-    def committer_name(self) -> str:
-        if callable(self._committer_name):
-            self._committer_name()
-            return self.committer_name
-        return self._committer_name
-
-    _committer_email: str|GitLoader
-    @property
-    def committer_email(self) -> str:
-        if callable(self._committer_email):
-            self._committer_email()
-            return self.committer_email
-        return self._committer_email
-
-    _signature: str|GitLoader
+    __signature: str
     @property
     def signature(self) -> str:
-        if callable(self._signature):
-            self._signature()
-            return self.signature
-        return self._signature
-
-    def _update_author(self, line: str):
-        author, name, email, date = _parse_author_date(line)
-        self._author = author
-        self._author_name = name
-        self._author_email = email
-        self._author_date = date
-
-    def _update_committer(self, line: str):
-        committer, name, email, date = _parse_author_date(line)
-        self._committer = committer
-        self._committer_name = name
-        self._committer_email = email
-        self._committer_date = date
+        if self.__loader:
+            self.__loader()
+        return self.__signature
 
     def __init__(self, hash: str, /, *, repository: GitRepository):
-        path = repository.worktree.path
         def loader():
-            with chdir(path):
-                lines = _run_lines(["git", "cat-file", "commit", hash])
-                tree = next(lines).split()[1]
-                self._tree = _git_object(tree, repository, 'tree')
-                self._parents = []
-                in_sig = False
-                sig_lines = []
-                for line in lines:
-                    line = line.strip()
-                    if line.startswith("parent"):
-                        self._parents.append(_git_object(line.split()[1], repository, 'commit'))
-                    elif line.startswith("author"):
-                        author_line = line.split(maxsplit=1)[1]
-                        author_loader = lambda: self._update_author(author_line)
-                        self._author = author_loader
-                        self._author_name = author_loader
-                        self._author_email = author_loader
-                        self._author_date = author_loader
-                    elif line.startswith("committer"):
-                        committer_line = line.split(maxsplit=1)[1]
-                        committer_loader = lambda: self._update_committer(committer_line)
-                        self._committer = committer_loader
-                        self._committer_name = committer_loader
-                        self._committer_email = committer_loader
-                        self._committer_date = committer_loader
-                    elif line == 'gpgsig -----BEGIN PGP SIGNATURE-----':
-                        in_sig = True
-                        sig_lines.append(line)
-                    elif in_sig:
-                        sig_lines.append(line)
-                        if line == "-----END PGP SIGNATURE-----":
-                            self._signature = "\n".join(sig_lines)
-                            in_sig = False
-                    elif line == "":
-                        break
-                    else:
-                        raise ValueError(f"Unexpected line: {line}")
-                msg_lines = []
-                for line in lines:
-                    msg_lines.append(line.rstrip())
-                self._message = "\n".join(msg_lines)
-                sig_lines.extend(lines)
-                self._signature = "\n".join(sig_lines)
-                self._size = 0
-        _GitObject.__init__(self, hash)
-        self._tree = loader
-        self._parents = loader
-        self._author = loader
-        self._author_name = loader
-        self._author_email = loader
-        self._author_date = loader
-        self._committer = loader
-        self._committer_name = loader
-        self._committer_email = loader
-        self._committer_date = loader
-        self._message = loader
-        self._signature = loader
+            lines = repository.git_stream("cat-file", "commit", hash)
+            tree = next(lines).split()[1]
+            def load_tree(_):
+                return _git_object(tree, repository, 'tree')
+            self.__tree = load_tree
+            self.__parents = []
+            in_sig = False
+            msg_lines = []
+            sig_lines = []
+            for line in lines:
+                if line.startswith("parent"):
+                    self.__parents.append(_git_object(line.split()[1], repository, 'commit'))
+                elif line.startswith("author"):
+                    author_line = line.split(maxsplit=1)[1]
+                    self.__author = CommittedBy(author_line)
+                elif line.startswith("committer"):
+                    committer_line = line.split(maxsplit=1)[1]
+                    self.__committer = CommittedBy(committer_line)
+                elif line == 'gpgsig -----BEGIN PGP SIGNATURE-----':
+                    in_sig = True
+                    sig_lines.append(line)
+                elif in_sig:
+                    sig_lines.append(line)
+                    if line.strip() == "-----END PGP SIGNATURE-----":
+                        in_sig = False
+                elif line == "":
+                    break
+                else:
+                    raise ValueError(f"Unexpected line: {line}")
+            msg_lines.extend(lines)
+            self.__message = "\n".join(msg_lines)
+            self.__signature = "\n".join(sig_lines)
+            self._size = 0
+        self.__loader = loader
+        _GitObject.__init__(self, hash, self._size_loader(repository))
 
     def __str__(self):
         return f"commit {self.hash}"
@@ -660,6 +570,36 @@ class _GitCommit(_GitObject, GitCommit):
     def __format__(self, fmt: str):
         return f"commit {self.hash.format(fmt)}"
 
+    def _repr_pretty_(self, p: RepresentationPrinter, cycle):
+        if cycle:
+            p.text(f"GitCommit({self.hash!r})")
+        else:
+            with p.group(4, f"GitCommit({self.hash!r}, ", "\n)"):
+                p.breakable()
+                p.text(f"tree={self.tree.hash!r}")
+                p.breakable()
+                with p.group(4, "parents=[", "],"):
+                    for parent in self.parents:
+                        p.text(f"{parent.hash},")
+                        p.breakable()
+                p.breakable()
+                p.text(f"author='{self.author.person.full_name} @ {self.author.date}',")
+                p.breakable()
+
+                p.text(f"committer='{self.committer.person.full_name} @ {self.committer.date}',")
+                p.breakable()
+                with p.group(4, "message='''", "''',"):
+                    for i, line in enumerate(self.message.splitlines()):
+                        p.text(line)
+                        if i < len(self.message.splitlines()) - 1:
+                            p.break_()
+                p.breakable()
+                with p.group(4, "signature='''", "'''"):
+                    for i, line in enumerate(self.signature.splitlines()):
+                        p.text(line)
+                        if i < len(self.signature.splitlines()) - 1:
+                            p.break_()
+
 
 class _GitTagObject(_GitObject, GitTagObject):
     """
@@ -667,133 +607,91 @@ class _GitTagObject(_GitObject, GitTagObject):
     This is an actual signed tag object, not just a reference.
     """
 
+    __loader: GitLoader|None
+
     @property
     def type(self) -> Literal["tag"]:
         return "tag"
 
-    _object: GitObject|GitLoader
+    __object: GitObject|InitFn[GitTagObject, GitObject]
     @property
     def object(self) -> GitObject:
-        if callable(self._object):
-            self._object()
-            return self.object
-        return self._object
+        if self.__loader:
+            self.__loader() # type: ignore
+        if callable(self.__object):
+            self.__object = self.__object(self)
+        return self.__object
 
-    _tagger: str|GitLoader
+    __tagger: CommittedBy
     @property
-    def tagger(self) -> str:
-        if callable(self._tagger):
-            self._tagger()
-            return self.tagger
-        return self._tagger
+    def tagger(self) -> CommittedBy:
+        if self.__loader:
+            self.__loader()
+        return self.__tagger
 
-    _tagger_email: str|GitLoader
-    @property
-    def tagger_email(self) -> str:
-        if callable(self._tagger_email):
-            self._tagger_email()
-            return self.tagger
-        return self._tagger_email
-
-    _tagger_name: str|GitLoader
-    @property
-    def tagger_name(self) -> str:
-        if callable(self._tagger_name):
-            self._tagger_name()
-            return self.tagger
-        return self._tagger_name
-
-    _tag_type: GitObjectType|GitLoader
+    __tag_type: GitObjectType
     @property
     def tag_type(self) -> str:
-        if callable(self._tag_type):
-            self._tag_type()
-            return self.tag_type
-        return self._tag_type
+        if self.__loader:
+            self.__loader()
+        return self.__tag_type
 
-    _tag_name: str|GitLoader
+    __tag_name: str
     @property
     def tag_name(self) -> str:
-        if callable(self._tag_name):
-            self._tag_name()
-            return self.tag_name
-        return self._tag_name
+        if self.__loader:
+            self.__loader()
+        return self.__tag_name
 
-    _created: datetime|GitLoader
-    @property
-    def created(self) -> datetime:
-        if callable(self._created):
-            self._created()
-            return self.created
-        return self._created
-
-    _message: str|GitLoader
+    __message: str
     @property
     def message(self) -> str:
-        if callable(self._message):
-            self._message()
-            return self.message
-        return self._message
+        if self.__loader:
+            self.__loader()
+        return self.__message
 
-    _signature: str|GitLoader
+    __signature: str
     @property
     def signature(self) -> str:
-        if callable(self._signature):
-            self._signature()
-            return self.signature
-        return self._signature
+        if self.__loader:
+            self.__loader()
+        return self.__signature
 
     def __init__(self, hash: str, /, *,
                  repository: GitRepository):
         def loader():
-            with chdir(repository.worktree.path):
-                lines = _run_lines(["git", "cat-file", "tag", hash])
-                for line in lines:
-                    if line.startswith("object"):
-                        self._object = _git_object(line.split()[1], repository)
-                    elif line.startswith("type"):
-                        tag_type = line.split()[1]
-                        assert tag_type in ("commit", "tree", "blob", "tag")
-                        self._tag_type = tag_type
-                    elif line.startswith("tag"):
-                        self._tag_name = line.split(maxsplit=1)[1]
-                    elif line.startswith("tagger"):
-                        tagger_line = line.split(maxsplit=1)[1]
-                        def parse_tagger(line):
-                            tagger, name, email, date = _parse_author_date(line)
-                            self._tagger = tagger
-                            self._tagger_name = name
-                            self._tagger_email = email
-                            self._created= date
-                        loader2 = lambda: parse_tagger(line.split(maxsplit=1)[1])
-                        self._tagger = loader2
-                        self._tagger_name = loader2
-                        self._tagger_email = loader2
-                        self._created = loader2
-                    elif line == "":
-                        break
-                    else:
-                        raise ValueError(f"Unexpected line: {line}")
-                msg_lines: list[str] = []
-                sig_lines: list[str] = []
-                for line in lines:
-                    if line == "-----BEGIN PGP SIGNATURE-----":
-                        sig_lines.append(line)
-                        break
-                    msg_lines.append(line)
-                self._message = "\n".join(msg_lines)
-                for line in lines:
+            lines = repository.git_lines(["git", "cat-file", "tag", hash])
+            for line in lines:
+                if line.startswith("object"):
+                    def load_object(_):
+                        return _git_object(line.split()[1], repository)
+                    self.__object = load_object
+                elif line.startswith("type"):
+                    tag_type = line.split()[1]
+                    assert tag_type in ("commit", "tree", "blob", "tag")
+                    self.__tag_type = tag_type
+                elif line.startswith("tag"):
+                    self.__tag_name = line.split(maxsplit=1)[1]
+                elif line.startswith("tagger"):
+                    tagger_line = line.split(maxsplit=1)[1]
+                    self.__tagger = CommittedBy(tagger_line)
+                elif line == "":
+                    break
+                else:
+                    raise ValueError(f"Unexpected line: {line}")
+            msg_lines: list[str] = []
+            sig_lines: list[str] = []
+            for line in lines:
+                if line == "-----BEGIN PGP SIGNATURE-----":
                     sig_lines.append(line)
-                self._signature = "\n".join(sig_lines)
-            self._object = loader
-            self._tagger = loader
-            self._tagger_name = loader
-            self._tagger_email = loader
-            self._created = loader
-            self._message = loader
-            self._signature = loader
-
-        _GitObject.__init__(self, hash)
+                    break
+                msg_lines.append(line)
+            self.__message = "\n".join(msg_lines)
+            for line in lines:
+                sig_lines.append(line)
+            self.__signature = "\n".join(sig_lines)
+        self.__loader = loader
+        _GitObject.__init__(self, hash, self._size_loader(repository))
 
     def __str__(self):
         return f"tag {self.hash}"
@@ -803,3 +701,28 @@ class _GitTagObject(_GitObject, GitTagObject):
 
     def __format__(self, fmt: str):
         return f"tag {self.hash.format(fmt)}"
+
+    def _repr_pretty_(self, p: RepresentationPrinter, cycle):
+        if cycle:
+            p.text(f"GitCommit({self.hash!r})")
+        else:
+            with p.group(4, f"GitTagObject({self.hash!r}, ", "\n)"):
+                p.breakable()
+                p.text(f"object=")
+                p.pretty(self.object)
+                p.breakable()
+                p.text(f"tagger='{self.tagger.person.full_name} @ {self.tagger.date}',")
+                p.breakable()
+                p.text(f"tag_type='{self.tag_type}',")
+                p.breakable()
+                with p.group(4, "message='''", "''',"):
+                    for i, line in enumerate(self.message.splitlines()):
+                        p.text(line)
+                        if i < len(self.message.splitlines()) - 1:
+                            p.break_()
+                p.break_()
+                with p.group(4, "signature='''", "'''"):
+                    for i, line in enumerate(self.signature.splitlines()):
+                        p.text(line)
+                        if i < len(self.signature.splitlines()) - 1:
+                            p.break_()

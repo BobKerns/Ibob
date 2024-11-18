@@ -14,9 +14,9 @@ See https://xonsh.org/ for more information about `xonsh`.
 from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
-    GitHash,    
+    GitHash,
 )
-from xontrib.xgit.git_types import (
+from xontrib.xgit.object_types import (
     GitId,
     GitObject,
     GitBlob,

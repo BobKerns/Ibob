@@ -29,10 +29,9 @@ from xontrib.xgit.types import (
     Directory, File, PythonFile,
 )
 from xontrib.xgit.vars import XSH, XGIT, XGIT_OBJECTS
-from xontrib.xgit.git_types import (
+from xontrib.xgit.object_types import (
     Branch, Tag, RemoteBranch, GitRef,
 )
-from xontrib.xgit.procs import _run_lines
 
 @contextual_completer
 def complete_hash(context: CompletionContext) -> set:
@@ -44,7 +43,10 @@ def complete_ref(prefix: str = "") -> ContextualCompleter:
     '''
     @contextual_completer
     def completer(context: CompletionContext) -> set[str]:
-        refs = _run_lines(["git", "for-each-ref", "--format=%(refname)", prefix])
+        if not XGIT:
+            return set()
+        worktree = XGIT.worktree
+        refs = worktree.git_lines("for-each-ref", "--format=%(refname)", prefix)
         return set(refs)
     return completer
 

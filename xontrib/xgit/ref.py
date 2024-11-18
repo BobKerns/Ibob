@@ -4,41 +4,40 @@ Any ref, usually a branch or tag, usually pointing to a commit.
 
 from typing import Any, Optional
 
-from xonsh.lib.pretty import PrettyPrinter
+from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
-from xontrib.xgit.git_types import (
+from xontrib.xgit.object_types import (
     GitObject, GitRef, RemoteBranch, Branch, Tag,
 )
 from xontrib.xgit.objects import _git_object
-from xontrib.xgit.procs import _run_text
 
 class _GitRef(GitRef):
     '''
     Any ref, usually a branch or tag, usually pointing to a commit.
     '''
-    _name: str
+    __name: str
     @property
     def name(self) -> str:
-        if self._name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+        if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             # Dereference on first use.
-            self._name = _run_text(['git', 'symbolic-ref', self._name])
-        return self._name
+            self.__name = self.__repository.git('symbolic-ref', self.__name)
+        return self.__name
 
-    _target: GitObject|None = None
-    _repository: GitRepository
+    __target: GitObject|None = None
+    __repository: GitRepository
     @property
     def repository(self) -> GitRepository:
-        return self._repository
+        return self.__repository
     @property
     def target(self) -> GitObject:
-        if self._target is None:
-            target = _run_text(['git', 'show_ref', '--hash', self.name])
+        if self.__target is None:
+            target = self.__repository.git('show_ref', '--hash', self.name)
             if not target:
                 raise ValueError(f"Ref not found: {self.name!r}")
-            self._target = _git_object(target, self.repository)
-        return self._target
+            self.__target = _git_object(target, self.repository)
+        return self.__target
 
     def __init__(self, name: str, /, *,
                  repository: GitRepository,
@@ -55,34 +54,34 @@ class _GitRef(GitRef):
         If `target` is provided, it is used as the target.
         Otherwise the target is resolved from the ref on demand and cached.
         '''
+        self.__name = name
+        self.__repository = repository
         if name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             # Dereference on first use.
-            self._name = name
+            self.__name = name
             return
         else:
             if not no_check:
-                _name = _run_text(['git', 'check-ref-format', '--normalize', name])
+                _name = repository.git('check-ref-format', '--normalize', name)
                 if not _name:
                     # Try it as a branch name
-                    _name = _run_text(['git', 'check-ref-format', '--branch', name])
+                    _name = repository.git('check-ref-format', '--branch', name)
                 if not _name:
                     raise ValueError(f"Invalid ref name: {name!r}")
             if no_exists_ok:
-                self._name = name
+                self.__name = name
             else:
-                result = _run_text(['git', 'show-ref', '--verify', name])
+                result = repository.git('show-ref', '--verify', name)
                 if not result:
-                    result = _run_text(['git', 'show-ref', '--verify', f'refs/heads/{name}'])
+                    result = repository.git('show-ref', '--verify', f'refs/heads/{name}')
                 if not result:
                     raise ValueError(f"Ref not found: {name!r}")
                 target, name = result.split()
         if target is not None:
             if isinstance(target, str):
-                self._target = _git_object(target, repository)
+                self.__target = _git_object(target, repository)
             else:
-                self._target = target
-        self._name = name
-        self._repository = repository
+                self.__target = target
 
         if name.startswith('refs/heads/'):
             self.__class__ = _Branch
@@ -108,18 +107,19 @@ class _GitRef(GitRef):
     def __str__(self) -> str:
         return self.name
 
-    def _repr_pretty_(self, p: PrettyPrinter, cycle: bool) -> str:
+    def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
         try:
-            if self._name.startswith('refs/heads/'):
-                return f'branch {self._name[11:]} -> {self.target.hash}'
-            if self._name.startswith('refs/tags/'):
-                return f'tag {self._name[10:]} -> {self.target.hash}'
-            if self._name.startswith('refs/remotes/'):
-                return f'remote {self._name[13:]} -> {self.target.hash}'
-            return f'{self._name} -> {self.target.hash}'
+            if self.__name.startswith('refs/heads/'):
+                p.text(f'branch {self.__name[11:]} -> {self.target.hash}')
+            elif self.__name.startswith('refs/tags/'):
+                p.text(f'tag {self.__name[10:]} -> {self.target.hash}')
+            elif self.__name.startswith('refs/remotes/'):
+                p.text(f'remote {self.__name[13:]} -> {self.target.hash}')
+            else:
+                p.text(f'ref {self.__name} -> {self.target.hash}')
         except ValueError:
             # No valid target.
-            return self.name
+            p.text(self.name)
 
     def to_json(self, desc: JsonDescriber) -> JsonData:
         return self.name

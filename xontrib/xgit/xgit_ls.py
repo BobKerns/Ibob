@@ -9,7 +9,7 @@ from xonsh.tools import chdir
 from xontrib.xgit.vars import XGIT
 from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.objects import _git_entry, _git_object
-from xontrib.xgit.git_types import GitTree, GitObject
+from xontrib.xgit.object_types import GitTree, GitObject
 from xontrib.xgit.procs import _run_stdout
 
 @command(
@@ -23,15 +23,15 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
     """
     if not XGIT:
         raise ValueError("Not in a git repository")
-    repository = XGIT.worktree.repository
-    dir = repository.worktree.path / XGIT.path / Path(path)
-    path = dir.relative_to(repository.worktree.path)
+    worktree = XGIT.worktree
+    repository = worktree.repository
+    dir = worktree.path / XGIT.path / Path(path)
+    path = dir.relative_to(worktree.path)
     def do_ls(path: Path) -> GitTree:
         if path == Path("."):
-            tree = _run_stdout(
-                ["git", "log", "--format=%T", "-n", "1", "HEAD"]
-            )
-            parent: GitObject  = _git_object(_run_stdout(['git', 'rev-parse', 'HEAD']), repository, 'commit')
+            tree = worktree.git("log", "--format=%T", "-n", "1", "HEAD")
+            parent_rev = worktree.git("rev-parse", "HEAD")
+            parent: GitObject  = _git_object(parent_rev, repository, 'commit')
         else:
             path_parent = path.parent
             if path_parent != path and path != Path("."):
@@ -51,6 +51,6 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
         with chdir(dir.parent):
             return do_ls(path)
     else:
-        with chdir(repository.worktree.path):
+        with chdir(worktree.path):
             return do_ls(path)
 
