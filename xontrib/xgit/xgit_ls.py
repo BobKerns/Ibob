@@ -23,15 +23,15 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
     """
     if not XGIT:
         raise ValueError("Not in a git repository")
-    worktree = XGIT.worktree.path
-    dir = worktree / XGIT.path / Path(path)
-    path = dir.relative_to(worktree)
+    repository = XGIT.worktree.repository
+    dir = repository.worktree.path / XGIT.path / Path(path)
+    path = dir.relative_to(repository.worktree.path)
     def do_ls(path: Path) -> GitTree:
         if path == Path("."):
             tree = _run_stdout(
                 ["git", "log", "--format=%T", "-n", "1", "HEAD"]
             )
-            parent: GitObject  = _git_object(_run_stdout(['git', 'rev-parse', 'HEAD']), 'commit')
+            parent: GitObject  = _git_object(_run_stdout(['git', 'rev-parse', 'HEAD']), repository, 'commit')
         else:
             path_parent = path.parent
             if path_parent != path and path != Path("."):
@@ -40,9 +40,10 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
 
         if not XGIT:
             raise ValueError("Not in a git repository")
-        _, dir = _git_entry(tree, path.name, "040000", "tree", "-", XGIT,
+        _, entry = _git_entry(tree, path.name, "040000", "tree", "-",
+                            repository=repository,
                             parent=parent or XGIT.worktree.commit)
-        return cast(GitTree, dir.object)
+        return cast(GitTree, entry.object)
     if dir.is_dir():
         with chdir(dir):
             return do_ls(path)
@@ -50,6 +51,6 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
         with chdir(dir.parent):
             return do_ls(path)
     else:
-        with chdir(worktree):
+        with chdir(repository.worktree.path):
             return do_ls(path)
 

@@ -9,23 +9,32 @@ from typing import Protocol, runtime_checkable, Optional
 
 from xontrib.xgit.types import ContextKey
 from xontrib.xgit.json_types import Jsonable
-from xontrib.xgit.git_types import GitRef, GitCommit, GitTreeEntry
+import xontrib.xgit.git_types as gt
 
 @runtime_checkable
 class GitRepository(Jsonable, Protocol):
     """
     A git repository.
     """
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """
+        The path to the common part of the repository. This is the same for all worktrees.
+        """
+        ...
 
-    path: Path = Path(".git")
-    """
-    The path to the common part of the repository. This is the same for all worktrees.
-    """
+    @property
+    @abstractmethod
+    def worktree(self) -> 'GitWorktree': ...
 
-    worktrees: dict[Path, 'GitWorktree']
-    '''
-    Worktrees known to be associated with this repository.
-    '''
+    @property
+    @abstractmethod
+    def worktrees(self) -> dict[Path, 'GitWorktree']:
+        '''
+        Worktrees known to be associated with this repository.
+        '''
+        ...
     def __getitem__(self, key: Path|str) -> 'GitWorktree': ...
 
     def get(self, key: Path|str) -> 'GitWorktree|None': ...
@@ -53,16 +62,16 @@ class GitWorktree(Jsonable, Protocol):
     def path(self) -> Path: ...
     @property
     @abstractmethod
-    def branch(self) -> GitRef: ...
+    def branch(self) -> gt.GitRef: ...
     @branch.setter
     @abstractmethod
-    def branch(self, value: GitRef|str|None): ...
+    def branch(self, value: gt.GitRef|str|None): ...
     @property
     @abstractmethod
-    def commit(self) -> GitCommit: ...
+    def commit(self) -> gt.GitCommit: ...
     @commit.setter
     @abstractmethod
-    def commit(self, value: GitCommit|str): ...
+    def commit(self, value: gt.GitCommit|str): ...
     locked: str
     prunable: str
 
@@ -82,22 +91,22 @@ class GitContext(Jsonable, Protocol):
     def path(self, value: Path|str): ...
     @property
     @abstractmethod
-    def branch(self) -> GitRef: ...
+    def branch(self) -> gt.GitRef: ...
     @branch.setter
     @abstractmethod
-    def branch(self, value: GitRef|str): ...
+    def branch(self, value: gt.GitRef|str): ...
     @property
     @abstractmethod
-    def commit(self) -> GitCommit: ...
+    def commit(self) -> gt.GitCommit: ...
     @commit.setter
     @abstractmethod
-    def commit(self, value: GitCommit|str): ...
+    def commit(self, value: gt.GitCommit|str): ...
     @property
     @abstractmethod
     def cwd(self) -> Path: ...
 
     @property
-    def root(self) -> GitTreeEntry: ...
+    def root(self) -> gt.GitTreeEntry: ...
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         ...

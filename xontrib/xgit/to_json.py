@@ -10,6 +10,7 @@ from typing import (
 )
 from types import GenericAlias
 
+from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.json_types import (
    JsonData,
    SequenceJson, MappingJson, InstanceJson, TypeJson, MaxDepthJson,
@@ -60,6 +61,7 @@ def json_type(obj: Any, references: Optional[dict[int,Any]] = None) -> type:
 
 @dataclass
 class _JsonDescriber(JsonDescriber):
+    repository: GitRepository
     objects_by_id: dict[int,Any] = field(default_factory=dict)
     overrides_by_id: dict[int,JsonData] = field(default_factory=dict)
     references: dict[int, CircularRefJson] = field(default_factory=dict)
@@ -384,9 +386,10 @@ class _JsonDescriber(JsonDescriber):
 
 
     def from_json(self, obj: Any, cls: Optional[type|str] = None, /, *,
-              describer: Optional['JsonDescriber'] = None,
-              references: dict[int,Any] = dict(),
-              class_map: dict[str,type] = dict(),
+                repository: GitRepository,
+                describer: Optional['JsonDescriber'] = None,
+                references: dict[int,Any] = dict(),
+                class_map: dict[str,type] = dict(),
             )  -> Any:
         '''
         Get the python representation of a `JsonReturn` object.
@@ -409,14 +412,30 @@ class _JsonDescriber(JsonDescriber):
             case None|str()|int()|float()|bool():
                 return obj
             case {'_id': int(_id), '_list': list(value)}:
-                value = [from_json(v, describer=describer) for v in value]
+                value = [
+                    from_json(v,
+                                repository=repository,
+                                describer=describer)
+                    for v in value
+                ]
                 references[_id] = value
                 return value
             case {'_id': int(_id), '_map': dict(value)}:
-                value = {k: from_json(v, describer=describer) for k,v in value.items()}
+                value = {
+                    k: from_json(v,
+                                 repository=repository,
+                                 describer=describer,
+                                 )
+                    for k,v in value.items()
+                }
                 return value
             case {'_id': int(_id), '_cls': str(_cls), '_attrs': dict(attrs)}:
-                attrs = {k: from_json(v, describer=describer) for k,v in attrs.items()}
+                attrs = {
+                    k: from_json(v,
+                                 repository=repository,
+                                 describer=describer)
+                    for k,v in attrs.items()
+                }
                 value = self.instantiate(_id, _cls, attrs)
                 references[_id] = value
                 return value
@@ -443,6 +462,7 @@ class _JsonDescriber(JsonDescriber):
 
 
 def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
+            repository: GitRepository,
             describer: Optional[JsonDescriber] = None,
             max_levels: int = 100,
             special_types: dict[type,JsonHandler] = {},
@@ -478,6 +498,7 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
     """
     if describer is None:
         describer = _JsonDescriber(
+            repository=repository,
             max_depth=max_levels,
             special_types=special_types,
             to_override_types=override_types,
@@ -489,6 +510,7 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
 
 
 def from_json(obj: JsonData, cls: Optional[type|str] = None, /, *,
+              repository: GitRepository,
             describer: Optional['JsonDescriber'] = None,
             references: dict[int,Any] = dict(),
             class_map: dict[str,type] = dict(),
@@ -510,10 +532,15 @@ def from_json(obj: JsonData, cls: Optional[type|str] = None, /, *,
     '''
     if describer is None:
         describer = _JsonDescriber(
+            repository=repository,
             objects_by_id=references,
             class_map=class_map,
             )
-    return describer.from_json(obj, cls)
+    return describer.from_json(obj, cls,
+                               repository=repository,
+                               describer=describer,
+                               references=references,
+                               class_map=class_map)
 
 class RemapError(ValueError):
     ...

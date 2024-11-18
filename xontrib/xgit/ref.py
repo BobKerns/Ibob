@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from xonsh.lib.pretty import PrettyPrinter
 
+from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
 from xontrib.xgit.git_types import (
     GitObject, GitRef, RemoteBranch, Branch, Tag,
@@ -26,16 +27,21 @@ class _GitRef(GitRef):
         return self._name
 
     _target: GitObject|None = None
+    _repository: GitRepository
+    @property
+    def repository(self) -> GitRepository:
+        return self._repository
     @property
     def target(self) -> GitObject:
         if self._target is None:
             target = _run_text(['git', 'show_ref', '--hash', self.name])
             if not target:
                 raise ValueError(f"Ref not found: {self.name!r}")
-            self._target = _git_object(target)
+            self._target = _git_object(target, self.repository)
         return self._target
 
     def __init__(self, name: str, /, *,
+                 repository: GitRepository,
                  no_exists_ok: bool=False,
                  no_check: bool=False,
                  target: Optional[str|GitObject]=None):
@@ -72,18 +78,19 @@ class _GitRef(GitRef):
                 target, name = result.split()
         if target is not None:
             if isinstance(target, str):
-                self._target = _git_object(target)
+                self._target = _git_object(target, repository)
             else:
                 self._target = target
         self._name = name
-        
+        self._repository = repository
+
         if name.startswith('refs/heads/'):
             self.__class__ = _Branch
         elif name.startswith('refs/tags/'):
             self.__class__ = _Tag
         elif name.startswith('refs/remotes/'):
             self.__class__ = _RemoteBranch
-    
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name!r}, {self.target!r})"
 
@@ -121,7 +128,7 @@ class _GitRef(GitRef):
     def from_json(data: JsonData, desc: JsonDescriber):
         match data:
             case str():
-                return _GitRef(data)
+                return _GitRef(data, repository=desc.repository)
             case _:
                 raise ValueError("Invalid branch in JSON")
 
@@ -129,14 +136,14 @@ class _GitRef(GitRef):
 class _Branch(Branch, _GitRef):
     def branch_name(self) -> str:
         return self.name[11:]
-    
-    
+
+
 class _RemoteBranch(RemoteBranch, _GitRef):
     def remote_branch_name(self) -> str:
         return self.name[13:]
-    
+
 
 class _Tag(Tag, _GitRef):
     def tag_name(self) -> str:
         return self.name[10:]
-    
+
