@@ -15,6 +15,7 @@ from xontrib.xgit.types import (
     CleanupAction, GitHash, GitEntryMode, GitObjectType,
 )
 import xontrib.xgit.context_types as ct
+from xontrib.xgit.person import CommittedBy
 
 @runtime_checkable
 class GitId(Protocol):
@@ -121,43 +122,18 @@ class GitCommit(GitObject, Protocol):
 
     @property
     @abstractmethod
-    def author(self) -> str: ...
+    def author(self) -> CommittedBy: ...
 
     @property
     @abstractmethod
-    def author_date(self) -> datetime:  ...
-
-    @property
-    @abstractmethod
-    def author_email(self) -> str:  ...
-
-    @property
-    @abstractmethod
-    def author_name(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def committer(self) -> str: ...
-    @property
-    @abstractmethod
-    def committer_date(self) -> datetime: ...
-
-    @property
-    @abstractmethod
-    def committer_email(self) -> datetime: ...
-
-    @property
-    @abstractmethod
-    def committer_name(self) -> datetime: ...
-
+    def committer(self) -> CommittedBy: ...
     @property
     @abstractmethod
     def tree(self) -> GitTree: ...
 
     @property
     @abstractmethod
-    def parents(self) -> 'Sequence[GitCommit]':
-        ...
+    def parents(self) -> 'Sequence[GitCommit]': ...
 
     @property
     @abstractmethod
@@ -178,19 +154,7 @@ class GitTagObject(GitObject, Protocol):
 
     @property
     @abstractmethod
-    def tagger(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def tagger_name(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def tagger_email(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def created(self) -> datetime: ...
+    def tagger(self) -> CommittedBy: ...
 
     @property
     @abstractmethod

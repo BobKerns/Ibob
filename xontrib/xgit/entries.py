@@ -5,7 +5,7 @@ This incudes `GitCommit`, `GitTree`, `GitTagObject` objects, as well as
 refs and entries in trees.
 """
 
-from typing import Any, Optional
+from typing import Optional
 from pathlib import Path
 
 from xonsh.lib.pretty import RepresentationPrinter
@@ -14,7 +14,7 @@ import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
     GitEntryMode,
 )
-from xontrib.xgit.git_types import (
+from xontrib.xgit.object_types import (
     GitObject, GitTreeEntry, GitHash,
 )
 

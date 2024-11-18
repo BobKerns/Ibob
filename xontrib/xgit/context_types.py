@@ -4,15 +4,38 @@ and our operations on it.
 '''
 
 from abc import abstractmethod
+from io import IOBase
 from pathlib import Path
-from typing import Protocol, runtime_checkable, Optional
+from typing import Iterator, Protocol, Sequence, overload, runtime_checkable, Optional
 
 from xontrib.xgit.types import ContextKey
 from xontrib.xgit.json_types import Jsonable
-import xontrib.xgit.git_types as gt
+import xontrib.xgit.object_types as gt
 
 @runtime_checkable
-class GitRepository(Jsonable, Protocol):
+class GitCmd(Protocol):
+    '''
+    Context for git commands.
+    '''
+    @abstractmethod
+    def git(self, *args, **kwargs) -> str: ...
+    @abstractmethod
+    def git_lines(self, *args, **kwargs) -> list[str]: ...
+    @abstractmethod
+    def git_stream(self, *args, **kwargs) -> Iterator[str]: ...
+    @abstractmethod
+    def git_binary(self, *args, **kwargs) -> IOBase: ...
+
+    @overload
+    def rev_parse(self, params: str, /) -> str: ...
+    @overload
+    def rev_parse(self,param: str, *_params: str) -> Sequence[str]: ...
+    @abstractmethod
+    def rev_parse(self, param: str, *params: str) -> Sequence[str] | str: ...
+
+
+@runtime_checkable
+class GitRepository(Jsonable, GitCmd, Protocol):
     """
     A git repository.
     """
@@ -41,7 +64,7 @@ class GitRepository(Jsonable, Protocol):
 
 
 @runtime_checkable
-class GitWorktree(Jsonable, Protocol):
+class GitWorktree(Jsonable, GitCmd, Protocol):
     """
     A git worktree. This is the root directory of where the files are checked out.
     """
