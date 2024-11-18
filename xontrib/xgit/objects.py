@@ -621,7 +621,7 @@ class _GitCommit(_GitObject, GitCommit):
 
         def loader():
             if context is not None:
-                worktree = context.worktree
+                worktree = context.worktree.path
             else:
                 worktree = Path.cwd()
             with chdir(worktree):
