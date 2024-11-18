@@ -29,7 +29,7 @@ from xontrib.xgit.types import (
     Directory, File, PythonFile,
 )
 from xontrib.xgit.vars import XSH, XGIT, XGIT_OBJECTS
-from xontrib.xgit.object_types import (
+from xontrib.xgit.ref_types import (
     Branch, Tag, RemoteBranch, GitRef,
 )
 

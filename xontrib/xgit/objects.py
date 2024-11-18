@@ -2,21 +2,26 @@
 Implementations of the `GitObject family of classes.
 
 These are the core objects that represent the contents of a git repository.
+These are the four types that live in a git object database:
+
+- `GitTree`: A directory of other objects.
+- `GitBlob`: A file.
+- `GitCommit`: A commit object, representing a snapshot of a submodule.
+- `GitTagObject`: A signed tag object. These do not appear in trees,
+    but are used to tag commits. (Unsigned tags are just references.)
 '''
 
-from ast import Call
 from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
-    Callable, overload, Iterable, Iterator,
+    Callable, overload, Iterable, Iterator, Mapping,
 )
+from types import MappingProxyType
 from pathlib import Path
-
+from collections import defaultdict
 
 from xonsh.built_ins import XSH
-from xonsh.tools import chdir
 from xonsh.lib.pretty import RepresentationPrinter
 
-from tests.conftest import repository
 from xontrib.xgit.person import CommittedBy
 from xontrib.xgit.types import (
     GitLoader,
@@ -26,17 +31,19 @@ from xontrib.xgit.types import (
     GitEntryKey,
     InitFn,
 )
+from xontrib.xgit.object_types_base import GitId, GitObject
 from xontrib.xgit.object_types import (
     GitCommit,
-    GitId,
     GitObject,
     GitTree,
     GitBlob,
     GitTagObject,
-    GitTreeEntry,
 )
 from xontrib.xgit.context_types import GitCmd, GitContext, GitRepository
-from xontrib.xgit.entries import _GitTreeEntry
+from xontrib.xgit.entry_types import (
+    O, ParentObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
+)
+import xontrib.xgit.entries as xe
 # Avoid a circular import dependency by not looking
 # at the vars module until it is loaded.
 from xontrib.xgit.proxy import target
@@ -127,7 +134,7 @@ def _parse_git_entry(
     line: str,
     repository: GitRepository,
     parent_hash: GitHash | None = None
-) -> tuple[str, GitTreeEntry]:
+) -> tuple[str, GitEntry]:
     """
     Parse a line from `git ls-tree --long` and return a `GitObject`.
     """
@@ -191,17 +198,66 @@ def _git_object(hash: str,
     xv.XGIT_OBJECTS[hash] = obj
     return obj
 
+@overload
 def _git_entry(
-    hash_or_obj: GitHash|GitObject,
+    hash_or_obj: GitHash|GitCommit,
+    name: str,
+    mode: GitEntryMode,
+    type: Literal['commit'],
+    size: str|int,
+    repository: GitRepository,
+    parent: Optional[GitObject] = None,
+    parent_entry: Optional[GitEntryTree] = None,
+    path: Optional[Path] = None,
+) -> tuple[str, GitEntryCommit]: ...
+@overload
+def _git_entry(
+    hash_or_obj: GitHash|GitBlob,
+    name: str,
+    mode: GitEntryMode,
+    type: Literal['blob'],
+    size: str|int,
+    repository: GitRepository,
+    parent: Optional[GitObject] = None,
+    parent_entry: Optional[GitEntryTree] = None,
+    path: Optional[Path] = None,
+) -> tuple[str, GitEntryBlob]: ...
+@overload
+def _git_entry(
+    hash_or_obj: GitHash|GitTree,
+    name: str,
+    mode: GitEntryMode,
+    type: Literal['tree'],
+    size: str|int,
+    repository: GitRepository,
+    parent: Optional[GitObject] = None,
+    parent_entry: Optional[GitEntryTree] = None,
+    path: Optional[Path] = None,
+) -> tuple[str, GitEntryTree]: ...
+@overload
+
+def _git_entry(
+    hash_or_obj: GitHash|O,
     name: str,
     mode: GitEntryMode,
     type: GitObjectType,
     size: str|int,
     repository: GitRepository,
     parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitTreeEntry] = None,
+    parent_entry: Optional[GitEntryTree] = None,
     path: Optional[Path] = None,
-) -> tuple[str, GitTreeEntry]:
+) -> tuple[str, GitEntry[O]]: ...
+def _git_entry(
+    hash_or_obj: GitHash|O,
+    name: str,
+    mode: GitEntryMode,
+    type: GitObjectType,
+    size: str|int,
+    repository: GitRepository,
+    parent: Optional[GitObject] = None,
+    parent_entry: Optional[GitEntryTree] = None,
+    path: Optional[Path] = None,
+) -> tuple[str, GitEntry[O]]:
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
     """
@@ -234,20 +290,36 @@ def _git_entry(
         this_path = path / name
     else:
         this_path = None
-    entry = _GitTreeEntry(obj, name, mode,
-                          repository=repository,
+    match type:
+        case 'tree':
+            entry = xe._GitEntryTree(cast(GitTree, obj), name, mode,
+                        repository=repository,
                         path=this_path,
                         parent=parent_entry,
-                        parent_object=parent)
+                        parent_object=cast(ParentObject, parent))
+        case 'blob':
+            entry = xe._GitEntryBlob(cast(GitBlob, obj), name, mode,
+                        repository=repository,
+                        path=this_path,
+                        parent=parent_entry,
+                        parent_object=cast(ParentObject, parent))
+        case 'commit':
+            entry = xe._GitEntryCommit(cast(GitCommit, obj), name, mode,
+                        repository=repository,
+                        path=this_path,
+                        parent=parent_entry,
+                        parent_object=cast(ParentObject, parent))
+        case _:
+            raise ValueError(f"Unknown type {type}")
     xv.XGIT_ENTRIES[key] = entry
     if hash not in xv.XGIT_REFERENCES:
         xv.XGIT_REFERENCES[hash] = set()
     ref_key = (repository.path, parent_hash)
     xv.XGIT_REFERENCES[hash].add(ref_key)
-    return name, entry
+    return name, cast(GitEntry[O], entry)
 
 
-class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
+class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
     """
     A directory ("tree") stored in a git repository.
 
@@ -257,7 +329,21 @@ class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
     Updates would make no sense, as this would invalidate the hash.
     """
 
-    _lazy_loader: InitFn['_GitTree',Iterable[tuple[str,GitTreeEntry]]] | None
+    __lazy_loader: InitFn['_GitTree',Iterable[tuple[str,GitEntry]]] | None
+
+    __hashes: defaultdict[GitHash, set[GitEntry]]
+    @property
+    def hashes(self) -> Mapping[GitHash, set[GitEntry]]:
+        '''
+        A mapping of hashes to the entries that have that hash.
+        This will usually be a one-to-one mapping, but it is possible for
+        multiple entries to have the same hash. These will have different
+        names, even different modes, but the same hash and content.
+        '''
+        if self.__lazy_loader is not None:
+            self._expand()
+        return MappingProxyType(self.__hashes)
+
     def __init__(
         self,
         tree: GitHash,
@@ -266,14 +352,15 @@ class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
         repository: GitRepository,
     ):
         def _lazy_loader(self: '_GitTree'):
-            with chdir(repository.worktree.path):
-                for line in repository.git_lines("ls-tree", "--long", tree):
-                    if line:
-                        name, entry = _parse_git_entry(line, repository, tree)
-                        yield name, entry
+            self.__hashes = defaultdict(set)
+            for line in repository.git_lines("ls-tree", "--long", tree):
+                if line:
+                    name, entry = _parse_git_entry(line, repository, tree)
+                    self.__hashes[entry.hash].add(entry)
+                    yield name, entry
             self._size = dict.__len__(self)
-            self._lazy_loader = None
-        self._lazy_loader = _lazy_loader
+            self.__lazy_loader = None
+        self.__lazy_loader = _lazy_loader
 
         dict.__init__(self)
         _GitObject.__init__(
@@ -283,8 +370,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
         )
 
     def _expand(self):
-        if self._lazy_loader is not None:
-            i = self._lazy_loader(self)
+        if self.__lazy_loader is not None:
+            i = self.__lazy_loader(self)
             dict.update(self, i)
         return self
 

@@ -5,6 +5,9 @@ Implementation of the `GitContext` class and related types.
     of a git repository or worktree.
 * `GitRepository` - a class that represents a git repository.
 * `GitWorktree` - a class that represents a git worktree.
+
+BEWARE: The interrelationships between the entry, object, and context
+classes are complex. It is very easy to end up with circular imports.
 '''
 
 import cmd
@@ -22,10 +25,12 @@ from subprocess import run, Popen, PIPE
 from xonsh.tools import chdir
 from xonsh.lib.pretty import PrettyPrinter
 
-from xontrib.xgit.ref import _GitRef
+import xontrib.xgit.ref as xr
+import xontrib.xgit.ref_types as rt
 from xontrib.xgit.to_json import JsonDescriber
 from xontrib.xgit.types import ContextKey, InitFn, GitHash
-from xontrib.xgit.object_types import GitObject, GitRef, GitTagObject, GitCommit, GitRef, GitTreeEntry
+from xontrib.xgit.entry_types import GitEntryTree
+from xontrib.xgit.object_types import GitObject, GitTagObject, GitCommit
 from xontrib.xgit.context_types import (
     GitCmd,
     GitContext,
@@ -197,7 +202,7 @@ class _GitRepository(_GitCmd, GitRepository):
         worktree = self.__worktrees.get(key)
         if worktree is None:
             branch_name = self.git('symbolic-ref', '-q', 'HEAD')
-            branch: GitRef|None = None
+            branch: 'rt.GitRef|None' = None
             if branch_name:
                 branch = _GitRef(branch_name, repository=self)
             commit = _git_object('HEAD', self, 'commit')  # Should be the same as branch.target
@@ -234,7 +239,7 @@ class _GitRepository(_GitCmd, GitRepository):
             bare: bool = False
             result: dict[Path,GitWorktree] = {}
             worktree: Path = path.parent
-            branch: GitRef|None = None
+            branch: 'rt.GitRef|None' = None
             commit: GitCommit|None = None
             locked: str = ''
             prunable: str = ''
@@ -322,14 +327,14 @@ class _GitWorktree(_GitCmd, GitWorktree):
     def path(self) -> Path | None:
         return self.__path
 
-    __branch: GitRef|None
+    __branch: 'rt.GitRef|None'
     @property
-    def branch(self) -> GitRef|None:
+    def branch(self) -> 'rt.GitRef|None':
         return self.__branch
     @branch.setter
-    def branch(self, value: GitRef|str|None):
+    def branch(self, value: 'rt.GitRef|str|None'):
         match value:
-            case GitRef():
+            case rt.GitRef():
                 self.__branch = value
             case str():
                 value = value.strip()
@@ -364,7 +369,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 repository: GitRepository,
                 path: Path,
                 repository_path: Path,
-                branch: GitRef|str|None,
+                branch: 'rt.GitRef|str|None',
                 commit: GitCommit,
                 locked: str = '',
                 prunable: str = '',
@@ -419,6 +424,10 @@ class _GitContext(GitContext):
     def worktree(self) -> GitWorktree:
         return self.__worktree
 
+    @property
+    def repository(self) -> GitRepository:
+        return self.worktree.repository
+
     __path: Path = Path(".")
     @property
     def path(self) -> Path:
@@ -428,14 +437,14 @@ class _GitContext(GitContext):
     def path(self, value: Path|str):
         self.__path = Path(value)
 
-    __branch: GitRef|None = None
+    __branch: 'rt.GitRef|None' = None
     @property
-    def branch(self) -> GitRef|None:
+    def branch(self) -> 'rt.GitRef|None':
         return self.__branch
     @branch.setter
-    def branch(self, value: str|GitRef|None):
+    def branch(self, value: 'str|rt.GitRef|None'):
         match value:
-            case GitRef():
+            case rt.GitRef():
                 self.__branch = value
             case str():
                 value = value.strip()
@@ -466,7 +475,7 @@ class _GitContext(GitContext):
                 # recurse if necessary to get the commit
                 # or error if the tag doesn't point to a commit
                 self.__commit = cast(GitCommit, value.object)
-            case GitRef():
+            case rt.GitRef():
                 # recurse if necessary to get the commit
                 # or error if the ref doesn't point to a commit
                 self.__commit = cast(GitCommit, value.target)
@@ -474,7 +483,7 @@ class _GitContext(GitContext):
                 raise ValueError(f'Not a commit: {value}')
 
     @property
-    def root(self) -> GitTreeEntry:
+    def root(self) -> GitEntryTree:
         """
         Get the root tree entry.
         """
@@ -488,7 +497,7 @@ class _GitContext(GitContext):
     def __init__(self, *args,
                  worktree: GitWorktree,
                  path: Path = Path("."),
-                 branch: str|GitRef|None = DEFAULT_BRANCH,
+                 branch: 'str|rt.GitRef|None' = DEFAULT_BRANCH,
                  commit: str|GitCommit = DEFAULT_BRANCH,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -503,8 +512,8 @@ class _GitContext(GitContext):
                                           repository=self.worktree.repository)
                 else:
                     self.branch = None
-            case GitRef():
-                self.branch = cast(GitRef, branch)
+            case rt.GitRef():
+                self.branch = cast('rt.GitRef', branch)
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         subpath = Path(subpath) if subpath else None
@@ -532,7 +541,7 @@ class _GitContext(GitContext):
         /,
         worktree: Optional[GitWorktree] = None,
         path: Optional[Path] = None,
-        branch: Optional[str|GitRef] = None,
+        branch: Optional['str|rt.GitRef'] = None,
         commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
         worktree = worktree or self.worktree
