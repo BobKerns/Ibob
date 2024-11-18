@@ -5,10 +5,10 @@ from typing import (
     TypeAlias, TypeVar, Optional, TypedDict, Protocol, Generic, Any,
 )
 
-import xontrib.xgit.context_types as ct
 from xontrib.xgit.types import (
     JsonData, JsonAtomic,
 )
+import xontrib.xgit.context_types as ct
 
 class JsonRepresentation(TypedDict):
     '''
@@ -97,7 +97,7 @@ JsonReturn: TypeAlias = JsonAtomic|ErrorJson|SequenceJson|InstanceJson\
 Any valid return type from the `to_json` function.
 '''
 
-JsonKV: TypeAlias = dict[str, JsonReturn]
+JsonKV: TypeAlias = dict[str, JsonReturn] # type: ignore # mypy bug
 '''
 Key-Value pairs for JSON objects, such as maps or instances.
 '''
@@ -124,7 +124,7 @@ class JsonDescriber(Protocol):
     class_map: dict[str,type]
     class_names: dict[type,str]
     include_private: bool
-    repository: ct.GitRepository
+    repository: 'ct.GitRepository' # (a refractory circular reference)
     def to_json(self, obj: Any, cls: Optional[type|str]=None) -> JsonReturn:
         """
         Perform the conversion to JSON.
@@ -140,7 +140,7 @@ class JsonDescriber(Protocol):
         """
     def from_json(self, obj: Any,
                     cls: Optional[type|str] = None, /, *,
-              repository: ct.GitRepository,
+              repository: 'ct.GitRepository', # a refractory circular reference
               describer: Optional['JsonDescriber'] = None,
               references: dict[int,Any] = dict(),
               class_map: dict[str,type] = dict(),
