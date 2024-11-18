@@ -14,8 +14,7 @@ from datetime import datetime
 from xontrib.xgit.types import (
     CleanupAction, GitHash, GitEntryMode, GitObjectType,
 )
-from xontrib.xgit.context_types import GitRepository
-
+import xontrib.xgit.context_types as ct
 
 @runtime_checkable
 class GitId(Protocol):
@@ -240,7 +239,7 @@ class GitTreeEntry(GitObject, Protocol):
     def object(self) -> GitObject: ...
     @property
     @abstractmethod
-    def repository(self) -> GitRepository: ...
+    def repository(self) -> 'ct.GitRepository': ...
     @property
     @abstractmethod
     def parent_object(self) -> Optional[GitObject]: ...
@@ -266,7 +265,7 @@ class GitRef(Protocol):
     def target(self) -> GitObject: ...
     @property
     @abstractmethod
-    def repository(self) -> GitRepository: ...
+    def repository(self) -> 'ct.GitRepository': ...
 
 class Branch(GitRef, Protocol):
     """
