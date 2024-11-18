@@ -5,7 +5,7 @@ from threading import RLock
 from types import ModuleType as Module
 import pytest
 from importlib import import_module
-from typing import Callable, Any, Generator, NamedTuple, TypeAlias, cast
+from typing import Callable, Any, Generator, NamedTuple, Optional, TypeAlias, cast
 import sys
 import os
 
@@ -262,12 +262,15 @@ def git():
     _git = which('git')
     if _git is None:
         raise ValueError("git is not installed")
-    def git(*args, **kwargs):
+    def git(*args, cwd: Optional[Path|str], **kwargs):
+        if cwd is not None:
+            cwd = str(cwd)
         return run([_git, *args],
                    check=True,
                    stdout=PIPE,
                    text=True,
                    env={**os.environ},
+                   cwd=cwd,
                    **kwargs
                 ).stdout.rstrip()
     return git

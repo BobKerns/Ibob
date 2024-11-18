@@ -19,7 +19,7 @@ A git hash. Defined as a string to make the code more self-documenting.
 Also allows using `GitHash` as a type hint that drives completion.
 '''
 
-type ContextKey = tuple[Path, Path, GitHash, GitHash]
+type ContextKey = tuple[Path, Path, str|None, GitHash]
 """
 A key for uniquely identifying a `GitContext`
 """

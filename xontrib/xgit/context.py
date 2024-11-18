@@ -21,7 +21,7 @@ from xonsh.lib.pretty import PrettyPrinter
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.to_json import JsonDescriber
 from xontrib.xgit.types import ContextKey, InitFn, GitHash
-from xontrib.xgit.git_types import GitObject, GitRef, GitTagObject, GitCommit, GitTree, GitTreeEntry
+from xontrib.xgit.git_types import GitObject, GitRef, GitTagObject, GitCommit, GitRef, GitTreeEntry
 from xontrib.xgit.context_types import (
     GitContext,
     GitRepository,
@@ -69,7 +69,7 @@ class _GitRepository(GitRepository):
         key = Path(key).resolve()
         worktree = self._worktrees.get(key)
         if worktree is None:
-            branch_name = _run_stdout(['git', 'symbolic-ref', 'q', 'HEAD'])
+            branch_name = _run_stdout(['git', 'symbolic-ref', 'q', 'HEAD']).rstrip()
             branch = _GitRef(branch_name) if branch_name else None
             commit = _git_object('HEAD', 'commit')  # Should be the same as branch.target
             worktree = _GitWorktree(
@@ -117,7 +117,11 @@ class _GitRepository(GitRepository):
                         commit = _git_object(c, 'commit')
                         self._objects[commit.hash] = commit
                     case ['branch', b]:
-                        branch = _GitRef(b)
+                        b = b.strip()
+                        if b:
+                            branch = _GitRef(b)
+                        else:
+                            branch = None
                     case ['locked', l]:
                         locked = l.strip('"')
                         locked = locked.replace('\\n', '\n')
@@ -189,8 +193,41 @@ class _GitWorktree(GitWorktree):
     def path(self) -> Path | None:
         return self._path
 
-    branch: GitRef|None
-    commit: GitCommit
+    _branch: GitRef|None
+    @property
+    def branch(self) -> GitRef|None:
+        return self._branch
+    @branch.setter
+    def branch(self, value: GitRef|str|None):
+        match value:
+            case GitRef():
+                self._branch = value
+            case str():
+                value = value.strip()
+                if value:
+                    self._branch = _GitRef(value)
+                else:
+                    self._branch = None
+            case None:
+                self._branch = None
+            case _:
+                raise ValueError(f"Invalid branch: {value!r}")
+    _commit: GitCommit|None
+    @property
+    def commit(self) -> GitCommit:
+        assert self._commit is not None, "Commit has not been set."
+        return self._commit
+    @commit.setter
+    def commit(self, value: str|GitCommit):
+        match value:
+            case str():
+                value = value.strip()
+                hash = _run_text(['git', 'rev-parse', value]).strip()
+                self._commit = _git_object(hash, 'commit')
+            case GitCommit():
+                self._commit = value
+            case _:
+                raise ValueError(f'Not a commit: {value}')
     locked: str
     prunable: str
 
@@ -198,7 +235,7 @@ class _GitWorktree(GitWorktree):
                 repository: GitRepository,
                 path: Path,
                 repository_path: Path,
-                branch: GitRef|None,
+                branch: GitRef|str|None,
                 commit: GitCommit,
                 locked: str = '',
                 prunable: str = '',
@@ -261,17 +298,23 @@ class _GitContext(GitContext):
     def path(self, value: Path|str):
         self._path = Path(value)
 
-    _branch: _GitRef = _GitRef(DEFAULT_BRANCH)
+    _branch: GitRef|None = _GitRef(DEFAULT_BRANCH)
     @property
-    def branch(self) -> _GitRef:
+    def branch(self) -> GitRef|None:
         return self._branch
     @branch.setter
-    def branch(self, value: str|_GitRef):
+    def branch(self, value: str|GitRef|None):
         match value:
-            case _GitRef():
+            case GitRef():
                 self._branch = value
             case str():
-                self._branch = _GitRef(value)
+                value = value.strip()
+                if value:
+                    self._branch = _GitRef(value)
+                else:
+                    self._branch = None
+            case None:
+                self._branch = None
             case _:
                 raise ValueError(f"Invalid branch: {value!r}")
     _commit: GitCommit|None = None
@@ -284,6 +327,7 @@ class _GitContext(GitContext):
     def commit(self, value: str|GitCommit|_GitRef|GitTagObject):
         match value:
             case str():
+                value = value.strip()
                 hash = _run_text(['git', 'rev-parse', value]).strip()
                 self._commit = _git_object(hash, 'commit', self)
             case GitCommit():
@@ -291,11 +335,11 @@ class _GitContext(GitContext):
             case GitTagObject():
                 # recurse if necessary to get the commit
                 # or error if the tag doesn't point to a commit
-                self.commit = cast(GitCommit, value.object)
-            case _GitRef():
+                self._commit = cast(GitCommit, value.object)
+            case GitRef():
                 # recurse if necessary to get the commit
                 # or error if the ref doesn't point to a commit
-                self.commit = cast(GitCommit, value.target)
+                self._commit = cast(GitCommit, value.target)
             case _:
                 raise ValueError(f'Not a commit: {value}')
 
@@ -314,14 +358,22 @@ class _GitContext(GitContext):
     def __init__(self, *args,
                  worktree: GitWorktree,
                  path: Path = Path("."),
-                 branch: str|_GitRef = DEFAULT_BRANCH,
+                 branch: str|GitRef|None = DEFAULT_BRANCH,
                  commit: str|GitCommit = DEFAULT_BRANCH,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self._worktree = worktree
         self.commit = commit
         self._path = path
-        self.branch = branch
+        match branch:
+            case str():
+                branch = branch.strip()
+                if branch:
+                    self.branch = _GitRef(branch)
+                else:
+                    self.branch = None
+            case GitRef():
+                self.branch = cast(GitRef, branch)
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         subpath = Path(subpath) if subpath else None
@@ -331,9 +383,11 @@ class _GitContext(GitContext):
         if commit is not None:
             hash = commit.hash
         '''
+        branch_name = None
         if subpath is None:
-            return (key, self._path, self.branch.name, hash)
-        return (key, subpath, self.branch.name, hash)
+            branch_name = self.branch.name if self.branch else None
+            return (key, self._path, branch_name, hash)
+        return (key, subpath, branch_name, hash)
 
     @property
     def cwd(self) -> Path:
@@ -347,7 +401,7 @@ class _GitContext(GitContext):
         /,
         worktree: Optional[GitWorktree] = None,
         path: Optional[Path] = None,
-        branch: Optional[str|_GitRef] = None,
+        branch: Optional[str|GitRef] = None,
         commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
         worktree = worktree or self.worktree
@@ -356,6 +410,11 @@ class _GitContext(GitContext):
         if isinstance(commit, str):
             commit = _git_object(commit, 'commit', self)
         commit = commit or self.commit
+        if isinstance(branch, str):
+            if branch == '':
+                branch = None
+            else:
+                branch = _GitRef(branch)
         return _GitContext(
             worktree=worktree,
             path=path,
@@ -480,7 +539,9 @@ def _git_context():
             path = Path.cwd().relative_to(worktree_path)
             branch = _run_stdout(
                 ["git", "symbolic-ref", '--quiet', 'HEAD']
-            )
+            ).strip()
+            if branch and '/' not in branch:
+                raise ValueError(f"Invalid branch name from symbolic-ref: {branch!r}")
             key = worktree_path or repository_path
             if key in XGIT_CONTEXTS:
                 xgit = XGIT_CONTEXTS[key]
@@ -505,7 +566,7 @@ def _git_context():
                         path=worktree_path,
                         repository=repository,
                         repository_path=repository_path,
-                        branch=_GitRef(branch) if branch else None,
+                        branch=branch,
                         commit=_git_object(commit, 'commit'),
                         locked='',
                         prunable='',
@@ -526,7 +587,7 @@ def _git_context():
                         path=worktree_path,
                         repository=repository,
                         repository_path=repository_path,
-                        branch=_GitRef(branch),
+                        branch=branch,
                         commit=_git_object(commit, 'commit'),
                         locked='',
                         prunable='',
@@ -552,8 +613,10 @@ def _git_context():
             commits = list(filter(lambda x: x, list(commits)))
             commit = commits[0] if commits else ""
             branch = _run_stdout(
-                ["git", "name-rev", "--name-only", commit]
-            )
+                ["git", "symbolic-ref", "--quiet", 'HEAD']
+            ).rstrip()
+            if branch and '/' not in branch:
+                raise ValueError(f"Invalid branch name from symbolic-ref, part 2: {branch!r}")
             repo = worktree_path or repository_path
             if repo in XGIT_CONTEXTS:
                 xgit = XGIT_CONTEXTS[repo]
@@ -602,7 +665,7 @@ def _git_context():
         env = XSH.env
         assert isinstance(env, MutableMapping),\
             f"XSH.env is not a MutableMapping: {env!r}"
-        if env.get("XGIT_TRACE_ERRORS"):
+        if env.get("XGIT_TRACE_ERRORS") or True:
             import traceback
             traceback.print_exc()
         print(f"Error setting git context: {ex}", file=sys.stderr)

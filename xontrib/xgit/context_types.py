@@ -3,6 +3,7 @@ Types pertaining to the context of a git repository
 and our operations on it.
 '''
 
+from abc import abstractmethod
 from pathlib import Path
 from typing import Protocol, runtime_checkable, Optional
 
@@ -36,8 +37,10 @@ class GitWorktree(Jsonable, Protocol):
     A git worktree. This is the root directory of where the files are checked out.
     """
     @property
+    @abstractmethod
     def repository(self) -> GitRepository: ...
     @property
+    @abstractmethod
     def repository_path(self) -> Path:
         """
         The path to the repository. If this is a separate worktree,
@@ -46,9 +49,20 @@ class GitWorktree(Jsonable, Protocol):
         """
         ...
     @property
+    @abstractmethod
     def path(self) -> Path: ...
-    branch: GitRef|None
-    commit: GitCommit
+    @property
+    @abstractmethod
+    def branch(self) -> GitRef: ...
+    @branch.setter
+    @abstractmethod
+    def branch(self, value: GitRef|str|None): ...
+    @property
+    @abstractmethod
+    def commit(self) -> GitCommit: ...
+    @commit.setter
+    @abstractmethod
+    def commit(self, value: GitCommit|str): ...
     locked: str
     prunable: str
 
@@ -57,11 +71,30 @@ class GitContext(Jsonable, Protocol):
     """
     A git context.
     """
-    worktree: GitWorktree
-    path: Path = Path(".")
-    branch: str = ""
-    commit: str = ""
-    cwd: Path = Path(".")
+    @property
+    @abstractmethod
+    def worktree(self) -> GitWorktree: ...
+    @property
+    @abstractmethod
+    def path(self) -> Path: ...
+    @path.setter
+    @abstractmethod
+    def path(self, value: Path|str): ...
+    @property
+    @abstractmethod
+    def branch(self) -> GitRef: ...
+    @branch.setter
+    @abstractmethod
+    def branch(self, value: GitRef|str): ...
+    @property
+    @abstractmethod
+    def commit(self) -> GitCommit: ...
+    @commit.setter
+    @abstractmethod
+    def commit(self, value: GitCommit|str): ...
+    @property
+    @abstractmethod
+    def cwd(self) -> Path: ...
 
     @property
     def root(self) -> GitTreeEntry: ...
