@@ -591,8 +591,9 @@ class _GitCommit(_GitObject, GitCommit):
         self._committer_date = date
 
     def __init__(self, hash: str, /, *, repository: GitRepository):
+        path = repository.worktree.path
         def loader():
-            with chdir(repository.worktree.path):
+            with chdir(path):
                 lines = _run_lines(["git", "cat-file", "commit", hash])
                 tree = next(lines).split()[1]
                 self._tree = _git_object(tree, repository, 'tree')
