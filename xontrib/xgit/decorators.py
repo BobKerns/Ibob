@@ -327,7 +327,10 @@ def prefix_command(alias: str):
     _aliases[alias] = prefix_cmd
     @contextual_completer
     def completer(ctx: CompletionContext):
-        return set(subcmds.keys())
+        if ctx.command:
+            if ctx.command.prefix.strip() == alias:
+                return set(subcmds.keys())
+        return set()
     completer.__doc__ = f"Completer for {alias}"
     add_one_completer(prefix_name, completer, "start")
     return prefix_cmd
