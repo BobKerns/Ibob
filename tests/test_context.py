@@ -15,17 +15,19 @@ def test_context_loads(modules, sysdisplayhook):
         assert m_ctx is not None
 
 def test_context_simple(with_xgit, worktree, sysdisplayhook):
-    def _t(*_, _GitContext, **__):
-        ctx = _GitContext(worktree=worktree)
+    def _t(*_, **__):
+        import xontrib.xgit.context as ctx
+        ctx = ctx._GitContext(worktree=worktree)
         assert ctx is not NonCallableMock
     with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.vars')
 
 def test_context_json(with_xgit, worktree, git, sysdisplayhook, test_branch):
-    def _t(*_, _GitContext, to_json, from_json, _run_text, **__):
+    def _t(*_, to_json, from_json, _run_text, **__):
+        import xontrib.xgit.context as ctx
         head = git('rev-parse', 'HEAD', cwd=worktree.path)
         branch = git('symbolic-ref', 'HEAD', cwd=worktree.path)
-        ctx = _GitContext(worktree=worktree)
-        j = to_json(ctx, _GitContext)
+        ctx = ctx._GitContext(worktree=worktree)
+        j = to_json(ctx, repository=worktree.repository)
         path = worktree.path
         expected = {
             'branch': branch,
