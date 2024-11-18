@@ -49,7 +49,7 @@ type GitObjectType = Literal["blob", "tree", "commit", "tag"]
 Valid types for a git object.
 """
 
-type GitEntryKey = tuple[Path, str, str, str|None]
+type GitEntryKey = tuple[Path, Path|None, str, str, str|None]
 
 type GitObjectReference = tuple[ContextKey, str | None]
 """
