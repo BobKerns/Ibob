@@ -10,6 +10,7 @@ from xontrib.xgit.vars import XGIT
 from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.objects import _git_entry, _git_object
 from xontrib.xgit.object_types import GitTree, GitObject
+from xontrib.xgit.entry_types import GitEntryTree
 from xontrib.xgit.procs import _run_stdout
 
 @command(
@@ -17,7 +18,7 @@ from xontrib.xgit.procs import _run_stdout
     export=True,
     prefix=(xgit, 'ls'),
 )
-def git_ls(path: Path | str = Path('.')) -> GitTree:
+def git_ls(path: Path | str = Path('.')) -> GitEntryTree:
     """
     List the contents of the current directory or the directory provided.
     """
@@ -27,7 +28,7 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
     repository = worktree.repository
     dir = worktree.path / XGIT.path / Path(path)
     path = dir.relative_to(worktree.path)
-    def do_ls(path: Path) -> GitTree:
+    def do_ls(path: Path) -> GitEntryTree:
         if path == Path("."):
             tree = worktree.git("log", "--format=%T", "-n", "1", "HEAD")
             parent_rev = worktree.git("rev-parse", "HEAD")
@@ -35,7 +36,7 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
         else:
             path_parent = path.parent
             if path_parent != path and path != Path("."):
-                parent = do_ls(path.parent)
+                parent = cast(GitTree, do_ls(path.parent).object)
                 tree = parent[path.name].hash
 
         if not XGIT:
@@ -43,14 +44,6 @@ def git_ls(path: Path | str = Path('.')) -> GitTree:
         _, entry = _git_entry(tree, path.name, "040000", "tree", "-",
                             repository=repository,
                             parent=parent or XGIT.worktree.commit)
-        return cast(GitTree, entry.object)
-    if dir.is_dir():
-        with chdir(dir):
-            return do_ls(path)
-    elif dir.is_file():
-        with chdir(dir.parent):
-            return do_ls(path)
-    else:
-        with chdir(worktree.path):
-            return do_ls(path)
+        return entry
+    return do_ls(path)
 
