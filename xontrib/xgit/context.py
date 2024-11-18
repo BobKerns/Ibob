@@ -21,13 +21,13 @@ from xonsh.lib.pretty import PrettyPrinter
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.to_json import JsonDescriber
 from xontrib.xgit.types import ContextKey, InitFn, GitHash
-from xontrib.xgit.git_types import GitObject, GitRef, GitTagObject, GitCommit
+from xontrib.xgit.git_types import GitObject, GitRef, GitTagObject, GitCommit, GitTree, GitTreeEntry
 from xontrib.xgit.context_types import (
     GitContext,
     GitRepository,
     GitWorktree
 )
-from xontrib.xgit.objects import _git_object
+from xontrib.xgit.objects import _git_object, _git_entry
 from xontrib.xgit.vars import (
     XGIT_CONTEXTS, XSH, XGIT_REPOSITORIES, XGIT_WORKTREES,
 )
@@ -299,6 +299,18 @@ class _GitContext(GitContext):
             case _:
                 raise ValueError(f'Not a commit: {value}')
 
+    @property
+    def root(self) -> GitTreeEntry:
+        """
+        Get the root tree entry.
+        """
+        tree = _git_object(self.commit.tree.hash, 'tree', self)
+        name, entry = _git_entry(tree, "", "040000", "tree", "-",
+                                 context=self,
+                                 parent=self.commit,
+                                 path=Path("."))
+        return entry
+
     def __init__(self, *args,
                  worktree: GitWorktree,
                  path: Path = Path("."),
@@ -467,7 +479,7 @@ def _git_context():
 
             path = Path.cwd().relative_to(worktree_path)
             branch = _run_stdout(
-                ["git", "name-rev", "--name-only", commit]
+                ["git", "symbolic-ref", '--quiet', 'HEAD']
             )
             key = worktree_path or repository_path
             if key in XGIT_CONTEXTS:
@@ -493,7 +505,7 @@ def _git_context():
                         path=worktree_path,
                         repository=repository,
                         repository_path=repository_path,
-                        branch=_GitRef(branch),
+                        branch=_GitRef(branch) if branch else None,
                         commit=_git_object(commit, 'commit'),
                         locked='',
                         prunable='',

@@ -9,24 +9,28 @@ from typing import Any, Optional
 from pathlib import Path
 
 from xonsh.lib.pretty import RepresentationPrinter
+import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
     GitEntryMode,
 )
 from xontrib.xgit.git_types import (
-    GitObject, GitTreeEntry,
+    GitObject, GitTreeEntry, GitHash,
 )
 
 
 class _GitTreeEntry(GitTreeEntry):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
-    it supplies the mode and name.
+    it supplies the mode and name, and the tree, commit, or tag that
+    it was found in.
     """
 
     _name: str
     _object: GitObject
     _mode: GitEntryMode
-    _path: Path
+    _path: Optional[Path]
+    _parent_object: Optional[GitObject]
+    _parent: Optional[GitTreeEntry]
 
     @property
     def type(self):
@@ -69,6 +73,14 @@ class _GitTreeEntry(GitTreeEntry):
         return self._name
 
     @property
+    def parent_object(self):
+        return self._parent_object
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @property
     def entry(self):
         rw = self.prefix
         return f"{rw} {self.type} {self.hash}\t{self.name}"
@@ -83,11 +95,23 @@ class _GitTreeEntry(GitTreeEntry):
     def path(self):
         return self._path
 
-    def __init__(self, object: GitObject, name: str, mode: GitEntryMode, path: Optional[Path] = None):
+    def __init__(self,
+                 object: GitObject,
+                 name: str,
+                 mode: GitEntryMode,
+                 parent_object: Optional[GitObject|GitHash]=None,
+                 parent: Optional[GitTreeEntry]=None,
+                 path: Optional[Path] = None):
         self._object = object
         self._name = name
         self._mode = mode
-        self._path = path or Path(name)
+        self._path = path
+        if isinstance(parent_object, str):
+            parent_object = xo._git_object(parent_object)
+        if parent is not None and parent_object is None:
+            parent_object = parent.object
+        self._parent_object = parent_object
+        self._parent = parent
 
     def __getattr__(self, name):
         try:
@@ -100,7 +124,13 @@ class _GitTreeEntry(GitTreeEntry):
 
     def __getitem__(self, name):
         # Only implemented for trees, but we'll let the object raise the exception.
-        return self._object[name] # type: ignore
+        obj = self._object[name] # type: ignore
+        path = self._path / name if self._path else None
+        _, entry = xo._git_entry(obj.object, name, self._mode, obj.type, obj.size,
+                             path=path,
+                             parent_entry=self,
+                             parent=self._object)
+        return entry
 
     def __contains__(self, name):
         return name in self._object
@@ -123,6 +153,10 @@ class _GitTreeEntry(GitTreeEntry):
                 p.pretty(self._object)
                 p.text(',')
                 p.breakable()
-                p.text(f'mode{self.mode!r},')
+                p.text(f'mode={self.mode!r},')
                 p.breakable()
-                p.text(f'name={self.name!r}')
+                p.text(f'name={self.name!r},')
+                p.breakable()
+                p.text(f'parent={self.parent.hash if self.parent else None!r},')
+                p.breakable()
+                p.text(f'path={self.path!r}')

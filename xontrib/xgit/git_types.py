@@ -14,7 +14,6 @@ from datetime import datetime
 from xontrib.xgit.types import (
     CleanupAction, GitHash, GitEntryMode, GitObjectType,
 )
-from xontrib.xgit.json_types import Jsonable
 
 
 @runtime_checkable
@@ -240,9 +239,15 @@ class GitTreeEntry(GitObject, Protocol):
     def object(self) -> GitObject: ...
     @property
     @abstractmethod
+    def parent_object(self) -> Optional[GitObject]: ...
+    @property
+    @abstractmethod
+    def parent(self) -> Optional['GitTreeEntry']: ...
+    @property
+    @abstractmethod
     def path(self) -> Path: ...
     @abstractmethod
-    def __getitem__(self, key: str) -> GitObject: ...
+    def __getitem__(self, key: str) -> 'GitTreeEntry': ...
 
 @runtime_checkable
 class GitRef(Protocol):
@@ -259,7 +264,7 @@ class Branch(GitRef, Protocol):
     A branch ref.
     """
     def branch_name(self) -> str: ...
-    
+
 
 class RemoteBranch(GitRef, Protocol):
     """

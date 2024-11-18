@@ -8,7 +8,7 @@ from typing import Protocol, runtime_checkable, Optional
 
 from xontrib.xgit.types import ContextKey
 from xontrib.xgit.json_types import Jsonable
-from xontrib.xgit.git_types import GitRef, GitCommit
+from xontrib.xgit.git_types import GitRef, GitCommit, GitTreeEntry
 
 @runtime_checkable
 class GitRepository(Jsonable, Protocol):
@@ -62,6 +62,9 @@ class GitContext(Jsonable, Protocol):
     branch: str = ""
     commit: str = ""
     cwd: Path = Path(".")
+
+    @property
+    def root(self) -> GitTreeEntry: ...
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         ...

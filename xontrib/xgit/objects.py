@@ -21,6 +21,7 @@ from xontrib.xgit.types import (
     GitHash,
     GitEntryMode,
     GitObjectType,
+    GitEntryKey,
     InitFn,
 )
 from xontrib.xgit.git_types import (
@@ -121,7 +122,7 @@ xv.__dict__['_GitObject'] = _GitObject
 def _parse_git_entry(
     line: str,
     context: GitContext|GitContextFn = lambda: cast(GitContext,xv.XGIT),
-parent: GitHash | None = None
+    parent_hash: GitHash | None = None
 ) -> tuple[str, GitTreeEntry]:
     if callable(context):
         context = context()
@@ -131,6 +132,7 @@ parent: GitHash | None = None
     mode, type, hash, size, name = line.split()
     mode = cast(GitEntryMode, mode)
     type = cast(GitObjectType, type)
+    parent = _git_object(parent_hash, context=context) if parent_hash is not None else None
     return _git_entry(hash, name, mode, type, size, context, parent)
 
 def default_context() -> GitContext:
@@ -197,13 +199,15 @@ def _git_object(hash: str,
     return obj
 
 def _git_entry(
-    hash: GitHash,
+    hash_or_obj: GitHash|GitObject,
     name: str,
     mode: GitEntryMode,
     type: GitObjectType,
     size: str|int,
     context: GitContext|GitContextFn = default_context,
-    parent: str | None = None,
+    parent: Optional[GitObject] = None,
+    parent_entry: Optional[GitTreeEntry] = None,
+    path: Optional[Path] = None,
 ) -> tuple[str, GitTreeEntry]:
     if callable(context):
         context = context()
@@ -212,12 +216,24 @@ def _git_entry(
     """
     assert isinstance(XSH.env, MutableMapping),\
         f"XSH.env not a MutableMapping: {XSH.env!r}"
-
-    key = (
+    parent_hash = parent.hash if parent is not None else ''
+    if callable(context):
+        context = context()
+    match hash_or_obj:
+        case str():
+            hash = hash_or_obj
+            obj = _git_object(hash, type, context, size=size)
+        case GitObject():
+            obj = hash_or_obj
+            hash = obj.hash
+        case _:
+            raise ValueError(f"Invalid hash or object: {hash_or_obj}")
+    key: GitEntryKey = (
            context.worktree.repository.path,
+           path,
            hash,
            mode,
-           parent)
+           parent_hash,)
     entry = xv.XGIT_ENTRIES.get(key)
     if entry is not None:
         return name, entry
@@ -225,20 +241,24 @@ def _git_entry(
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {context=}, {parent=}"
         msg = f"git_entry({args})"
         print(msg)
-    if callable(context):
-        context = context()
-    obj = _git_object(hash, type, context, size=size)
-    entry = _GitTreeEntry(obj, name, mode)
+    if path is not None:
+        this_path = path / name
+    else:
+        this_path = None
+    entry = _GitTreeEntry(obj, name, mode,
+                        path=this_path,
+                        parent=parent_entry,
+                        parent_object=parent)
     xv.XGIT_ENTRIES[key] = entry
     if hash not in xv.XGIT_REFERENCES:
         xv.XGIT_REFERENCES[hash] = set()
     if context is not None:
-        ref_key = (context.reference(name), parent)
+        ref_key = (context.reference(name), parent_hash)
         xv.XGIT_REFERENCES[hash].add(ref_key)
     return name, entry
 
 
-class _GitTree(_GitObject, GitTree, dict[str, GitObject]):
+class _GitTree(_GitObject, GitTree, dict[str, GitTreeEntry]):
     """
     A directory ("tree") stored in a git repository.
 
@@ -270,7 +290,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitObject]):
             self._size = dict.__len__(self)
             self._lazy_loader = None
         self._lazy_loader = _lazy_loader
-        
+
         dict.__init__(self)
         _GitObject.__init__(
             self,
@@ -278,7 +298,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitObject]):
             lambda _: len(self._expand()),
             context=context,
         )
-    
+
     def _expand(self):
         if self._lazy_loader is not None:
             i = self._lazy_loader(self)
