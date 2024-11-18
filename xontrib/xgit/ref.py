@@ -2,18 +2,18 @@
 Any ref, usually a branch or tag, usually pointing to a commit.
 '''
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
-from xontrib.xgit.object_types import (
-    GitObject, GitRef, RemoteBranch, Branch, Tag,
-)
+import xontrib.xgit.object_types as ot
+import xontrib.xgit.ref_types as rt
 from xontrib.xgit.objects import _git_object
 
-class _GitRef(GitRef):
+
+class _GitRef(rt.GitRef):
     '''
     Any ref, usually a branch or tag, usually pointing to a commit.
     '''
@@ -23,15 +23,24 @@ class _GitRef(GitRef):
         if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             # Dereference on first use.
             self.__name = self.__repository.git('symbolic-ref', self.__name)
+            if self.__validate:
+                self.__validate()
         return self.__name
 
-    __target: GitObject|None = None
     __repository: GitRepository
     @property
     def repository(self) -> GitRepository:
         return self.__repository
+
+    __validate: Callable[[], None]|None
+    '''
+    Allows for delayed validation of the ref name for
+    refs obtained from symbolic references.
+    '''
+
+    __target: 'ot.GitObject|None' = None
     @property
-    def target(self) -> GitObject:
+    def target(self) -> 'ot.GitObject':
         if self.__target is None:
             target = self.__repository.git('show_ref', '--hash', self.name)
             if not target:
@@ -43,7 +52,7 @@ class _GitRef(GitRef):
                  repository: GitRepository,
                  no_exists_ok: bool=False,
                  no_check: bool=False,
-                 target: Optional[str|GitObject]=None):
+                 target: Optional['str|ot.GitObject']=None):
         '''
         Initialize a ref. If `no_exists_ok` is `True`. the ref is not checked
         for existence, but is checked for validity and normalized.
@@ -56,11 +65,9 @@ class _GitRef(GitRef):
         '''
         self.__name = name
         self.__repository = repository
-        if name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
-            # Dereference on first use.
-            self.__name = name
-            return
-        else:
+        def validate():
+            nonlocal name
+            self.__validate = None
             if not no_check:
                 _name = repository.git('check-ref-format', '--normalize', name)
                 if not _name:
@@ -89,12 +96,22 @@ class _GitRef(GitRef):
             self.__class__ = _Tag
         elif name.startswith('refs/remotes/'):
             self.__class__ = _RemoteBranch
+        elif name.startswith('refs/replace/'):
+            self.__class__ = _Replacement
+            self._replaced = None
+        if name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+            # Dereference on first use.
+            self.__name = name
+            self.__validate = validate
+            return
+        else:
+            validate()
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.name!r}, {self.target!r})"
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, GitRef):
+        if not isinstance(other, 'rt.GitRef'):
             return False
         return self.name == other.name and self.target == other.target
 
@@ -133,17 +150,36 @@ class _GitRef(GitRef):
                 raise ValueError("Invalid branch in JSON")
 
 
-class _Branch(Branch, _GitRef):
+class _Branch(rt.Branch, _GitRef):
     def branch_name(self) -> str:
         return self.name[11:]
 
 
-class _RemoteBranch(RemoteBranch, _GitRef):
+class _RemoteBranch(rt.RemoteBranch, _GitRef):
     def remote_branch_name(self) -> str:
         return self.name[13:]
 
 
-class _Tag(Tag, _GitRef):
+class _Tag(rt.Tag, _GitRef):
     def tag_name(self) -> str:
         return self.name[10:]
 
+class _Replacement(rt.Replacement, _GitRef):
+    _replaced: 'ot.GitObject'
+    @property
+    def replaced(self) -> 'ot.GitObject':
+        '''
+        The object being replaced.
+        '''
+        if self._replaced is None:
+            target = self.__repository.git('show-ref', '--hash', self.name)
+            if not target:
+                raise ValueError(f"Ref not found: {self.name!r}")
+            self._replaced = _git_object(target, self.repository)
+        return self._replaced
+
+    def replacement_name(self) -> str:
+        '''
+        The Sha1 hash of the object being replaced.
+        '''
+        return super().replacement_name()[13:]

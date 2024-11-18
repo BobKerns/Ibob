@@ -1,50 +1,34 @@
 '''
-Types describing git objects and related types.
+Types describing the Git objects that live in the object database
+of a git repository.
+
+These types are mirrored b the `xontrib.xgit.entry_types` module, which
+act as references to these objects in the tree, blob, and commit objects
+found in tree objects. (tags are not stored in trees)
+
+BEWARE: The interrelationships between the entry, object, and context
+classes are complex. It is very easy to end up with circular imports.
 '''
 
-from pathlib import Path
 from typing import (
-    Protocol, runtime_checkable, Optional, Any, Iterator, Literal, Sequence,
+    Protocol, runtime_checkable, Any, Iterator, Literal,
+    Sequence, Mapping, TypeAlias,
 )
 from abc import abstractmethod
 from io import IOBase
-from datetime import datetime
-
 
 from xontrib.xgit.types import (
-    CleanupAction, GitHash, GitEntryMode, GitObjectType,
+    CleanupAction, GitHash, GitObjectType,
 )
-import xontrib.xgit.context_types as ct
-from xontrib.xgit.person import CommittedBy
+import xontrib.xgit.person as xp
 
-@runtime_checkable
-class GitId(Protocol):
-    """
-    Anything that has a hash in a git repository.
-    """
-    @abstractmethod
-    def __init__(self, hash: GitHash,
-                 cleanup: Optional[CleanupAction] = None):
-        ...
-    @property
-    @abstractmethod
-    def hash(self) -> GitHash:
-        ...
+from xontrib.xgit.object_types_base import GitObject
 
-@runtime_checkable
-class GitObject(GitId, Protocol):
-    """
-    A git object.
-    """
-    @property
-    @abstractmethod
-    def type(self) -> GitObjectType:
-        ...
-    @property
-    @abstractmethod
-    def size(self) -> int:
-        ...
 
+EntryObject: TypeAlias = 'GitTree | GitBlob | GitCommit'
+'''
+A type alias for the types of objects that can be found in a git tree.
+'''
 
 @runtime_checkable
 class GitTree(GitObject, Protocol):
@@ -56,16 +40,20 @@ class GitTree(GitObject, Protocol):
         return 'tree'
 
     @abstractmethod
-    def items(self) -> dict[str, GitObject]: ...
+    def items(self) -> Iterator[tuple[str, EntryObject]]: ...
 
     @abstractmethod
     def keys(self) -> Iterator[str]: ...
 
     @abstractmethod
-    def values(self) -> Iterator[GitObject]: ...
+    def values(self) -> Iterator[EntryObject]: ...
+
+    @property
+    @abstractmethod
+    def hashes(self) -> Mapping[GitHash, 'et.GitEntry']: ...
 
     @abstractmethod
-    def __getitem__(self, key: str) -> GitObject: ...
+    def __getitem__(self, key: str) -> EntryObject: ...
 
     @abstractmethod
     def __iter__(self) -> Iterator[str]:  ...
@@ -77,7 +65,7 @@ class GitTree(GitObject, Protocol):
     def __contains__(self, key: str) -> bool: ...
 
     @abstractmethod
-    def get(self, key: str, default: Any = None) -> GitObject: ...
+    def get(self, key: str, default: Any = None) -> EntryObject: ...
 
     @abstractmethod
     def __eq__(self, other: Any) -> bool: ...
@@ -122,11 +110,11 @@ class GitCommit(GitObject, Protocol):
 
     @property
     @abstractmethod
-    def author(self) -> CommittedBy: ...
+    def author(self) -> 'xp.CommittedBy': ...
 
     @property
     @abstractmethod
-    def committer(self) -> CommittedBy: ...
+    def committer(self) -> 'xp.CommittedBy': ...
     @property
     @abstractmethod
     def tree(self) -> GitTree: ...
@@ -154,7 +142,7 @@ class GitTagObject(GitObject, Protocol):
 
     @property
     @abstractmethod
-    def tagger(self) -> CommittedBy: ...
+    def tagger(self) -> 'xp.CommittedBy': ...
 
     @property
     @abstractmethod
@@ -169,83 +157,4 @@ class GitTagObject(GitObject, Protocol):
     def signature(self) -> str: ...
 
 
-class GitTreeEntry(GitObject, Protocol):
-    """
-    An entry in a git tree. In addition to referencing a `GitObject`,
-    it supplies the mode and name.
-
-    It makes the fields of `GetObject available as properties.
-    """
-    @property
-    @abstractmethod
-    def type(self) -> GitObjectType:
-        ...
-    @property
-    @abstractmethod
-    def hash(self) -> GitHash: ...
-    @property
-    @abstractmethod
-    def mode(self) -> GitEntryMode: ...
-    @property
-    @abstractmethod
-    def size(self) -> int: ...
-    @property
-    @abstractmethod
-    def name(self) -> str: ...
-    @property
-    @abstractmethod
-    def entry(self) -> str: ...
-    @property
-    @abstractmethod
-    def entry_long(self) -> str: ...
-    @property
-    @abstractmethod
-    def object(self) -> GitObject: ...
-    @property
-    @abstractmethod
-    def repository(self) -> 'ct.GitRepository': ...
-    @property
-    @abstractmethod
-    def parent_object(self) -> Optional[GitObject]: ...
-    @property
-    @abstractmethod
-    def parent(self) -> Optional['GitTreeEntry']: ...
-    @property
-    @abstractmethod
-    def path(self) -> Path: ...
-    @abstractmethod
-    def __getitem__(self, key: str) -> 'GitTreeEntry': ...
-
-@runtime_checkable
-class GitRef(Protocol):
-    """
-    Any ref, usually a branch or tag, usually pointing to a commit.
-    """
-    @property
-    @abstractmethod
-    def name(self) -> str: ...
-    @property
-    @abstractmethod
-    def target(self) -> GitObject: ...
-    @property
-    @abstractmethod
-    def repository(self) -> 'ct.GitRepository': ...
-
-class Branch(GitRef, Protocol):
-    """
-    A branch ref.
-    """
-    def branch_name(self) -> str: ...
-
-
-class RemoteBranch(GitRef, Protocol):
-    """
-    A branch ref.
-    """
-    def remote_branch_name(self) -> str: ...
-
-class Tag(GitRef, Protocol):
-    """
-    A tag ref.
-    """
-    def tag_name(self) -> str: ...
+import xontrib.xgit.entry_types as et

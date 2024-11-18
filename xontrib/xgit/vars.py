@@ -7,9 +7,18 @@ This sets up proxies for values stored in the either:
 
 (Or both).
 
-The `XonshSession` object is stored in a `ContextLocal` in the xgit module,
-permitting separate contexts for different contexts, e.g. with
-different threads or asyncio tasks.
+Originally, XSH was stored in a context local, but the
+threading model of xonsh didn't allow for that to be
+inherited by spawned threads. Instead, I observed that
+xonsh uses the environment to maintain session state
+and inherit the appropriate subset to spawned threads.
+
+The plan is to leverage that to store the xgit context.
+
+The main purpose of this module is to provide a way to
+to store the xgit context in the xonsh session, and to
+allow reassignment by the user without needing to do
+anything special.
 '''
 from pathlib import Path
 from threading import Lock
@@ -25,6 +34,7 @@ from xontrib.xgit.types import (
     GitEntryKey,
     _NoValue, _NO_VALUE,
 )
+from xontrib.xgit.entry_types import GitEntry
 import xontrib.xgit.object_types as ot
 from xontrib.xgit.context_types import (
     GitRepository,
@@ -119,7 +129,7 @@ A map from the hash of a git object to the object itself.
 Stored here to persist across reloads.
 """
 
-XGIT_ENTRIES: dict[GitEntryKey, ot.GitTreeEntry] = user_proxy(
+XGIT_ENTRIES: dict[GitEntryKey, GitEntry] = user_proxy(
     'XGIT_ENTRIES',
     dict,
     {},
