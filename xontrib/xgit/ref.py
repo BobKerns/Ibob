@@ -13,7 +13,7 @@ import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
 from xontrib.xgit.objects import _git_object
 
-
+SYMBOLIC_REFS = frozenset(('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'))
 class _GitRef(rt.GitRef):
     '''
     Any ref, usually a branch or tag, usually pointing to a commit.
@@ -80,12 +80,18 @@ class _GitRef(rt.GitRef):
         def validate():
             nonlocal name
             self.__validate = None
+            target = None
             if not no_check:
-                _name = repository.git('check-ref-format', '--normalize', name)
+                _name = repository.git('check-ref-format', '--normalize', name,
+                                       check=False)
                 if not _name:
                     # Try it as a branch name
-                    _name = repository.git('check-ref-format', '--branch', name)
+                    _name = repository.git('check-ref-format', '--branch', name,
+                                           check=False)
                 if not _name:
+                    _name = repository.git('symbolic-ref', '--quiet', name,
+                                           check=False)
+                if not _name and name not in SYMBOLIC_REFS:
                     raise ValueError(f"Invalid ref name: {name!r}")
             if no_exists_ok:
                 self.__name = name
@@ -96,11 +102,11 @@ class _GitRef(rt.GitRef):
                 if not result:
                     raise ValueError(f"Ref not found: {name!r}")
                 target, name = result.split()
-        if target is not None:
-            if isinstance(target, str):
-                self.__target = _git_object(target, repository)
-            else:
-                self.__target = target
+            if target is not None:
+                if isinstance(target, str):
+                    self.__target = _git_object(target, repository)
+                else:
+                    self.__target = target
 
         if name.startswith('refs/heads/'):
             self.__class__ = _Branch
@@ -111,7 +117,7 @@ class _GitRef(rt.GitRef):
         elif name.startswith('refs/replace/'):
             self.__class__ = _Replacement
             self._replaced = None
-        if name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+        if name in SYMBOLIC_REFS:
             # Dereference on first use.
             self.__name = name
             self.__validate = validate

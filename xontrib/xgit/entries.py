@@ -135,6 +135,7 @@ class _GitEntry(GitEntry[O]):
         self.__mode = mode
         self.__path = path
         self.__repository = repository
+        po = None
         if isinstance(parent_object, str):
             po = cast(ParentObject, xo._git_object(parent_object, repository))
         if parent is not None and parent_object is None:
