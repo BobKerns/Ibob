@@ -262,11 +262,11 @@ def git():
     _git = which('git')
     if _git is None:
         raise ValueError("git is not installed")
-    def git(*args, cwd: Optional[Path|str], **kwargs):
+    def git(*args, cwd: Optional[Path|str], check=True, **kwargs):
         if cwd is not None:
             cwd = str(cwd)
         return run([_git, *args],
-                   check=True,
+                   check=check,
                    stdout=PIPE,
                    text=True,
                    env={**os.environ},
