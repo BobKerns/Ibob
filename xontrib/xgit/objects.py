@@ -22,6 +22,7 @@ from collections import defaultdict
 from xonsh.built_ins import XSH
 from xonsh.lib.pretty import RepresentationPrinter
 
+from xontrib.xgit.identity_set import IdentitySet
 from xontrib.xgit.person import CommittedBy
 from xontrib.xgit.types import (
     GitLoader,
@@ -331,9 +332,9 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
 
     __lazy_loader: InitFn['_GitTree',Iterable[tuple[str,GitEntry]]] | None
 
-    __hashes: defaultdict[GitHash, set[GitEntry]]
+    __hashes: defaultdict[GitHash, IdentitySet[GitEntry,int]]
     @property
-    def hashes(self) -> Mapping[GitHash, set[GitEntry]]:
+    def hashes(self) -> Mapping[GitHash, IdentitySet[GitEntry,int]]:
         '''
         A mapping of hashes to the entries that have that hash.
         This will usually be a one-to-one mapping, but it is possible for
@@ -352,7 +353,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
         repository: GitRepository,
     ):
         def _lazy_loader(self: '_GitTree'):
-            self.__hashes = defaultdict(set)
+            self.__hashes = defaultdict(lambda: IdentitySet(key=id))
             for line in repository.git_lines("ls-tree", "--long", tree):
                 if line:
                     name, entry = _parse_git_entry(line, repository, tree)
