@@ -54,7 +54,7 @@ class _GitRef(rt.GitRef):
         # Validation will set the target if it's a symbolic ref.
         name = self.name
         if self.__target is None:
-            target = self.__repository.git('show_ref', '--hash', name)
+            target = self.__repository.git('show-ref', '--hash', name)
             if not target:
                 raise ValueError(f"Ref not found: {name!r}")
             self.__target = _git_object(target, self.repository)
