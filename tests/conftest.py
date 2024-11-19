@@ -329,7 +329,7 @@ def worktree(with_xgit, git, repository, chdir):
     '''
     def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
         commit = git('rev-parse', 'HEAD', cwd=repository.path)
-        branch = git('symbolic-ref', 'HEAD', cwd=repository.path)
+        branch = git('symbolic-ref', 'HEAD', cwd=repository.path, check=False)
         chdir(repository.path.parent)
         yield _GitWorktree(repository=repository,
                            path=repository.path.parent,
