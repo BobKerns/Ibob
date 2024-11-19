@@ -28,6 +28,7 @@ frozendict
 gctx
 Gitter
 gpgsig
+hashable
 itercheck
 ivar
 Jsonable
