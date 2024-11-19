@@ -70,9 +70,13 @@ class GitRepository(Jsonable, GitCmd, Protocol):
         Worktrees known to be associated with this repository.
         '''
         ...
-    def __getitem__(self, key: Path|str) -> 'GitWorktree': ...
 
-    def get(self, key: Path|str) -> 'GitWorktree|None': ...
+    def get_worktree(self, key: Path|str) -> 'GitWorktree|None':
+        '''
+        Get a worktree by its path. Canonicalizes the path first,
+        making this the preferred way to get a worktree.
+        '''
+
 
 
 @runtime_checkable

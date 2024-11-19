@@ -2,6 +2,7 @@
 Any ref, usually a branch or tag, usually pointing to a commit.
 '''
 
+from tabnanny import check
 from typing import Any, Callable, Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
@@ -22,9 +23,17 @@ class _GitRef(rt.GitRef):
     def name(self) -> str:
         if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             # Dereference on first use.
-            self.__name = self.__repository.git('symbolic-ref', self.__name)
-            if self.__validate:
-                self.__validate()
+            name = self.__repository.git('symbolic-ref', '--quiet', self.__name,
+                                                check=False)
+            if name:
+                self.__name = name
+                if self.__validate:
+                    self.__validate()
+            else:
+                # Detached or non-existent ref
+                ref = self.__repository.git('rev-parse', '--verify', '--quiet', self.__name, check=False)
+                if ref:
+                    self.__target = _git_object(ref, self.repository)
         return self.__name
 
     __repository: GitRepository
@@ -41,10 +50,13 @@ class _GitRef(rt.GitRef):
     __target: 'ot.GitObject|None' = None
     @property
     def target(self) -> 'ot.GitObject':
+        # Fetching the name will trigger validation if needed.
+        # Validation will set the target if it's a symbolic ref.
+        name = self.name
         if self.__target is None:
-            target = self.__repository.git('show_ref', '--hash', self.name)
+            target = self.__repository.git('show_ref', '--hash', name)
             if not target:
-                raise ValueError(f"Ref not found: {self.name!r}")
+                raise ValueError(f"Ref not found: {name!r}")
             self.__target = _git_object(target, self.repository)
         return self.__target
 

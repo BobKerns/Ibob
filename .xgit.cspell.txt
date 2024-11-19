@@ -6,6 +6,7 @@ blist
 bobkerns
 bset
 bstring
+Canonicalizes
 capsys
 chdir
 cmds
