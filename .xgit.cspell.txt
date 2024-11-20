@@ -32,6 +32,7 @@ hashable
 itercheck
 ivar
 Jsonable
+keyable
 MAXDEPTH
 maxlevels
 maxsplit

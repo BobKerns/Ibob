@@ -178,79 +178,79 @@ class _GitEntry(GitEntry[O]):
 class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     @property
     def hashes(self) -> Mapping[GitHash, GitEntry]:
-        return MappingProxyType(self.__object.hashes)
+        return MappingProxyType(self.object.hashes)
 
     def __getitem__(self, name):
-        obj = self.__object[name] # type: ignore
-        path = self.__path / name if self.__path else None
-        _, entry = xo._git_entry(obj, name, self.__mode, obj.type, obj.size,
-                                repository=self.__repository,
+        obj = self.object[name] # type: ignore
+        path = self.path / name if self.path else None
+        _, entry = xo._git_entry(obj, name, self.mode, obj.type, obj.size,
+                                repository=self.repository,
                                 path=path,
                                 parent_entry=self,
-                                parent=self.__object)
+                                parent=self.object)
         return entry
 
     def get(self, name, default=None):
-        self.__object.get(name, default)
+        self.object.get(name, default)
 
     def __contains__(self, name):
-        return name in self.__object
+        return name in self.object
 
     def items(self) -> Iterator[tuple[str, EntryObject]]:
-        return self.__object.items()
+        return self.object.items()
 
     def keys(self):
-        return self.__object.keys()
+        return self.object.keys()
 
     def values(self) -> Iterator[EntryObject]:
-        return self.__object.values()
+        return self.object.values()
 
     def __iter__(self):
-        return self.__object.__iter__()
+        return self.object.__iter__()
 
     def __len__(self):
-        return len(self.__object)
+        return len(self.object)
 
     def __eq__(self, other):# -> Any:
-        return self.__object == other
+        return self.object == other
 
     def __bool__(self):
-        return bool(self.__object)
+        return bool(self.object)
 
 class _GitEntryCommit(_GitEntry[ot.GitCommit], GitEntryCommit):
     @property
     def message(self):
-        return self.__object.message
+        return self.object.message
 
     @property
     def author(self):
-        return self.__object.author
+        return self.object.author
 
     @property
     def committer(self):
-        return  self.__object.committer
+        return  self.object.committer
 
     @property
     def tree(self):
-        return self.__object.tree
+        return self.object.tree
 
     @property
     def parents(self):
-        return self.__object.parents
+        return self.object.parents
 
     @property
     def signature(self):
-        return self.__object.signature
+        return self.object.signature
 
 class _GitEntryBlob(_GitEntry[ot.GitBlob], GitEntryBlob):
     @property
     def data(self):
-        return self.__object.data
+        return self.object.data
 
     @property
     def lines(self):
-        return self.__object.lines
+        return self.object.lines
 
     @property
     def stream(self):
-        return self.__object.stream
+        return self.object.stream
