@@ -15,8 +15,9 @@ def test_table_view():
         {'a': 3, 'b': 4},
     ])
     assert table._columns == {
-        'a': Column(name='a', heading_width=1, elements=[1, 3]),
-        'b': Column(name='b', heading_width=1, elements=[2, 4]),
+        -1: Column(name='Row', key=-1, heading_width=0, ignore=True, elements=[]),
+        'a': Column(name='a', key='a', heading_width=1, elements=[1, 3]),
+        'b': Column(name='b', key='b', heading_width=1, elements=[2, 4]),
     }
 
 
