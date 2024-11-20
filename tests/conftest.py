@@ -17,7 +17,7 @@ def run_stdout(args, **kwargs):
 
 def cleanup(target: dict[str, Any], before: dict[str, Any], loaded: dict[str, Any], after: dict[str, Any]):
     '''
-    Undo additions and deletionis, while preserving modifications.
+    Undo additions and deletions, while preserving modifications.
     '''
     all_vars = after.keys() | loaded.keys() | before.keys()
     for k in all_vars:

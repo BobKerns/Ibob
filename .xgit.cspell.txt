@@ -35,8 +35,10 @@ Jsonable
 MAXDEPTH
 maxlevels
 maxsplit
+myobj
 mypy
 myxontrib
+ndigits
 newdir
 newpath
 noendl
@@ -48,8 +50,10 @@ ovar
 parms
 postcommand
 postdisplay
+postfilter
 precommand
 predisplay
+prefilter
 procs
 proxied
 PYPI
@@ -67,9 +71,12 @@ setenv
 sorteddict
 subcmd
 subcmds
+sublists
 subproc
+subviews
 sysdisplayhook
 tmpname
+tomlkit
 typecheck
 typeshed
 unloadable
