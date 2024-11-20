@@ -9,7 +9,6 @@ from typing import (
 )
 from itertools import count
 
-from tomlkit import value
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue

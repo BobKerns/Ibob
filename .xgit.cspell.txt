@@ -1,5 +1,6 @@
 argcnt
 argname
+autoimport
 autoupdate
 autouse
 blist
@@ -36,6 +37,7 @@ keyable
 MAXDEPTH
 maxlevels
 maxsplit
+multiview
 myobj
 mypy
 myxontrib
