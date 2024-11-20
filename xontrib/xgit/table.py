@@ -3,15 +3,30 @@ A table view of objects.
 '''
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Literal, Mapping, Optional, TypeAlias
-from itertools import chain
+from typing import (
+    Any, Callable, Generic, Iterable, Literal, Mapping, Optional, TypeAlias,
+    cast
+)
+from itertools import count
 
+from tomlkit import value
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue
-from xontrib.xgit.view import SequenceView
+from xontrib.xgit.view import T, K, X, Rcv
+from xontrib.xgit.multiview import MultiView, default_extractor
 
 HeadingStrategy: TypeAlias = Literal['none', 'name', 'heading', 'heading-or-name']
+
+class ExtractorFnMulti(Generic[T,K,Rcv]):
+    '''
+    A function that extracts columns from a target.
+    '''
+    def __call__(self, target: T) -> Iterable[tuple[K, Rcv]]:
+        '''
+        Extract the columns from the target.
+        '''
+        ...
 
 @dataclass
 class Column:
@@ -19,20 +34,26 @@ class Column:
     A column in a table view.
     '''
     name: str
+    key: str|int = -2
     heading: Optional[str] = None
     heading_width: int = 0
+    _width: int = field(default=-1, repr=False)
     @property
     def width(self):
-        return max(self.heading_width,
+        if self._width < 0:
+            if len(self.elements) == 0:
+                return 0
+            self._width = max(self.heading_width,
                    max(len(e) for e in self.formatted))
-    formatter: Optional[Callable[[Any], str]] = None
+        return self._width            
+    formatter: Optional[Callable[[Any], str]] = field(default=None, repr=False)
     format: str = '{:<{width}}'
     missing: str = ''
     ignore: bool = False
     ''''
     Whether to ignore the column. Ignored columns are not collected or displayed.
     '''
-    elements: list[Any] = field(default_factory=list)
+    elements: list[Any] = field(default_factory=list, repr=False)
     _formatted: list[str] = field(default_factory=list, repr=False)
     @property
     def formatted(self):
@@ -43,11 +64,30 @@ class Column:
             formatter = self.formatter or str
             self._formatted = [formatter(e) for e in self.elements]
         return self._formatted
+    def reset(self):
+        '''
+        Reset the column.
+        '''
+        self.elements.clear()
+        self._formatted.clear()
+        self._width = -1
+        
+    def __repr__(self):
+        args = [
+            f'Column(name={self.name!r}',
+            f'key={self.key!r}',
+            f'heading={self.heading!r}' if self.heading else None,
+            f'width={self.width!r}' if self.width >= 0 else None,
+            f'missing={self.missing!r}' if self.missing else None,
+            f'ignore={self.ignore!r}',
+            f'format={self.format!r})',
+        ]
+        return ', '.join(a for a in args if a is not None)
 
 ColumnDict: TypeAlias = dict[str|int, Column]|dict[str, Column]|dict[int, Column]
 ColumnKeys: TypeAlias = list[str|int]|list[str]|list[int]
 
-class TableView(SequenceView):
+class TableView(MultiView[T,K,X,Rcv]):
     '''
     A table view of objects.
 
@@ -70,14 +110,13 @@ class TableView(SequenceView):
         If the order is set and has keys not in the columns, they will be removed from the order.
         If the order is not set, it will be set to the keys of the columns.
         '''
-        self.__collect_columns(list(self._target_value))
+        self.__collect_columns(self._target_value)
         return self.__columns
     @_columns.setter
     def _columns(self, value):
         self.__columns = value
         for column in self.__columns.values():
-            column.elements.clear()
-            column._formatted.clear()
+            column.reset()
         if self.__order:
             self.__order = [key for key in self.__order if key in self.__columns]
         else:
@@ -119,14 +158,37 @@ class TableView(SequenceView):
     '''
     The separator between cells.
     '''
+    
+    _show_row_id: bool = False
+    '''
+    Whether to show the row ids.
+    '''
+    
+    x__column_extractor: Optional[ExtractorFnMulti[T,K,X]] = None
+    
+    @property
+    def _column_extractor(self) -> ExtractorFnMulti[T,K,X]:
+        '''
+        Get/set the column extractor.
+        '''
+        val = getattr(self, 'x__column_extractor')
+        if val is None:
+            return cast(ExtractorFnMulti[T,K,X], default_extractor)
+        return val
+    
+    @_column_extractor.setter
+    def _column_extractor(self, value: Optional[ExtractorFnMulti[T,K,X]]):
+        self.x__column_extractor = value
 
-    def __init__(self, target: Iterable|_NoValue=_NO_VALUE,
-                 columns: Optional[ColumnDict] = None,
-                 order: Optional[ColumnKeys] = None,
-                 heading_strategy: HeadingStrategy = 'heading-or-name',
-                 heading_separator: str = ' ',
-                 cell_separator: str = ' ',
-                 **kwargs):
+    def __init__(self, target: T|_NoValue=_NO_VALUE,
+                columns: Optional[ColumnDict] = None,
+                column_extractor: Optional[ExtractorFnMulti[T,K,X]] = None,
+                order: Optional[ColumnKeys] = None,
+                heading_strategy: HeadingStrategy = 'heading-or-name',
+                heading_separator: str = ' ',
+                cell_separator: str = ' ',
+                show_row_id: bool = False,
+                **kwargs):
 
         '''
         Initialize the table view.
@@ -135,56 +197,60 @@ class TableView(SequenceView):
         :param columns: The columns to use.
         '''
         super().__init__(target, **kwargs)
+        self._column_extractor = column_extractor
         self._columns = columns or {}
         self._order = order or []
         self._heading_strategy = heading_strategy
         self._heading_separator = heading_separator
         self._cell_separator = cell_separator
+        self._show_row_id = show_row_id
 
-    def __identify_columns(self, target: Iterable|Mapping):
+    def __identify_columns(self, row: Any):
         '''
         Identify the columns in the table.
 
         This only identifies available columns, it does not collect the values.
         '''
-        for row, value in enumerate(target):
-            if isinstance(value, Mapping):
-                for key, item in value.items():
-                    if key not in self.__columns:
-                        self.__columns[key] = Column(name=key)
-                        self.__order.append(key)
-            elif isinstance(value, Iterable):
-                for index, item in enumerate(value):
-                    if index not in self.__columns:
-                        self.__columns[index] = Column(name=str(index))
-                        self.__order.append(index)
-            else:
-               raise ValueError(f'Cannot identify columns for {value}')
+        _, value = row
+        columns = self.__columns
+        order = self.__order
+        ctr = count(len(columns))
+        if -1 not in columns:
+            columns[-1] = Column(name='Row',
+                                 key=-1,
+                                 ignore=not self._show_row_id)
+            if len(order) == 0 and self._show_row_id:
+                order[0:0] = [-1]
+        column_extractor = self._column_extractor
+        for key, _ in column_extractor(value):
+            if not isinstance(key, (int, str)):
+                key = next(ctr)
+                while key in columns:
+                    key = next(ctr)
+            if key not in columns:
+                columns[key] = Column(name=str(key), key=key)
+                order.append(key)
 
-    def __collect_columns(self, target: list):
+    def __collect_columns(self, target: Iterable[tuple[K, Rcv]]):
         '''
         Collect the columns in the table.
         '''
-        self.__identify_columns(target)
         # Clear the columns.
+        ctr = count(len(self.__columns))
         for column in self.__columns.values():
-            column.elements.clear()
+            column.reset()
+        column_extractor = self._column_extractor
         for value in target:
+            self.__identify_columns(value)
             for column in self.__columns.values():
                 if not column.ignore:
                     column.elements.append(column.missing)
-            if isinstance(value, Mapping):
-                for key, item in value.items():
-                    column = self.__columns[key]
-                    if not column.ignore:
-                        column.elements[-1] = item
-            elif isinstance(value, Iterable):
-                for index, item in enumerate(value):
-                    column = self.__columns[index]
-                    if not column.ignore:
-                        column.elements[-1] = item
-            else:
-                raise ValueError(f'Cannot collect columns for {value}')
+            for key, v in column_extractor(value[1]): # type: ignore
+                if not isinstance(key, (int, str)):
+                    key = next(ctr)
+                column = self.__columns[key]
+                if not column.ignore:
+                    column.elements[-1] = v
         # Update the heading widths without triggering a full update.
         self.__update_heading_widths(self.__ordered(self.__columns))
 
@@ -193,13 +259,13 @@ class TableView(SequenceView):
         Update the heading widths.
         '''
         for column, heading in zip(ordered, self.__headings(ordered)):
-            column.heading_width = len(heading or '')
+            column.heading_width = len(str(heading or ''))
 
-    def __headings(self, ordered: list[Column]) -> list[str|None]:
+    def __headings(self, ordered: list[Column]) -> list[str|int|None]:
         '''
         Get the headings for the columns.
         '''
-        headings: list[str|None]
+        headings: list[int|str|None]
         match self._heading_strategy:
             case 'none':
                 headings = [None for c in ordered]
@@ -212,7 +278,7 @@ class TableView(SequenceView):
 
         for heading, column in zip(headings, ordered):
             if heading is not None:
-                column.heading_width = len(heading)
+                column.heading_width = len(str(heading))
         return headings
 
     @property
@@ -243,11 +309,6 @@ class TableView(SequenceView):
         return self.__ordered(self._columns)
 
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool) -> None:
-        try:
-            self._target_value
-        except ValueError:
-            p.text('TableView()')
-            return
         # Only get this once, to avoid multiple passes collecting the columns.
         columns = self._ordered
         headings = self.__headings(columns)
