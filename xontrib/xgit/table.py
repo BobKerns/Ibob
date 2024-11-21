@@ -244,6 +244,9 @@ class TableView(MultiView[T,K,X,Rcv]):
             for column in self.__columns.values():
                 if not column.ignore:
                     column.elements.append(column.missing)
+            row_id = self.__columns[-1]
+            if not row_id.ignore:
+                row_id.elements[-1] = value[0]
             for key, v in column_extractor(value[1]): # type: ignore
                 if not isinstance(key, (int, str)):
                     key = next(ctr)
@@ -306,6 +309,30 @@ class TableView(MultiView[T,K,X,Rcv]):
         Get the ordered columns.
         '''
         return self.__ordered(self._columns)
+    
+    @property
+    def _rows(self):
+        '''
+        Get the rows of the table.
+        '''
+        return zip(*(c.elements for c in self._ordered))
+    
+    @property
+    def _formatted(self):
+        '''
+        Get the string-formatted rows.
+        '''
+        return zip(*(c.formatted for c in self._ordered))
+    
+    @property
+    def _aligned(self):
+        '''
+        Get the rows with the cells padded and aligned.
+        '''
+        cols = self._ordered
+        
+        for row in self._formatted:
+            yield tuple(c.format.format(e, width=c.width) for c, e in zip(cols, row))
 
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool) -> None:
         # Only get this once, to avoid multiple passes collecting the columns.
