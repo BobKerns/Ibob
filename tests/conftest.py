@@ -6,11 +6,16 @@ from threading import RLock
 from types import ModuleType as Module
 import pytest
 from importlib import import_module
-from typing import Callable, Any, Generator, NamedTuple, Optional, TypeAlias, cast
+from typing import (
+    Callable, Any, Generator, NamedTuple, Optional, TypeAlias, cast,
+    TYPE_CHECKING
+)
 import sys
 import os
 
 from xonsh.built_ins import XonshSession
+if TYPE_CHECKING:
+    from xontrib.xgit.context_types import GitRepository, GitWorktree
 
 DATA_DIR = Path(__file__).parent / 'data'
 
@@ -280,14 +285,18 @@ def git():
 
 repository_lock = RLock()
 @pytest.fixture()
-def repository(with_xgit, git, chdir, tmp_path):
+def repository(with_xgit,
+               xonsh_session,
+               chdir,
+               tmp_path,
+               ) -> Generator['GitRepository', None, None]:
     '''
     Fixture to create a test repository.
     '''
     from tests.zip_repo import unzip_repo
     from secrets import token_hex
     from shutil import rmtree
-    
+
     with repository_lock:
         token = token_hex(16)
         from_zip = DATA_DIR / 'test_repo.zip'
@@ -303,7 +312,8 @@ def repository(with_xgit, git, chdir, tmp_path):
         with gitconfig.open('w') as f:
             f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
         chdir(worktree)
-        def _t(*_, _GitRepository, **__):
+        def _t(*_, _GitRepository, **__) -> Generator[GitRepository, None, None]:
+            from xontrib.xgit.context import _GitRepository
             yield _GitRepository(path=to_git)
         yield from with_xgit(_t, 'xontrib.xgit.context')
         chdir(old)
@@ -313,11 +323,19 @@ def repository(with_xgit, git, chdir, tmp_path):
         #    rmtree(tmp_path)
 
 @pytest.fixture()
-def worktree(with_xgit, git, repository, chdir):
+def worktree(
+    with_xgit,
+    git,
+    repository,
+    chdir,
+    ) -> Generator['GitWorktree', None, None]:
     '''
     Fixture to create a test worktree.
     '''
     def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
+        from xontrib.xgit.context import _GitWorktree
+        from xontrib.xgit.ref import _GitRef
+        from xontrib.xgit.objects import _GitCommit
         commit = git('rev-parse', 'HEAD', cwd=repository.path)
         branch = git('symbolic-ref', 'HEAD', cwd=repository.path, check=False)
         worktree = repository.path.parent
@@ -356,4 +374,3 @@ def cmd_args(modules):
                 return apply
             return wrap_and_apply
         return _cmd_args
-        

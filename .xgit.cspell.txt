@@ -87,6 +87,7 @@ tomlkit
 typecheck
 typeshed
 unloadable
+unrooted
 worktree
 Worktree
 worktrees
