@@ -144,7 +144,12 @@ def default_extractor(x: T) -> Iterable[tuple[int|str, T]]:
         with suppress(Exception):
             return enumerate(iter(cast(Iterable, x)))
     with suppress(Exception):
-        return vars(x).items()
+        def shorten(k: str, v: Any) -> str:
+            if k.startswith('_'):
+                s = k.split('__', maxsplit=1)
+                return s[-1].strip('_')
+            return k.rstrip('_')
+        return {shorten(k,v):v for k,v in vars(x).items()}.items()
     with suppress(Exception):
         return enumerate(iter(cast(Iterable[T], x)))
     return [(0, x)]
