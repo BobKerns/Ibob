@@ -10,3 +10,5 @@ jobs:
     uses: ./.github/actions/test-poetry-xontrib.yml
     with:
         xontrib_name: xgit
+        lfs: true
+
