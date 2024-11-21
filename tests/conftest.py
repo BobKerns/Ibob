@@ -1,6 +1,8 @@
+from calendar import c
 from contextlib import contextmanager, suppress
 from inspect import currentframe, stack
 from pathlib import Path
+from readline import add_history
 from threading import RLock
 from types import ModuleType as Module
 import pytest
@@ -338,3 +340,30 @@ def worktree(with_xgit, git, repository, chdir):
                            commit=_GitCommit(commit, repository=repository),
                            )
     yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
+
+@pytest.fixture()
+def cmd_args(modules):
+    '''
+    Fixture to test command line arguments.
+    '''
+    with modules('xontrib.xgit.decorators') as ((m_cmd,), vars):
+        command = vars['command']
+        def _cmd_args(*args, **kwargs):
+            _aliases = {}
+            _exports = []
+            def _export(*args):
+                _exports.append(args)
+            # Wrap our test command in the decorator
+            f = command(*args,
+                        _export=_export,
+                        _aliases=_aliases,
+                        **kwargs)
+            def wrap_and_apply(cmd: Callable):
+                f(cmd)
+                info = cmd.info
+                def apply(*args, **kwargs):
+                    return info.wrapper(args, _info=info, **kwargs)
+                return apply
+            return wrap_and_apply
+        return _cmd_args
+        

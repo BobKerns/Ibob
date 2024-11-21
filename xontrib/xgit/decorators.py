@@ -3,9 +3,11 @@ Various decorators for xgit commands and functions.
 
 """
 
+from contextlib import suppress
+from logging import info
 from re import sub
 from typing import (
-    Any, MutableMapping, Optional, Callable, Union,
+    Any, MutableMapping, NamedTuple, Optional, Callable, Union,
     TypeAlias,
 )
 from inspect import signature, Signature, Parameter
@@ -111,12 +113,57 @@ _aliases: dict[str, Callable] = {}
 Dictionary of aliases defined on loading this xontrib.
 """
 
+class CommandInfo(NamedTuple):
+    """
+    Information about a command.
+    """
+    cmd: Callable
+    wrapper: Callable
+    alias: str
+    signature: Signature
+    # Below only in test hardness
+    _aliases = {}
+    _exports = []
+    
+class InvocationInfo(NamedTuple):
+    """
+    Information about a command invocation.
+    """
+    cmd: CommandInfo
+    args: list
+    kwargs: dict
+    stdin: Any
+    stdout: Any
+    stderr: Any
+    env: MutableMapping
+
 class CmdError(Exception):
     '''
     An exception raised when a command fails, that should be
     caught and handled by the command, not the shell.
     '''
     pass
+
+def nargs(p: Callable):
+    """
+    Return the number of positional arguments accepted by the callable.
+    """
+    return len([p for p in signature(p).parameters.values()
+                if p.kind in {p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL}])
+
+def convert(p: Parameter, value: str) -> Any:
+    if value == p.empty:
+        return p.default
+    t = p.annotation
+    if type(t) == type:
+        with suppress(Exception):
+            return t(value)
+    if t == Path or t == Union[Path, str]:
+        return Path(value)
+    if callable(t):
+        with suppress(Exception):
+            return t(value)
+    return value
 
 def command(
     cmd: Optional[Callable] = None,
@@ -125,6 +172,8 @@ def command(
     alias: Optional[str] = None,
     export: bool = False,
     prefix: Optional[tuple[Callable[..., Any], str]]=None,
+    _export=_export,
+    _aliases=_aliases,
 ) -> Callable:
     """
     Decorator/decorator factory to make a function a command. Command-line
@@ -168,39 +217,56 @@ def command(
     if alias is None:
         alias = cmd.__name__.replace("_", "-")
 
+    sig: Signature = signature(cmd)
     def wrapper(
-        args,
+        xargs,
         stdin=sys.stdin,
         stdout=sys.stdout,
         stderr=sys.stderr,
         **kwargs,
     ):
-        if "--help" in args:
+        if "--help" in xargs:
             print(getattr(cmd, "__doc__", ""), file=stderr)
             return
+        args: list[str] = [*xargs]
+        p_args: list[str] = []
         while len(args) > 0:
             if args[0] == "--":
                 args.pop(0)
-                break
+                continue
             if args[0].startswith("--"):
                 if "=" in args[0]:
                     k, v = args.pop(0).split("=", 1)
                     kwargs[k[2:]] = v
                 else:
-                    if args[0] in flags:
+                    if args[0] in flags or args[0][2:] in flags:
                         kwargs[args.pop(0)[2:]] = True
                     else:
                         kwargs[args.pop(0)[2:]] = args.pop(0)
             else:
-                break
-
-        sig: Signature = signature(cmd)
+                p_args.append(args.pop(0))
+        
         n_args = []
         n_kwargs = {}
         env = XSH.env
         assert isinstance(env, MutableMapping),\
             f"XSH.env not a MutableMapping: {env!r}"
 
+        info = InvocationInfo(
+            cmd=cmd.info,
+            args=args,
+            kwargs=kwargs,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            env=env,
+        )
+
+        kwargs = {
+            "_info": info,
+            **kwargs
+        }
+        
         def type_completer(p: Parameter):
             match p.annotation:
                 case t if t == Path or t == Union[Path, str]:
@@ -227,19 +293,22 @@ def command(
             def add_arg(value: Any):
                 match p.kind:
                     case p.POSITIONAL_ONLY:
+                        value = convert(p, value)
                         n_args.append(value)
 
                     case p.POSITIONAL_OR_KEYWORD:
-                        positional = len(args) > 0
+                        positional = len(p_args) > 0
                         if value == p.empty:
                             if positional:
-                                value = args.pop(0)
+                                value = p_args.pop(0)
                             elif p.name in kwargs:
                                 value = kwargs.pop(p.name)
                             else:
                                 value = p.default
                         if value == p.empty:
                             raise ValueError(f"Missing value for {p.name}")  # noqa
+                        
+                        value = convert(p, value)
                         if positional:
                             n_args.append(value)
                         else:
@@ -252,11 +321,12 @@ def command(
                                 value = p.default
                         if value == p.empty:
                             raise CmdError(f"Missing value for {p.name}")
+                        value = convert(p, value)
                         n_kwargs[p.name] = value
                     case p.VAR_POSITIONAL:
-                        if len(args) > 0:
-                            n_args.extend(args)
-                            args.clear()
+                        if len(p_args) > 0:
+                            n_args.extend(p_args)
+                            p_args.clear()
                     case p.VAR_KEYWORD:
                         n_kwargs.update(
                             {"stdin": stdin, "stdout": stdout, "stderr": stderr}
@@ -300,6 +370,7 @@ def command(
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
         prefix_cmd._subcmds[prefix_alias] = wrapper
+    cmd.info =  CommandInfo(cmd, wrapper, alias, sig)
     return cmd
 
 def prefix_command(alias: str):
