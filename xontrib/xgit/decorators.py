@@ -167,7 +167,7 @@ def convert(p: Parameter, value: str) -> Any:
 
 def command(
     cmd: Optional[Callable] = None,
-    flags: frozenset = frozenset(),
+    flags: set = set(),
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,

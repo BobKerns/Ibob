@@ -11,14 +11,16 @@ from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.objects import _git_entry, _git_object
 from xontrib.xgit.object_types import GitTree, GitObject
 from xontrib.xgit.entry_types import GitEntryTree
-from xontrib.xgit.procs import _run_stdout
+from xontrib.xgit.view import View
+from xontrib.xgit.table import TableView
 
 @command(
     for_value=True,
     export=True,
     prefix=(xgit, 'ls'),
+    flags={'table'}
 )
-def git_ls(path: Path | str = Path('.')) -> GitEntryTree:
+def git_ls(path: Path | str = Path('.'), /, *, table: bool=False) -> GitEntryTree|View:
     """
     List the contents of the current directory or the directory provided.
     """
@@ -29,6 +31,7 @@ def git_ls(path: Path | str = Path('.')) -> GitEntryTree:
     dir = worktree.path / XGIT.path / Path(path)
     path = dir.relative_to(worktree.path)
     def do_ls(path: Path) -> GitEntryTree:
+
         if path == Path("."):
             tree = worktree.git("log", "--format=%T", "-n", "1", "HEAD")
             parent_rev = worktree.git("rev-parse", "HEAD")
@@ -45,5 +48,9 @@ def git_ls(path: Path | str = Path('.')) -> GitEntryTree:
                             repository=repository,
                             parent=parent or XGIT.worktree.commit)
         return entry
-    return do_ls(path)
+    val = do_ls(path)
+    if table:
+        val = TableView(val)
+    return val
+
 
