@@ -16,7 +16,7 @@ from typing import (
     Callable, overload, Iterable, Iterator, Mapping,
 )
 from types import MappingProxyType
-from pathlib import Path
+from pathlib import PurePosixPath
 from collections import defaultdict
 
 from xonsh.built_ins import XSH
@@ -31,6 +31,7 @@ from xontrib.xgit.types import (
     GitObjectType,
     GitEntryKey,
     InitFn,
+    _NO_VALUE,
 )
 from xontrib.xgit.object_types_base import GitId, GitObject
 from xontrib.xgit.object_types import (
@@ -153,28 +154,34 @@ def _git_object(hash: str,
                 repository: GitRepository,
                 type: Literal['tree'],
                 ) -> GitTree: ...
+
 @overload
 def _git_object(hash: str,
                 repository: GitRepository,
                 type: Literal['blob'],
                 size: int=-1,
                 ) -> GitBlob: ...
+
 @overload
 def _git_object(hash: str,
                 repository: GitRepository,
                 type: Literal['commit'],
                 ) -> GitCommit: ...
+
 @overload
 def _git_object(hash: str,
                 repository: GitRepository,
                 type: Literal['tag'],
                 ) -> GitTagObject: ...
+
 @overload
 def _git_object(hash: str,
                 repository: GitRepository,
                 type: GitObjectType|None=None,
                 size: int|str=-1
                 ) -> GitObject: ...
+
+# Implementation
 def _git_object(hash: str,
                 repository: GitRepository,
                 type: Optional[GitObjectType]=None,
@@ -185,6 +192,7 @@ def _git_object(hash: str,
         return obj
     if type is None:
         type = cast(GitObjectType, repository.git("cat-file", "-t", hash))
+        
     match type:
         case "tree":
             obj = _GitTree(hash, repository=repository)
@@ -209,8 +217,9 @@ def _git_entry(
     repository: GitRepository,
     parent: Optional[GitObject] = None,
     parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[Path] = None,
+    path: Optional[PurePosixPath] = None,
 ) -> tuple[str, GitEntryCommit]: ...
+
 @overload
 def _git_entry(
     hash_or_obj: GitHash|GitBlob,
@@ -221,8 +230,9 @@ def _git_entry(
     repository: GitRepository,
     parent: Optional[GitObject] = None,
     parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[Path] = None,
+    path: Optional[PurePosixPath] = None,
 ) -> tuple[str, GitEntryBlob]: ...
+
 @overload
 def _git_entry(
     hash_or_obj: GitHash|GitTree,
@@ -233,7 +243,7 @@ def _git_entry(
     repository: GitRepository,
     parent: Optional[GitObject] = None,
     parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[Path] = None,
+    path: Optional[PurePosixPath] = None,
 ) -> tuple[str, GitEntryTree]: ...
 @overload
 
@@ -246,8 +256,10 @@ def _git_entry(
     repository: GitRepository,
     parent: Optional[GitObject] = None,
     parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[Path] = None,
+    path: Optional[PurePosixPath] = None,
 ) -> tuple[str, GitEntry[O]]: ...
+
+# Implementation
 def _git_entry(
     hash_or_obj: GitHash|O,
     name: str,
@@ -257,7 +269,7 @@ def _git_entry(
     repository: GitRepository,
     parent: Optional[GitObject] = None,
     parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[Path] = None,
+    path: Optional[PurePosixPath] = None,
 ) -> tuple[str, GitEntry[O]]:
     """
     Obtain or create a `GitObject` from a parsed entry line or equivalent.
@@ -265,6 +277,7 @@ def _git_entry(
     assert isinstance(XSH.env, MutableMapping),\
         f"XSH.env not a MutableMapping: {XSH.env!r}"
     parent_hash = parent.hash if parent is not None else ''
+    
     match hash_or_obj:
         case str():
             hash = hash_or_obj
@@ -274,15 +287,19 @@ def _git_entry(
             hash = obj.hash
         case _:
             raise ValueError(f"Invalid hash or object: {hash_or_obj}")
+        
     key: GitEntryKey = (
            repository.path,
            path,
            hash,
            mode,
            parent_hash,)
+    
     entry = xv.XGIT_ENTRIES.get(key)
+    
     if entry is not None:
         return name, entry
+    
     if XSH.env.get("XGIT_TRACE_OBJECTS"):
         args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {repository.path=}, {parent=}"
         msg = f"git_entry({args})"
@@ -312,6 +329,7 @@ def _git_entry(
                         parent_object=cast(ParentObject, parent))
         case _:
             raise ValueError(f"Unknown type {type}")
+        
     xv.XGIT_ENTRIES[key] = entry
     if hash not in xv.XGIT_REFERENCES:
         xv.XGIT_REFERENCES[hash] = set()
@@ -395,8 +413,19 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
     def __contains__(self, key):
         return dict.__contains__(self._expand(), key)
 
+
     def __getitem__(self, key: str) -> _GitObject:
-        return dict.__getitem__(self._expand(), key)
+        path = key.split("/")
+        loc = self
+        for p in path:
+            match p:
+                case '' | '.':
+                    pass
+                case '..':
+                    raise ValueError("Cannot use '..' in a path")
+                case _:
+                    loc = dict.__getitem__(loc, p)
+        return loc
 
     def __setitem__(self, key: str, value: _GitObject):
         raise NotImplementedError("Cannot set items in a GitTree")
@@ -423,8 +452,25 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
     def values(self):
         return dict.values(self._expand())
 
-    def get(self, key: str, default: Any = None):
-        return dict.get(self._expand(), key, default)
+    def get(self, key: str|PurePosixPath, default: Any = None):
+        self._expand()
+        ex = next(iter(dict.values(self)))
+        repository = ex.repository
+        _, loc = _git_entry(self.hash, '.', "040000", "tree", "-",
+                              repository=repository)
+        
+        key_path = PurePosixPath(key)
+        path = PurePosixPath()
+        for p in key_path.parts:
+            if p in ('', '.'):
+                continue
+            if p == '..':
+                raise ValueError("Cannot use '..' in a path")
+            loc = dict.get(loc.object, p, _NO_VALUE)
+            if loc is _NO_VALUE:
+                return default
+            path = path / p
+        return loc
 
     def __str__(self):
         return f"D {self.hash} {len(self._expand()):>8d}"

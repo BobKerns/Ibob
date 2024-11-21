@@ -1,7 +1,7 @@
 '''
 The xgit-cd command.
 '''
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 
 from xontrib.xgit.vars import XSH, XGIT
@@ -25,7 +25,7 @@ def git_cd(path: str = "", stderr=sys.stderr) -> None:
 
     fpath = Path() / path
     if path == "":
-        XGIT.path = Path(".")
+        XGIT.path = PurePosixPath(".")
         if XGIT.worktree is not None:
             fpath = XGIT.worktree.path
     elif path == ".":
@@ -33,7 +33,7 @@ def git_cd(path: str = "", stderr=sys.stderr) -> None:
     else:
         try:
             git_path = (XGIT.worktree.path / XGIT.path / path).resolve()
-            git_path = git_path.relative_to(XGIT.worktree.path)
+            git_path = PurePosixPath(git_path.relative_to(XGIT.worktree.path))
             XGIT.path = git_path
             fpath = XGIT.worktree.path / XGIT.path
         except ValueError:

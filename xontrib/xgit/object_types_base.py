@@ -9,7 +9,7 @@ classes are complex. It is very easy to end up with circular imports.
 
 
 from abc import abstractmethod
-from typing import Optional, Protocol, TypeAlias, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 from xontrib.xgit.types import CleanupAction, GitHash, GitObjectType
 

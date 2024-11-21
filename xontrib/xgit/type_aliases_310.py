@@ -6,14 +6,14 @@ We try to make these invisible to type checkers; they're for
 downrev runtime compatibility only.
 '''
 from typing import Literal, TYPE_CHECKING, Any, Callable, Literal, TypeVar, Generic
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from pytest import Directory
 
 if not TYPE_CHECKING:
 
     GitHash = str
-    ContextKey = tuple[Path, Path, GitHash, GitHash]
+    ContextKey = tuple[Path, PurePosixPath, GitHash, GitHash]
     GitLoader = Callable[[], None]
     GitEntryMode = Literal[
         "040000",  # directory
@@ -23,7 +23,7 @@ if not TYPE_CHECKING:
         "20000",  # symlink
     ]
     GitObjectType = Literal["blob", "tree", "commit", "tag"]
-    GitEntryKey = tuple[Path, str, str, str|None]
+    GitEntryKey = tuple[Path, PrePosixPath|None, str, str|None]
     GitObjectReference = tuple[ContextKey, str | None]
     CleanupAction = Callable[[], None]
 

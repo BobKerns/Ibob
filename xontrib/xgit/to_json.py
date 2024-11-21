@@ -3,7 +3,7 @@ A module to create description of an object for debugging or tests.
 """
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import (
     Any, Iterable, Mapping, Optional,
     Sequence, cast
@@ -88,9 +88,11 @@ class _JsonDescriber(JsonDescriber):
             self.class_names[cls] = name
         self.special_types.update({
             Path: lambda x, _: {'_path': str(x)},
+            PurePosixPath: lambda x, _: {'_path': str(x)},
             })
         self.to_override_types.update({
             Path: lambda x, _: str(x),
+            PurePosixPath: lambda x, _: str(x),
             })
         def json_to_path(json: JsonData, _: 'JsonDescriber') -> Path:
             return Path(str(json))

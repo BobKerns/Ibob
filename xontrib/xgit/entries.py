@@ -14,16 +14,18 @@ The objects which can occur in Git trees are
 BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
+import re
+from sys import deactivate_stack_trampoline
 from types import MappingProxyType
 from typing import Optional, cast, Mapping, Iterator
-from pathlib import Path
+from pathlib import PurePosixPath
 
 
 from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.context_types import GitRepository
 import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
-    GitEntryMode, GitHash
+    GitEntryMode, GitHash, _NO_VALUE
 )
 from xontrib.xgit.entry_types import (
     GitEntry, O, ParentObject, EntryObject,
@@ -41,7 +43,7 @@ class _GitEntry(GitEntry[O]):
     __name: str
     __object: O
     __mode: GitEntryMode
-    __path: Optional[Path]
+    __path: Optional[PurePosixPath]
     __parent_object: Optional[ParentObject]
     __parent: Optional['GitEntryTree']
     __repository: GitRepository
@@ -129,7 +131,7 @@ class _GitEntry(GitEntry[O]):
                  repository: GitRepository,
                  parent_object: Optional['ParentObject|GitHash']=None,
                  parent: Optional['GitEntryTree']=None,
-                 path: Optional[Path] = None):
+                 path: Optional[PurePosixPath] = None):
         self.__object = object
         self.__name = name
         self.__mode = mode
@@ -180,18 +182,44 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     def hashes(self) -> Mapping[GitHash, GitEntry]:
         return MappingProxyType(self.object.hashes)
 
-    def __getitem__(self, name):
-        obj = self.object[name] # type: ignore
-        path = self.path / name if self.path else None
-        _, entry = xo._git_entry(obj, name, self.mode, obj.type, obj.size,
-                                repository=self.repository,
-                                path=path,
-                                parent_entry=self,
-                                parent=self.object)
+    def __getitem__(self, name):# -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
+        entry = self.get(name)
+        if entry is None:
+            raise KeyError(name)
         return entry
 
     def get(self, name, default=None):
-        self.object.get(name, default)
+        path = self.path
+        loc = self
+        if path is None:
+            path = PurePosixPath(name)
+
+        parts = name.split('/')
+        for part in parts:
+            match part:
+                case '.' | '':
+                    continue
+                case '..':
+                    if (loc.parent is None) or (path.parent == path):
+                        return default
+                    loc = loc.parent
+                    path = path.parent
+                case _:
+                    #if not isinstance(loc,GitEntryTree):
+                    #    return default
+                    if loc.type != "tree":
+                        return default
+                    loc = cast(GitEntryTree, loc)
+                        
+                    obj = loc.object[part]
+                    path = path / part
+                    _, entry = xo._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
+                                repository=self.repository,
+                                path=path,
+                                parent_entry=loc,
+                                parent=loc.parent)
+                    loc = entry
+        return loc
 
     def __contains__(self, name):
         return name in self.object
@@ -216,6 +244,10 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
 
     def __bool__(self):
         return bool(self.object)
+    
+    @property
+    def path(self):
+        return self.__path
 
 class _GitEntryCommit(_GitEntry[ot.GitCommit], GitEntryCommit):
     @property

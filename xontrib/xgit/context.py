@@ -17,7 +17,7 @@ from textwrap import shorten
 from typing import (
     MutableMapping, Optional, Sequence, TypeAlias, cast, overload
 )
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 import shutil
 from subprocess import run, Popen, PIPE
@@ -466,14 +466,14 @@ class _GitContext(GitContext):
     def repository(self) -> GitRepository:
         return self.worktree.repository
 
-    __path: Path = Path(".")
+    __path: PurePosixPath = PurePosixPath(".")
     @property
-    def path(self) -> Path:
+    def path(self) -> PurePosixPath:
         return self.__path
 
     @path.setter
-    def path(self, value: Path|str):
-        self.__path = Path(value)
+    def path(self, value: PurePosixPath|str):
+        self.__path = PurePosixPath(value)
 
     __branch: 'rt.GitRef|None' = None
     @property
@@ -529,12 +529,12 @@ class _GitContext(GitContext):
         name, entry = _git_entry(tree, "", "040000", "tree", "-",
                                  repository=self.worktree.repository,
                                  parent=self.commit,
-                                 path=Path("."))
+                                 path=PurePosixPath("."))
         return entry
 
     def __init__(self, *args,
                  worktree: GitWorktree,
-                 path: Path = Path("."),
+                 path: PurePosixPath = PurePosixPath("."),
                  branch: 'str|rt.GitRef|None' = DEFAULT_BRANCH,
                  commit: str|GitCommit = DEFAULT_BRANCH,
                  **kwargs):
@@ -553,8 +553,8 @@ class _GitContext(GitContext):
             case rt.GitRef():
                 self.branch = cast('rt.GitRef', branch)
 
-    def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
-        subpath = Path(subpath) if subpath else None
+    def reference(self, subpath: Optional[PurePosixPath | str] = None) -> ContextKey:
+        subpath = PurePosixPath(subpath) if subpath else None
         key = self.worktree.path
         commit = self.commit
         hash = '''
@@ -578,7 +578,7 @@ class _GitContext(GitContext):
         self,
         /,
         worktree: Optional[GitWorktree] = None,
-        path: Optional[Path] = None,
+        path: Optional[PurePosixPath] = None,
         branch: Optional['str|rt.GitRef'] = None,
         commit: Optional[str|GitCommit] = None,
     ) -> "_GitContext":
@@ -728,7 +728,7 @@ def _git_context():
                 )
                 repository.worktrees[worktree_path] = worktree
 
-            path = Path.cwd().relative_to(worktree_path)
+            path = PurePosixPath(Path.cwd().relative_to(worktree_path))
             branch = repository.git("symbolic-ref", '--quiet', 'HEAD', check=False)
             if branch and '/' not in branch:
                 raise ValueError(f"Invalid branch name from symbolic-ref: {branch!r}")
@@ -819,7 +819,7 @@ def _git_context():
                 worktree = XGIT_WORKTREES[worktree_path]
                 xgit = _GitContext(
                     worktree=worktree,
-                    path=Path("."),
+                    path=PurePosixPath("."),
                     commit=_git_object(commit, worktree.repository, 'commit'),
                     branch=branch,
                 )
@@ -845,7 +845,7 @@ def _git_context():
                 XGIT_WORKTREES[worktree_path] = worktree
                 xgit = _GitContext(
                     worktree=worktree,
-                    path=Path("."),
+                    path=PurePosixPath("."),
                     commit=_git_object(commit, repository, 'commit'),
                     branch=branch,
                 )

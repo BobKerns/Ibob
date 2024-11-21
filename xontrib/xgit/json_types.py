@@ -118,7 +118,7 @@ class JsonDescriber(Protocol):
     references: dict[int, CircularRefJson]
     "Allows sharing of references within and between objects."
     max_depth: int = 100
-    special_types: dict[type,JsonHandler[JsonKV]]
+    special_types: dict[type,'JsonHandler[JsonKV]']
     from_override_types: dict[type,FromJsonOverride]
     to_override_types: dict[type,ToJsonOverride]
     class_map: dict[str,type]

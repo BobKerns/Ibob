@@ -4,7 +4,7 @@ aliases. See type_aliases_310.py for the same type aliases defined using
 `TypeAlias` from `typing`.
 '''
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, TypeVar
 
 type CleanupAction = Callable[[], None]
@@ -19,7 +19,7 @@ A git hash. Defined as a string to make the code more self-documenting.
 Also allows using `GitHash` as a type hint that drives completion.
 '''
 
-type ContextKey = tuple[Path, Path, str|None, GitHash]
+type ContextKey = tuple[Path, PurePosixPath, str|None, GitHash]
 """
 A key for uniquely identifying a `GitContext`
 """
@@ -49,7 +49,7 @@ type GitObjectType = Literal["blob", "tree", "commit", "tag"]
 Valid types for a git object.
 """
 
-type GitEntryKey = tuple[Path, Path|None, str, str, str|None]
+type GitEntryKey = tuple[Path, PurePosixPath|None, str, str, str|None]
 
 type GitObjectReference = tuple[Path, str | None]
 """

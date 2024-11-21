@@ -15,8 +15,8 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 from abc import abstractmethod
-from typing import Protocol, Optional, TypeVar, Generic, TypeAlias
-from pathlib import Path
+from typing import Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable
+from pathlib import PurePosixPath
 
 from xontrib.xgit.types import GitEntryMode, GitObjectType, GitHash
 import xontrib.xgit.object_types_base as otb
@@ -27,6 +27,7 @@ O = TypeVar('O', bound=EntryObject, covariant=True)
 
 ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
 
+@runtime_checkable
 class GitEntry(Generic[O], otb.GitObject, Protocol):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
@@ -70,11 +71,13 @@ class GitEntry(Generic[O], otb.GitObject, Protocol):
     def parent(self) -> Optional['GitEntryTree']: ...
     @property
     @abstractmethod
-    def path(self) -> Path: ...
+    def path(self) -> PurePosixPath: ...
 
 
 import xontrib.xgit.object_types as ot
-class GitEntryTree(GitEntry, ot.GitTree):
+@runtime_checkable
+class GitEntryTree(GitEntry, Protocol):
+    __path: Optional[PurePosixPath] = None
     @abstractmethod
     def __getitem__(self, key: str) -> 'GitEntry': ...
 

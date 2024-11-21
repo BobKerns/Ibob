@@ -15,7 +15,7 @@ classes are complex. It is very easy to end up with circular imports.
 
 from abc import abstractmethod
 from io import IOBase
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterator, Protocol, Sequence, overload, runtime_checkable, Optional
 
 from xontrib.xgit.types import ContextKey
@@ -127,10 +127,10 @@ class GitContext(Jsonable, Protocol):
     def repository(self) -> GitRepository: ...
     @property
     @abstractmethod
-    def path(self) -> Path: ...
+    def path(self) -> PurePosixPath: ...
     @path.setter
     @abstractmethod
-    def path(self, value: Path|str): ...
+    def path(self, value: PurePosixPath|str): ...
     @property
     @abstractmethod
     def branch(self) -> 'rt.GitRef': ...
@@ -158,7 +158,7 @@ class GitContext(Jsonable, Protocol):
         /,
         worktree: Optional[Path] = None,
         repository: Optional[Path] = None,
-        git_path: Optional[Path] = None,
+        git_path: Optional[PurePosixPath] = None,
         branch: Optional[str] = None,
         commit: Optional[str] = None,
     ) -> "GitContext":

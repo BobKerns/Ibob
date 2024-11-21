@@ -8,7 +8,6 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 from typing import (
     Generic, Protocol, TypeVar,
 )
-from pathlib import Path
 
 try:
     from xontrib.xgit.type_aliases import (
