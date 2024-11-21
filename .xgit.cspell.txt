@@ -26,6 +26,7 @@ execer
 extracontext
 filtfunc
 frozendict
+fspath
 gctx
 Gitter
 gpgsig
@@ -51,6 +52,7 @@ olddir
 ovalue
 ovar
 parms
+pipx
 postcommand
 postdisplay
 postfilter
@@ -59,6 +61,7 @@ predisplay
 prefilter
 procs
 proxied
+pycache
 PYPI
 pyproject
 pyreadline3
@@ -70,6 +73,7 @@ refactoring
 refactorings
 remodularization
 remodularizations
+sdist
 setenv
 sorteddict
 subcmd
@@ -94,3 +98,4 @@ xontext
 xontrib
 xontribs
 xpip
+zipf

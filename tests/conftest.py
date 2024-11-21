@@ -1,8 +1,7 @@
-from calendar import c
-from contextlib import contextmanager, suppress
+
+from contextlib import contextmanager
 from inspect import currentframe, stack
 from pathlib import Path
-from readline import add_history
 from threading import RLock
 from types import ModuleType as Module
 import pytest
@@ -12,6 +11,8 @@ import sys
 import os
 
 from xonsh.built_ins import XonshSession
+
+DATA_DIR = Path(__file__).parent / 'data'
 
 def run_stdout(args, **kwargs):
     from subprocess import run, PIPE
@@ -279,50 +280,37 @@ def git():
 
 repository_lock = RLock()
 @pytest.fixture()
-def repository(with_xgit, git, chdir):
+def repository(with_xgit, git, chdir, tmp_path):
     '''
     Fixture to create a test repository.
     '''
-    from tempfile import mkdtemp
+    from tests.zip_repo import unzip_repo
     from secrets import token_hex
     from shutil import rmtree
+    
     with repository_lock:
-        tmpname = mkdtemp()
+        token = token_hex(16)
+        from_zip = DATA_DIR / 'test_repo.zip'
         old = Path.cwd()
-        chdir(tmpname)
-        tmp = Path.cwd()
+        old_home = os.environ.get('HOME') or str(Path.home())
+        home = tmp_path
+        gitconfig = home / '.gitconfig'
+        worktree = home / token
+        to_git = worktree / '.git'
+        worktree.mkdir(parents=False, exist_ok=False)
+        unzip_repo(from_zip, to_git)
+        os.environ['HOME'] = str(home)
+        with gitconfig.open('w') as f:
+            f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
+        chdir(worktree)
         def _t(*_, _GitRepository, **__):
-                parent = Path(tmp)
-                token = token_hex(16)
-                config = parent / f'.gitconfig-{token}'
-                with config.open('w') as f:
-                    f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
-                repo = parent / f'test-{token}'
-                file= repo / 'test.txt'
-                git('init', repo.name, cwd=parent)
-                git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
-                git('config', 'user.name', 'Fake Name', cwd=repo)
-                file.touch()
-                git('add', 'test.txt', cwd=repo)
-                git('commit', '-m', 'Initial commit', cwd=repo)
-                chdir(repo)
-                old = os.environ.get('GIT_CONFIG_GLOBAL')
-                os.environ['GIT_CONFIG_GLOBAL'] = str(config)
-                yield _GitRepository(path=repo / '.git')
-                if old is None:
-                    del os.environ['GIT_CONFIG_GLOBAL']
-                else:
-                    os.environ['GIT_CONFIG_GLOBAL'] = old
+            yield _GitRepository(path=to_git)
         yield from with_xgit(_t, 'xontrib.xgit.context')
         chdir(old)
+        os.environ['HOME'] = old_home
         # Clean up, or try to: Windows is a pain
-        with suppress(OSError):
-            rmtree(tmp)
-        try:
-            Path(tmpname).rmdir()
-        except OSError:
-            with suppress(OSError):
-                Path(tmpname).unlink()
+        #with suppress(OSError):
+        #    rmtree(tmp_path)
 
 @pytest.fixture()
 def worktree(with_xgit, git, repository, chdir):
@@ -332,9 +320,11 @@ def worktree(with_xgit, git, repository, chdir):
     def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
         commit = git('rev-parse', 'HEAD', cwd=repository.path)
         branch = git('symbolic-ref', 'HEAD', cwd=repository.path, check=False)
-        chdir(repository.path.parent)
+        worktree = repository.path.parent
+        chdir(worktree)
+        git('reset', '--hard', 'HEAD', cwd=worktree)
         yield _GitWorktree(repository=repository,
-                           path=repository.path.parent,
+                           path=worktree,
                            repository_path=repository.path,
                            branch=_GitRef(branch, repository=repository),
                            commit=_GitCommit(commit, repository=repository),
