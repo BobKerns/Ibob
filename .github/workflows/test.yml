@@ -7,7 +7,7 @@ on:
 jobs:
   testing:
     # reuse workflow definitions
-    uses: ./.github/actions/test-poetry-xontrib.yml
+    uses: ./.github/actions/test-poetry-xontrib.yml@main
     with:
         xontrib_name: xgit
         lfs: true
