@@ -2,14 +2,10 @@
 The xgit ls command.
 '''
 from pathlib import Path, PurePosixPath
-from tkinter import Entry
-from typing import cast
-
-from xonsh.tools import chdir
 
 from xontrib.xgit.vars import XGIT
 from xontrib.xgit.decorators import command, xgit
-from xontrib.xgit.objects import _git_entry, _git_object
+from xontrib.xgit.objects import _git_entry
 from xontrib.xgit.object_types import GitObject
 from xontrib.xgit.entry_types import GitEntry, GitEntryTree, EntryObject
 from xontrib.xgit.view import View
@@ -34,7 +30,7 @@ def git_ls(path: Path | str = Path('.'), /, *, table: bool=False) -> GitEntry[En
     def do_ls(path: PurePosixPath) -> GitEntry[EntryObject]:
         tree = worktree.git("log", "--format=%T", "-n", "1", "HEAD")
         parent_rev = worktree.git("rev-parse", "HEAD")
-        parent: GitObject  = _git_object(parent_rev, repository, 'commit')
+        parent: GitObject  = repository.get_object(parent_rev, 'commit')
         entry: GitEntry[EntryObject]
         _, entry = _git_entry(tree, '.', "040000", "tree", "-",
                         repository=repository,
@@ -52,5 +48,3 @@ def git_ls(path: Path | str = Path('.'), /, *, table: bool=False) -> GitEntry[En
     if table:
         val = TableView(val)
     return val
-
-

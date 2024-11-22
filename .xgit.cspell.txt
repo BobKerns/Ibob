@@ -1,9 +1,11 @@
 argcnt
 argname
 autoimport
+autolock
 autoupdate
 autouse
 blist
+Blobish
 bobkerns
 bset
 bstring
@@ -11,6 +13,7 @@ Canonicalizes
 capsys
 chdir
 cmds
+Commitish
 contextlib
 decscriptor
 deinit
@@ -47,6 +50,7 @@ newdir
 newpath
 noendl
 nparent
+Objectish
 objtype
 olddir
 ovalue
@@ -82,8 +86,10 @@ sublists
 subproc
 subviews
 sysdisplayhook
+Tagish
 tmpname
 tomlkit
+Treeish
 typecheck
 typeshed
 unloadable
@@ -91,6 +97,7 @@ unrooted
 worktree
 Worktree
 worktrees
+wtree
 xgit
 XGIT
 xonfig

@@ -14,14 +14,13 @@ In addition, it extends the displayhook to provide the following variables:
 """
 
 from contextlib import suppress
-from pathlib import Path
-from typing import MutableMapping, Any, cast
+from pathlib import Path, PurePosixPath
+from typing import MutableMapping, Any
 from collections.abc import Callable
 import sys
 
 from xonsh.built_ins import XonshSession
 from xonsh.events import events
-from xonsh.tools import chdir
 from xonsh.execer import Execer
 
 from xontrib.xgit.decorators import (
@@ -61,13 +60,13 @@ def update_git_context(olddir, newdir):
     newpath = Path(newdir)
     if XGIT.worktree == newpath:
         # Going back to the worktree root
-        XGIT.path = Path(".")
+        XGIT.path = PurePosixPath(".")
     if XGIT.worktree.path not in newpath.parents:
         # Not in the current worktree, so recompute the context.
         target(XGIT, _git_context())
     else:
         # Fast move within the same worktree.
-        XGIT.path = Path(newdir).resolve().relative_to(XGIT.worktree.path)
+        XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
 
 # Export the functions and values we want to make available.
 

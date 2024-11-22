@@ -14,6 +14,12 @@ import xontrib.xgit.ref_types as rt
 from xontrib.xgit.objects import _git_object
 
 SYMBOLIC_REFS = frozenset(('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'))
+'''
+These are not the only symbolic refs, but they are the most common.
+
+They can refer to a ref (typically a branch or tag), or commit.
+'''
+
 class _GitRef(rt.GitRef):
     '''
     Any ref, usually a branch or tag, usually pointing to a commit.
@@ -200,4 +206,21 @@ class _Replacement(rt.Replacement, _GitRef):
         '''
         The Sha1 hash of the object being replaced.
         '''
-        return super().replacement_name()[13:]
+        return super().name[13:]
+
+class _Note(rt.Note, _GitRef):
+    __attached_to: Optional['ot.GitObject']
+    @property
+    def note_name(self) -> str:
+        return self.name[10:]
+
+    @property
+    def target(self) -> 'ot.GitObject':
+        if self.__attached_to is None:
+            target_hash = self.note_name
+            self.__attached_to = _git_object(target_hash, self.repository)
+        return self.__attached_to
+
+    @property
+    def text(self) -> str:
+        return self.name[10:]

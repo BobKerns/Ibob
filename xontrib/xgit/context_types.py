@@ -14,36 +14,22 @@ classes are complex. It is very easy to end up with circular imports.
 '''
 
 from abc import abstractmethod
-from io import IOBase
+from ast import TypeAlias
 from pathlib import Path, PurePosixPath
-from typing import Iterator, Protocol, Sequence, overload, runtime_checkable, Optional
+from typing import (
+    Literal, Protocol, overload, runtime_checkable, Optional, TypeAlias, TYPE_CHECKING
+)
 
-from xontrib.xgit.types import ContextKey
+from xontrib.xgit.types import ContextKey, GitObjectType
 from xontrib.xgit.json_types import Jsonable
+from xontrib.xgit.git_cmd import GitCmd
 import xontrib.xgit.object_types as ot
-import xontrib.xgit.entry_types as et
 import xontrib.xgit.ref_types as rt
+if TYPE_CHECKING:
+    from xontrib.xgit.context_types import GitWorktree
 
-@runtime_checkable
-class GitCmd(Protocol):
-    '''
-    Context for git commands.
-    '''
-    @abstractmethod
-    def git(self, *args, **kwargs) -> str: ...
-    @abstractmethod
-    def git_lines(self, *args, **kwargs) -> list[str]: ...
-    @abstractmethod
-    def git_stream(self, *args, **kwargs) -> Iterator[str]: ...
-    @abstractmethod
-    def git_binary(self, *args, **kwargs) -> IOBase: ...
 
-    @overload
-    def rev_parse(self, params: str, /) -> str: ...
-    @overload
-    def rev_parse(self,param: str, *_params: str) -> Sequence[str]: ...
-    @abstractmethod
-    def rev_parse(self, param: str, *params: str) -> Sequence[str] | str: ...
+WorktreeMap: TypeAlias = dict[Path, 'GitWorktree']
 
 
 @runtime_checkable
@@ -71,13 +57,41 @@ class GitRepository(Jsonable, GitCmd, Protocol):
         '''
         ...
 
+    @abstractmethod
     def get_worktree(self, key: Path|str) -> 'GitWorktree|None':
         '''
         Get a worktree by its path. Canonicalizes the path first,
         making this the preferred way to get a worktree.
         '''
 
+    @abstractmethod
+    def get_reference(self, ref: 'rt.RefSpec|None' =None) -> 'rt.GitRef|None':
+        '''
+        Get a reference by name.
+        '''
 
+    @overload
+    def get_object(self, hash: 'ot.Commitish', type: Literal['commit']) -> 'ot.GitCommit':
+        ...
+    @overload
+    def get_object(self, hash: 'ot.Treeish', type: Literal['tree']) -> 'ot.GitTree':
+        ...
+    @overload
+    def get_object(self, hash: 'ot.Blobish', type: Literal['blob'],
+                   size: int=-1) -> 'ot.GitBlob':
+        ...
+    @overload
+    def get_object(self, hash: 'ot.Tagish', type: Literal['tag']) -> 'ot.GitTagObject':
+        ...
+    @overload
+    def get_object(self, hash: 'ot.Objectish',
+                   type: Optional[GitObjectType]=None,
+                   size: int=-1) -> 'ot.GitObject':
+        ...
+    def get_object(self, hash: 'ot.Objectish',
+                   type: Optional[GitObjectType]=None,
+                   size: int=-1) -> 'ot.GitObject':
+        ...
 
 @runtime_checkable
 class GitWorktree(Jsonable, GitCmd, Protocol):
@@ -147,8 +161,8 @@ class GitContext(Jsonable, Protocol):
     @abstractmethod
     def cwd(self) -> Path: ...
 
-    @property
-    def root(self) -> 'et.GitEntryTree': ...
+    #@property
+    #def root(self) -> 'et.GitEntryTree': ...
 
     def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
         ...

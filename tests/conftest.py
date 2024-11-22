@@ -2,7 +2,7 @@
 from contextlib import contextmanager
 from inspect import currentframe, stack
 from pathlib import Path
-from threading import RLock
+from threading import RLock, Lock
 from types import ModuleType as Module
 import pytest
 from importlib import import_module
@@ -313,9 +313,9 @@ def repository(with_xgit,
             f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
         chdir(worktree)
         def _t(*_, _GitRepository, **__) -> Generator[GitRepository, None, None]:
-            from xontrib.xgit.context import _GitRepository
+            from xontrib.xgit.repository import _GitRepository
             yield _GitRepository(path=to_git)
-        yield from with_xgit(_t, 'xontrib.xgit.context')
+        yield from with_xgit(_t, 'xontrib.xgit.repository')
         chdir(old)
         os.environ['HOME'] = old_home
         # Clean up, or try to: Windows is a pain
@@ -333,7 +333,7 @@ def worktree(
     Fixture to create a test worktree.
     '''
     def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
-        from xontrib.xgit.context import _GitWorktree
+        from xontrib.xgit.worktree import _GitWorktree
         from xontrib.xgit.ref import _GitRef
         from xontrib.xgit.objects import _GitCommit
         commit = git('rev-parse', 'HEAD', cwd=repository.path)
@@ -347,7 +347,7 @@ def worktree(
                            branch=_GitRef(branch, repository=repository),
                            commit=_GitCommit(commit, repository=repository),
                            )
-    yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
+    yield from with_xgit(_t, 'xontrib.xgit.worktree', 'xontrib.xgit.ref', 'xontrib.xgit.objects')
 
 @pytest.fixture()
 def cmd_args(modules):
@@ -374,3 +374,12 @@ def cmd_args(modules):
                 return apply
             return wrap_and_apply
         return _cmd_args
+
+_autolock: Lock = Lock()
+@pytest.fixture(autouse=True)
+def autolock(xonsh_session):
+    '''
+    Fixture to create a lock that unlocks automatically.
+    '''
+    with _autolock:
+        yield True

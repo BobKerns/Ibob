@@ -2,9 +2,18 @@
 Types for xgit references.
 '''
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypeAlias, runtime_checkable, Sequence
+from pathlib import PurePosixPath
+
 import xontrib.xgit.object_types_base as otb
 import xontrib.xgit.context_types as ct
+
+
+
+RefSpec: TypeAlias = 'PurePosixPath|str|Sequence[RefSpec]|GitRef'
+'''
+Ways to specify a ref. A sequence is searched for the first valid ref.
+'''
 
 @runtime_checkable
 class GitRef(Protocol):
@@ -65,14 +74,41 @@ class Replacement(GitRef, Protocol):
     Their name will be the hash of the object they replace, and their target
     is the replacement object
     """
+    @property
     @abstractmethod
     def replacement_name(self) -> str:
         "The Sha1 hash of the object being replaced."
 
+    @property
     @abstractmethod
     def replaced_object(self) -> 'otb.GitObject':
         "The object being replaced."
 
+    @property
     @abstractmethod
     def replacement_object(self) -> 'otb.GitObject':
         "The object that replaces the replaced object."
+
+@runtime_checkable
+class Note(GitRef, Protocol):
+    '''
+    A note ref. These are refs that live in the refs/notes namespace.
+    '''
+    @property
+    @abstractmethod
+    def note_name(self) -> str:
+        '''
+        The name of the note, without the refs/notes prefix
+        '''
+    @property
+    @abstractmethod
+    def note_target(self) -> 'otb.GitObject':
+        '''
+        The object the note is attached to.
+        '''
+    @property
+    @abstractmethod
+    def text(self) -> str:
+        '''
+        The text of the note.
+        '''

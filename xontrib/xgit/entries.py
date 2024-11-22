@@ -14,10 +14,8 @@ The objects which can occur in Git trees are
 BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
-import re
-from sys import deactivate_stack_trampoline
 from types import MappingProxyType
-from typing import Optional, cast, Mapping, Iterator
+from typing import Optional, TypeAlias, cast, Mapping, Iterator
 from pathlib import PurePosixPath
 
 
@@ -25,13 +23,16 @@ from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.context_types import GitRepository
 import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
-    GitEntryMode, GitHash, _NO_VALUE
+    GitEntryMode, GitHash,
 )
 from xontrib.xgit.entry_types import (
-    GitEntry, O, ParentObject, EntryObject,
+    GitEntry, ParentObject, O,
     GitEntryBlob, GitEntryTree, GitEntryCommit,
 )
 import xontrib.xgit.object_types as ot
+
+
+EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
 
 class _GitEntry(GitEntry[O]):
     """
@@ -210,7 +211,7 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
                     if loc.type != "tree":
                         return default
                     loc = cast(GitEntryTree, loc)
-                        
+
                     obj = loc.object[part]
                     path = path / part
                     _, entry = xo._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
@@ -244,7 +245,7 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
 
     def __bool__(self):
         return bool(self.object)
-    
+
     @property
     def path(self):
         return self.__path

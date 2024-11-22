@@ -15,17 +15,25 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 from abc import abstractmethod
-from typing import Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable
+from typing import (
+    Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable,
+    TYPE_CHECKING
+)
 from pathlib import PurePosixPath
 
 from xontrib.xgit.types import GitEntryMode, GitObjectType, GitHash
 import xontrib.xgit.object_types_base as otb
 import xontrib.xgit.context_types as ct
 
-EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
-O = TypeVar('O', bound=EntryObject, covariant=True)
-
-ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
+if TYPE_CHECKING:
+    ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
+    EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
+    O = TypeVar('O', bound='EntryObject', covariant=True)
+else:
+    import xontrib.xgit.object_types as ot
+    ParentObject = None
+    EntryObject = None
+    O = TypeVar('O', covariant=True)
 
 @runtime_checkable
 class GitEntry(Generic[O], otb.GitObject, Protocol):
@@ -74,13 +82,13 @@ class GitEntry(Generic[O], otb.GitObject, Protocol):
     def path(self) -> PurePosixPath: ...
 
 
-import xontrib.xgit.object_types as ot
 @runtime_checkable
 class GitEntryTree(GitEntry, Protocol):
     __path: Optional[PurePosixPath] = None
     @abstractmethod
     def __getitem__(self, key: str) -> 'GitEntry': ...
 
+import xontrib.xgit.object_types as ot
 class GitEntryBlob(GitEntry, ot.GitBlob):
     ...
 

@@ -23,11 +23,35 @@ from xontrib.xgit.types import (
 import xontrib.xgit.person as xp
 
 from xontrib.xgit.object_types_base import GitObject
+import xontrib.xgit.object_types as ot
+from xontrib.xgit.view import T
+import xontrib.xgit.ref_types as rt
 
 
 EntryObject: TypeAlias = 'GitTree | GitBlob | GitCommit'
 '''
 A type alias for the types of objects that can be found in a git tree.
+'''
+
+Commitish: TypeAlias = 'str|ot.GitCommit|ot.GitTagObject|rt.GitRef'
+'''
+A type alias for the types of objects that can be used to identify a commit.
+'''
+Treeish: TypeAlias = 'str|ot.GitCommit|ot.GitTree|ot.GitTagObject|rt.GitRef'
+'''
+A type alias for the types of objects that can be used to identify a tree.
+'''
+Tagish: TypeAlias = 'str|ot.GitTagObject|rt.GitRef'
+'''
+A type alias for the types of objects that can be used to identify a tag.
+'''
+Blobish: TypeAlias = 'str|ot.GitBlob|rt.GitRef'
+'''
+A type alias for the types of objects that can be used to identify a blob.
+'''
+Objectish: TypeAlias = 'str|ot.GitObject|rt.GitRef'
+'''
+A type alias for the types of objects that can be used to identify any object.
 '''
 
 @runtime_checkable
