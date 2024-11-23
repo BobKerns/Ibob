@@ -4,14 +4,13 @@ The xgit-cd command.
 from pathlib import Path, PurePosixPath
 import sys
 
-from xontrib.xgit.vars import XSH, XGIT
 from xontrib.xgit.decorators import command, xgit
 
 @command(
     export=True,
     prefix=(xgit, 'cd'),
 )
-def git_cd(path: str = "", stderr=sys.stderr) -> None:
+def git_cd(path: str = "", *, XSH, XGIT, stderr=sys.stderr) -> None:
     """
     Change the current working directory to the path provided.
     If no path is provided, change the current working directory

@@ -15,7 +15,7 @@ In addition, it extends the displayhook to provide the following variables:
 
 from contextlib import suppress
 from pathlib import Path, PurePosixPath
-from typing import MutableMapping, Any
+from typing import MutableMapping, Any, cast
 from collections.abc import Callable
 import sys
 
@@ -28,46 +28,20 @@ from xontrib.xgit.decorators import (
     _export,
     _unload_actions,
     _do_unload_actions,
+    _do_load_actions,
     _aliases,
-)
-from xontrib.xgit.context import (
-    _git_context,
+    session,
 )
 from xontrib.xgit.display import (
     _xgit_on_predisplay,
     _xgit_on_postdisplay,
     _on_precommand,
 )
-from xontrib.xgit.vars import (
-    XGIT,
-    xgit_version,
-)
 from xontrib.xgit.display import (
     _xonsh_displayhook,
     _xgit_displayhook,
 )
-from xontrib.xgit.proxy import target, ProxyMetadata
-
-@events.on_chdir
-def update_git_context(olddir, newdir):
-    """
-    Update the git context when changing directories.
-    """
-    if not XGIT:
-        # Not set at all so start from scratch
-        target(XGIT, _git_context())
-        return
-    newpath = Path(newdir)
-    if XGIT.worktree == newpath:
-        # Going back to the worktree root
-        XGIT.path = PurePosixPath(".")
-    if XGIT.worktree.path not in newpath.parents:
-        # Not in the current worktree, so recompute the context.
-        target(XGIT, _git_context())
-    else:
-        # Fast move within the same worktree.
-        XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
-
+import xontrib.xgit.context as ct
 # Export the functions and values we want to make available.
 
 _export(None, "+")
@@ -78,6 +52,17 @@ _export(None, "__")
 _export(None, "___")
 _export("_xgit_counter")
 
+_xgit_version: str = ""
+def xgit_version():
+    """
+    Return the version of xgit.
+    """
+    global _xgit_version
+    if _xgit_version:
+        return _xgit_version
+    from importlib.metadata import version
+    _xgit_version = version("xontrib-xgit")
+    return _xgit_version
 
 def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
@@ -92,11 +77,12 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     Returns:
         dict: this will get loaded into the current execution context
     """
-    from xontrib import xgit
-    ProxyMetadata.load()
+    from xontrib.xgit.context import _GitContext
+    _do_load_actions(xsh)
     env =  xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
+    env['XGIT'] = ct._GitContext(xsh)
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
     def set_unload(
         ns: MutableMapping[str, Any],
@@ -119,6 +105,33 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
             _unload_actions.append(del_item)
 
+
+    @events.on_chdir
+    @session()
+    def update_git_context(olddir, newdir):
+        """
+        Update the git context when changing directories.
+        """
+        assert xsh.env is not None, "XSH.env is None"
+        XGIT = xsh.env.get("XGIT")
+        XGIT = cast(_GitContext, XGIT)
+        if not XGIT:
+            # Not set at all so start from scratch
+            xsh.env['XGIT'] = ct._GitContext(xsh)
+            return
+        newpath = Path(newdir)
+
+        if XGIT.worktree.path == newpath:
+            # Going back to the worktree root
+            XGIT.path = PurePosixPath(".")
+        if XGIT.worktree.path not in newpath.parents:
+            # Not in the current worktree, so recompute the context.
+            XGIT.open_worktree(newpath)
+        else:
+            # Fast move within the same worktree.
+            XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
+
+
     for name, value in _exports.items():
         set_unload(xsh.ctx, name, value)
     for name, value in _aliases.items():
@@ -136,9 +149,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     assert isinstance(ctx, MutableMapping),\
         f"XSH.ctx is not a MutableMapping: {ctx!r}"
 
-    # Set the initial context on loading.
-    target(XGIT, None)
-    #_export("XGIT")
+    # Set the context on loading.
+    env['XGIT'] = ct._GitContext(xsh)
     if "_XGIT_RETURN" in xsh.ctx:
         del env["_XGIT_RETURN"]
 
@@ -165,7 +177,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Loaded xontrib-xgit", file=sys.stderr)
-    target(XGIT, _git_context())
     return _exports
 
 
@@ -193,7 +204,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
             pass
 
     remove("on_precommand", _on_precommand)
-    remove("on_chdir", update_git_context)
     remove("xgit_on_predisplay", _xgit_on_predisplay)
     remove("xgit_on_postdisplay", _xgit_on_postdisplay)
     env = xsh.env
@@ -210,7 +220,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
         del sys.modules[m]
-    ProxyMetadata.unload()
     return dict()
 
 if __name__ == "__main__" and False:

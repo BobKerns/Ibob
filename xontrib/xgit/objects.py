@@ -11,6 +11,8 @@ These are the four types that live in a git object database:
     but are used to tag commits. (Unsigned tags are just references.)
 '''
 
+from multiprocessing import parent_process
+from tkinter import Entry
 from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
     Callable, overload, Iterable, Iterator, Mapping,
@@ -33,23 +35,20 @@ from xontrib.xgit.types import (
     InitFn,
     _NO_VALUE,
 )
-from xontrib.xgit.object_types_base import GitId, GitObject
 from xontrib.xgit.object_types import (
+    GitId,
     GitCommit,
     GitObject,
     GitTree,
     GitBlob,
     GitTagObject,
+    Objectish,
 )
 from xontrib.xgit.context_types import GitCmd, GitContext, GitRepository
 from xontrib.xgit.entry_types import (
     O, ParentObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
 )
 import xontrib.xgit.entries as xe
-# Avoid a circular import dependency by not looking
-# at the vars module until it is loaded.
-from xontrib.xgit.proxy import target
-from xontrib.xgit import vars as xv
 
 GitContextFn: TypeAlias = Callable[[], GitContext]
 
@@ -130,212 +129,6 @@ class _GitObject(_GitId, GitObject):
 
     def _repr_pretty_(self, p, cycle):
         p.text(f"{type(self).__name__.strip('_')}({self.hash})")
-xv.__dict__['_GitObject'] = _GitObject
-
-def _parse_git_entry(
-    line: str,
-    repository: GitRepository,
-    parent_hash: GitHash | None = None
-) -> tuple[str, GitEntry]:
-    """
-    Parse a line from `git ls-tree --long` and return a `GitObject`.
-    """
-    mode, type, hash, size, name = line.split()
-    mode = cast(GitEntryMode, mode)
-    type = cast(GitObjectType, type)
-    parent = _git_object(parent_hash, repository) if parent_hash is not None else None
-    return _git_entry(hash, name, mode, type, size, repository, parent)
-
-def default_context() -> GitContext:
-    return cast(GitContext, target(xv.XGIT))
-
-@overload
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: Literal['tree'],
-                ) -> GitTree: ...
-
-@overload
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: Literal['blob'],
-                size: int=-1,
-                ) -> GitBlob: ...
-
-@overload
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: Literal['commit'],
-                ) -> GitCommit: ...
-
-@overload
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: Literal['tag'],
-                ) -> GitTagObject: ...
-
-@overload
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: GitObjectType|None=None,
-                size: int|str=-1
-                ) -> GitObject: ...
-
-# Implementation
-def _git_object(hash: str,
-                repository: GitRepository,
-                type: Optional[GitObjectType]=None,
-                size: int|str=-1,
-                ) -> GitObject:
-    obj = xv.XGIT_OBJECTS.get(hash)
-    if obj is not None:
-        return obj
-    if type is None:
-        type = cast(GitObjectType, repository.git("cat-file", "-t", hash))
-        
-    match type:
-        case "tree":
-            obj = _GitTree(hash, repository=repository)
-        case "blob":
-            obj = _GitBlob(hash, int(size), repository=repository)
-        case "commit":
-            obj = _GitCommit(hash, repository=repository)
-        case "tag":
-            obj = _GitTagObject(hash, repository=repository)
-        case _:
-            raise ValueError(f"Unknown type {type}")
-    xv.XGIT_OBJECTS[hash] = obj
-    return obj
-
-@overload
-def _git_entry(
-    hash_or_obj: GitHash|GitCommit,
-    name: str,
-    mode: GitEntryMode,
-    type: Literal['commit'],
-    size: str|int,
-    repository: GitRepository,
-    parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[PurePosixPath] = None,
-) -> tuple[str, GitEntryCommit]: ...
-
-@overload
-def _git_entry(
-    hash_or_obj: GitHash|GitBlob,
-    name: str,
-    mode: GitEntryMode,
-    type: Literal['blob'],
-    size: str|int,
-    repository: GitRepository,
-    parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[PurePosixPath] = None,
-) -> tuple[str, GitEntryBlob]: ...
-
-@overload
-def _git_entry(
-    hash_or_obj: GitHash|GitTree,
-    name: str,
-    mode: GitEntryMode,
-    type: Literal['tree'],
-    size: str|int,
-    repository: GitRepository,
-    parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[PurePosixPath] = None,
-) -> tuple[str, GitEntryTree]: ...
-@overload
-
-def _git_entry(
-    hash_or_obj: GitHash|O,
-    name: str,
-    mode: GitEntryMode,
-    type: GitObjectType,
-    size: str|int,
-    repository: GitRepository,
-    parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[PurePosixPath] = None,
-) -> tuple[str, GitEntry[O]]: ...
-
-# Implementation
-def _git_entry(
-    hash_or_obj: GitHash|O,
-    name: str,
-    mode: GitEntryMode,
-    type: GitObjectType,
-    size: str|int,
-    repository: GitRepository,
-    parent: Optional[GitObject] = None,
-    parent_entry: Optional[GitEntryTree] = None,
-    path: Optional[PurePosixPath] = None,
-) -> tuple[str, GitEntry[O]]:
-    """
-    Obtain or create a `GitObject` from a parsed entry line or equivalent.
-    """
-    assert isinstance(XSH.env, MutableMapping),\
-        f"XSH.env not a MutableMapping: {XSH.env!r}"
-    parent_hash = parent.hash if parent is not None else ''
-    
-    match hash_or_obj:
-        case str():
-            hash = hash_or_obj
-            obj = _git_object(hash, repository, type, size=size)
-        case GitObject():
-            obj = hash_or_obj
-            hash = obj.hash
-        case _:
-            raise ValueError(f"Invalid hash or object: {hash_or_obj}")
-        
-    key: GitEntryKey = (
-           repository.path,
-           path,
-           hash,
-           mode,
-           parent_hash,)
-    
-    entry = xv.XGIT_ENTRIES.get(key)
-    
-    if entry is not None:
-        return name, entry
-    
-    if XSH.env.get("XGIT_TRACE_OBJECTS"):
-        args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {repository.path=}, {parent=}"
-        msg = f"git_entry({args})"
-        print(msg)
-    if path is not None:
-        this_path = path / name
-    else:
-        this_path = None
-    match type:
-        case 'tree':
-            entry = xe._GitEntryTree(cast(GitTree, obj), name, mode,
-                        repository=repository,
-                        path=this_path,
-                        parent=parent_entry,
-                        parent_object=cast(ParentObject, parent))
-        case 'blob':
-            entry = xe._GitEntryBlob(cast(GitBlob, obj), name, mode,
-                        repository=repository,
-                        path=this_path,
-                        parent=parent_entry,
-                        parent_object=cast(ParentObject, parent))
-        case 'commit':
-            entry = xe._GitEntryCommit(cast(GitCommit, obj), name, mode,
-                        repository=repository,
-                        path=this_path,
-                        parent=parent_entry,
-                        parent_object=cast(ParentObject, parent))
-        case _:
-            raise ValueError(f"Unknown type {type}")
-        
-    xv.XGIT_ENTRIES[key] = entry
-    if hash not in xv.XGIT_REFERENCES:
-        xv.XGIT_REFERENCES[hash] = set()
-    ref_key = (repository.path, parent_hash)
-    xv.XGIT_REFERENCES[hash].add(ref_key)
-    return name, cast(GitEntry[O], entry)
 
 
 class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
@@ -374,7 +167,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
             self.__hashes = defaultdict(lambda: IdentitySet(key=id))
             for line in repository.git_lines("ls-tree", "--long", tree):
                 if line:
-                    name, entry = _parse_git_entry(line, repository, tree)
+                    name, entry = self._parse_git_entry(line, repository, tree)
                     self.__hashes[entry.hash].add(entry)
                     yield name, entry
             self._size = dict.__len__(self)
@@ -452,13 +245,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
     def values(self):
         return dict.values(self._expand())
 
-    def get(self, key: str|PurePosixPath, default: Any = None):
+    def get(self, key: str|PurePosixPath, default: Any = None) -> 'GitEntry[xe.EntryObject]':
         self._expand()
         ex = next(iter(dict.values(self)))
         repository = ex.repository
-        _, loc = _git_entry(self.hash, '.', "040000", "tree", "-",
+        _, loc = self._git_entry(self.hash, '.', "040000", "tree", -1,
                               repository=repository)
-        
+
         key_path = PurePosixPath(key)
         path = PurePosixPath()
         for p in key_path.parts:
@@ -516,6 +309,142 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
                     suffix = '/' if e.type == 'tree' else ''
                     l = f'{rw} {e.hash} {size:>8s} {e.name}{suffix}'
                     p.text(l)
+
+    def _parse_git_entry(
+        self,
+        line: str,
+        repository: GitRepository,
+        parent_hash: GitHash | None = None
+    ) -> tuple[str, GitEntry]:
+        """
+        Parse a line from `git ls-tree --long` and return a `GitObject`.
+        """
+        mode, type, hash, size, name = line.split()
+        mode = cast(GitEntryMode, mode)
+        type = cast(GitObjectType, type)
+        parent = repository.get_object(parent_hash) if parent_hash is not None else None
+        size = int(size)
+        return self._git_entry(hash, name, mode, type, size, repository, parent)
+
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: GitHash|GitCommit,
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['commit'],
+        size: int,
+        repository: GitRepository,
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional[GitEntryTree] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, GitEntryCommit]: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: GitHash|GitBlob,
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['blob'],
+        size: int,
+        repository: GitRepository,
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional[GitEntryTree] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, GitEntryBlob]: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: GitHash|GitTree,
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['tree'],
+        size: int,
+        repository: GitRepository,
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional[GitEntryTree] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, GitEntryTree]: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: GitHash|O,
+        name: str,
+        mode: GitEntryMode,
+        type: GitObjectType,
+        size: int,
+        repository: GitRepository,
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional[GitEntryTree] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, GitEntry[O]]: ...
+
+    # Implementation
+    def _git_entry(
+        self,
+        hash_or_obj: GitHash|O,
+        name: str,
+        mode: GitEntryMode,
+        type: GitObjectType,
+        size: int,
+        repository: GitRepository,
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional[GitEntryTree] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, GitEntry[O]]:
+        """
+        Obtain or create a `GitObject` from a parsed entry line or equivalent.
+        """
+        assert isinstance(XSH.env, MutableMapping),\
+            f"XSH.env not a MutableMapping: {XSH.env!r}"
+        parent_hash = parent.hash if parent is not None else ''
+
+        match hash_or_obj:
+            case str():
+                hash: Objectish = hash_or_obj
+                obj = repository.get_object(hash, type, size=size)
+            case GitObject():
+                obj = hash_or_obj
+                hash = obj.hash
+            case _:
+                raise ValueError(f"Invalid hash or object: {hash_or_obj}")
+
+        if XSH.env.get("XGIT_TRACE_OBJECTS"):
+            args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {repository.path=}, {parent=}"
+            msg = f"git_entry({args})"
+            print(msg)
+        if path is not None:
+            this_path = path / name
+        else:
+            this_path = None
+        match type:
+            case 'tree':
+                entry = xe._GitEntryTree(cast(GitTree, obj), name, mode,
+                            repository=repository,
+                            path=this_path,
+                            parent=parent_entry,
+                            parent_object=cast(ParentObject, parent))
+            case 'blob':
+                entry = xe._GitEntryBlob(cast(GitBlob, obj), name, mode,
+                            repository=repository,
+                            path=this_path,
+                            parent=parent_entry,
+                            parent_object=cast(ParentObject, parent))
+            case 'commit':
+                entry = xe._GitEntryCommit(cast(GitCommit, obj), name, mode,
+                            repository=repository,
+                            path=this_path,
+                            parent=parent_entry,
+                            parent_object=cast(ParentObject, parent))
+            case _:
+                raise ValueError(f"Unknown type {type}")
+
+        repository.add_reference(hash, self)
+        return name, cast(GitEntry[O], entry)
 
 
 class _GitBlob(_GitObject, GitBlob):
@@ -662,7 +591,7 @@ class _GitCommit(_GitObject, GitCommit):
             lines = repository.git_stream("cat-file", "commit", hash)
             tree = next(lines).split()[1]
             def load_tree(_):
-                return _git_object(tree, repository, 'tree')
+                return repository.get_object(tree, 'tree')
             self.__tree = load_tree
             self.__parents = []
             in_sig = False
@@ -670,7 +599,7 @@ class _GitCommit(_GitObject, GitCommit):
             sig_lines = []
             for line in lines:
                 if line.startswith("parent"):
-                    self.__parents.append(_git_object(line.split()[1], repository, 'commit'))
+                    self.__parents.append(repository.get_object(line.split()[1], 'commit'))
                 elif line.startswith("author"):
                     author_line = line.split(maxsplit=1)[1]
                     self.__author = CommittedBy(author_line)
@@ -794,11 +723,11 @@ class _GitTagObject(_GitObject, GitTagObject):
     def __init__(self, hash: str, /, *,
                  repository: GitRepository):
         def loader():
-            lines = repository.git_lines(["git", "cat-file", "tag", hash])
+            lines = repository.git_lines("cat-file", "tag", hash)
             for line in lines:
                 if line.startswith("object"):
                     def load_object(_):
-                        return _git_object(line.split()[1], repository)
+                        return repository.get_object(line.split()[1])
                     self.__object = load_object
                 elif line.startswith("type"):
                     tag_type = line.split()[1]

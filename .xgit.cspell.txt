@@ -31,6 +31,7 @@ filtfunc
 frozendict
 fspath
 gctx
+gitdir
 Gitter
 gpgsig
 hashable

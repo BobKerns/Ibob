@@ -10,22 +10,23 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 
+from pathlib import PurePosixPath
 from typing import (
-    Protocol, runtime_checkable, Any, Iterator, Literal,
+    Optional, Protocol, overload, runtime_checkable, Any, Iterator, Literal,
     Sequence, Mapping, TypeAlias,
 )
 from abc import abstractmethod
 from io import IOBase
 
 from xontrib.xgit.types import (
-    CleanupAction, GitHash, GitObjectType,
+    CleanupAction, GitHash, GitObjectType, GitEntryMode,
 )
 import xontrib.xgit.person as xp
 
-from xontrib.xgit.object_types_base import GitObject
 import xontrib.xgit.object_types as ot
-from xontrib.xgit.view import T
+import xontrib.xgit.context_types as ct
 import xontrib.xgit.ref_types as rt
+import xontrib.xgit.entry_types as et
 
 
 EntryObject: TypeAlias = 'GitTree | GitBlob | GitCommit'
@@ -53,6 +54,54 @@ Objectish: TypeAlias = 'str|ot.GitObject|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify any object.
 '''
+
+
+@runtime_checkable
+class GitId(Protocol):
+    """
+    Anything that has a hash in a git repository.
+    """
+    @abstractmethod
+    def __init__(self, hash: GitHash,
+                 cleanup: Optional[CleanupAction] = None):
+        ...
+    @property
+    @abstractmethod
+    def hash(self) -> GitHash:
+        ...
+
+@runtime_checkable
+class GitObject(GitId, Protocol):
+    """
+    A git object.
+    """
+    @property
+    @abstractmethod
+    def type(self) -> GitObjectType:
+        ...
+    @property
+    @abstractmethod
+    def size(self) -> int:
+        ...
+
+    @overload
+    def as_(self, type: Literal['tag']) -> Optional['ot.GitTagObject']: ...
+    @overload
+    def as_(self, type: Literal['commit']) -> Optional['ot.GitCommit']: ...
+    @overload
+    def as_(self, type: Literal['tree']) -> Optional['ot.GitTree']: ...
+    @overload
+    def as_(self, type: Literal['blob']) -> Optional['GitObject']: ...
+    @overload
+    def as_(self, type: GitObjectType) -> Optional['GitObject']: ...
+    def as_(self, type: GitObjectType) -> Optional['GitObject']:
+        """
+        Return the object as the specified type, if possible.
+        """
+        if type == self.type:
+            return self
+        return None
+
 
 @runtime_checkable
 class GitTree(GitObject, Protocol):
@@ -89,13 +138,87 @@ class GitTree(GitObject, Protocol):
     def __contains__(self, key: str) -> bool: ...
 
     @abstractmethod
-    def get(self, key: str, default: Any = None) -> EntryObject: ...
+    def get(self, key: str, default: Any = None) -> et.GitEntry[EntryObject]: ...
 
     @abstractmethod
     def __eq__(self, other: Any) -> bool: ...
 
+    @abstractmethod
     def __bool__(self) -> bool: ...
 
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: 'GitHash|ot.GitCommit',
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['commit'],
+        size: int,
+        repository: 'ct.GitRepository',
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional['et.GitEntryTree'] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, 'et.GitEntryCommit']: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: 'ot.GitHash|GitBlob',
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['blob'],
+        size: int,
+        repository: 'ct.GitRepository',
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional['et.GitEntryTree'] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, 'et.GitEntryBlob']: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: 'GitHash|ot.GitTree',
+        name: str,
+        mode: GitEntryMode,
+        type: Literal['tree'],
+        size: int,
+        repository: 'ct.GitRepository',
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional['et.GitEntryTree'] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, 'et.GitEntryTree']: ...
+
+    @overload
+    def _git_entry(
+        self,
+        hash_or_obj: 'GitHash|et.O',
+        name: str,
+        mode: GitEntryMode,
+        type: GitObjectType,
+        size: int,
+        repository: 'ct.GitRepository',
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional['et.GitEntryTree'] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, 'et.GitEntry[et.O]']: ...
+
+    # Implementation
+    def _git_entry(
+        self,
+        hash_or_obj: 'GitHash|et.O',
+        name: str,
+        mode: GitEntryMode,
+        type: GitObjectType,
+        size: int,
+        repository: 'ct.GitRepository',
+        parent: Optional[GitObject] = None,
+        parent_entry: Optional['et.GitEntryTree'] = None,
+        path: Optional[PurePosixPath] = None,
+    ) -> tuple[str, 'et.GitEntry[et.O]']:
+        """
+        Obtain or create a `GitObject` from a parsed entry line or equivalent.
+        """
+        ...
 
 @runtime_checkable
 class GitBlob(GitObject, Protocol):

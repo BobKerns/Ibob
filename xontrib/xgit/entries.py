@@ -140,7 +140,7 @@ class _GitEntry(GitEntry[O]):
         self.__repository = repository
         po = None
         if isinstance(parent_object, str):
-            po = cast(ParentObject, xo._git_object(parent_object, repository))
+            po = cast(ParentObject, repository.get_object(parent_object))
         if parent is not None and parent_object is None:
             po = parent.object
         self.__parent_object = po
@@ -214,7 +214,7 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
 
                     obj = loc.object[part]
                     path = path / part
-                    _, entry = xo._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
+                    _, entry = obj._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
                                 repository=self.repository,
                                 path=path,
                                 parent_entry=loc,

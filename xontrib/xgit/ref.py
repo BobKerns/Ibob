@@ -11,7 +11,6 @@ from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
-from xontrib.xgit.objects import _git_object
 
 SYMBOLIC_REFS = frozenset(('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'))
 '''
@@ -28,18 +27,19 @@ class _GitRef(rt.GitRef):
     @property
     def name(self) -> str:
         if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
+            repo = self.repository
             # Dereference on first use.
-            name = self.__repository.git('symbolic-ref', '--quiet', self.__name,
-                                                check=False)
+            name = repo.git('symbolic-ref', '--quiet', self.__name,
+                                check=False)
             if name:
                 self.__name = name
                 if self.__validate:
                     self.__validate()
             else:
                 # Detached or non-existent ref
-                ref = self.__repository.git('rev-parse', '--verify', '--quiet', self.__name, check=False)
+                ref = repo.git('rev-parse', '--verify', '--quiet', self.__name, check=False)
                 if ref:
-                    self.__target = _git_object(ref, self.repository)
+                    self.__target = repo.get_object(ref)
         return self.__name
 
     __repository: GitRepository
@@ -63,7 +63,7 @@ class _GitRef(rt.GitRef):
             target = self.__repository.git('show-ref', '--hash', name)
             if not target:
                 raise ValueError(f"Ref not found: {name!r}")
-            self.__target = _git_object(target, self.repository)
+            self.__target = self.__repository.get_object(target)
         return self.__target
 
     def __init__(self, name: str, /, *,
@@ -110,7 +110,7 @@ class _GitRef(rt.GitRef):
                 target, name = result.split()
             if target is not None:
                 if isinstance(target, str):
-                    self.__target = _git_object(target, repository)
+                    self.__target = repository.get_object(target)
                 else:
                     self.__target = target
 
@@ -196,10 +196,11 @@ class _Replacement(rt.Replacement, _GitRef):
         The object being replaced.
         '''
         if self._replaced is None:
-            target = self.__repository.git('show-ref', '--hash', self.name)
+            repo = self.__repository
+            target = repo.git('show-ref', '--hash', self.name)
             if not target:
                 raise ValueError(f"Ref not found: {self.name!r}")
-            self._replaced = _git_object(target, self.repository)
+            self._replaced = repo.get_object(target)
         return self._replaced
 
     def replacement_name(self) -> str:
@@ -218,7 +219,8 @@ class _Note(rt.Note, _GitRef):
     def target(self) -> 'ot.GitObject':
         if self.__attached_to is None:
             target_hash = self.note_name
-            self.__attached_to = _git_object(target_hash, self.repository)
+            repo = self.repository
+            self.__attached_to = repo.get_object(target_hash)
         return self.__attached_to
 
     @property

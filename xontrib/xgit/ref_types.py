@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import Protocol, TypeAlias, runtime_checkable, Sequence
 from pathlib import PurePosixPath
 
-import xontrib.xgit.object_types_base as otb
+import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
 
 
@@ -25,7 +25,7 @@ class GitRef(Protocol):
     def name(self) -> str: ...
     @property
     @abstractmethod
-    def target(self) -> 'otb.GitObject': ...
+    def target(self) -> 'ot.GitObject': ...
     @property
     @abstractmethod
     def repository(self) -> 'ct.GitRepository': ...
@@ -81,12 +81,12 @@ class Replacement(GitRef, Protocol):
 
     @property
     @abstractmethod
-    def replaced_object(self) -> 'otb.GitObject':
+    def replaced_object(self) -> 'ot.GitObject':
         "The object being replaced."
 
     @property
     @abstractmethod
-    def replacement_object(self) -> 'otb.GitObject':
+    def replacement_object(self) -> 'ot.GitObject':
         "The object that replaces the replaced object."
 
 @runtime_checkable
@@ -102,7 +102,7 @@ class Note(GitRef, Protocol):
         '''
     @property
     @abstractmethod
-    def note_target(self) -> 'otb.GitObject':
+    def note_target(self) -> 'ot.GitObject':
         '''
         The object the note is attached to.
         '''

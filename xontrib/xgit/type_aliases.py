@@ -7,10 +7,13 @@ aliases. See type_aliases_310.py for the same type aliases defined using
 from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, TypeVar
 
+from xonsh.built_ins import XonshSession
+
 type CleanupAction = Callable[[], None]
 '''
 An action to be taken when the xontrib is unloaded.
 '''
+type LoadAction = Callable[[XonshSession], None|CleanupAction]
 
 type GitHash = str
 '''
@@ -18,11 +21,6 @@ A git hash. Defined as a string to make the code more self-documenting.
 
 Also allows using `GitHash` as a type hint that drives completion.
 '''
-
-type ContextKey = tuple[Path, PurePosixPath, str|None, GitHash]
-"""
-A key for uniquely identifying a `GitContext`
-"""
 
 
 type GitLoader = Callable[[], None]
@@ -51,27 +49,19 @@ Valid types for a git object.
 
 type GitEntryKey = tuple[Path, PurePosixPath|None, str, str, str|None]
 
-type GitObjectReference = tuple[Path, str | None]
+type GitRepositoryId = str
+"""
+A unique identifier for a git repository.
+"""
+
+type GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
+'''
+The type of a git reference, that is, how an object is referenced.
+'''
+
+type GitObjectReference = tuple[GitRepositoryId, GitHash|PurePosixPath, GitReferenceType]
 """
 A reference to a git object in a tree in a repository.
-"""
-
-# Proxy
-
-type AdaptorMethod = Literal[
-    'getitem', 'setitem', 'delitem', 'setattr', 'getattr', 'contains', 'hasattr', 'bool'
-]
-
-type ProxyAction = Literal['get', 'set', 'delete', 'bool']
-"""
-Flags indicating the action being undertaken at the time of proxy access.
-"""
-
-type ProxyDeinitializer = Callable[[], None]
-"""
-A function returned from a `ProxyInitializer` that cleans up resources associated with the proxy object
-on plugin unload.
-
 """
 
 # Json

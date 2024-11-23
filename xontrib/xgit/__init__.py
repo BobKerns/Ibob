@@ -16,10 +16,8 @@ from xontrib.xgit.types import (
     GitObjectType,
     GitHash,
 )
-from xontrib.xgit.object_types_base import (
-    GitId, GitObject,
-)
 from xontrib.xgit.object_types import (
+    GitId, GitObject,
     GitBlob,
     GitTree,
     GitCommit,

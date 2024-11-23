@@ -22,7 +22,6 @@ from typing import (
 from pathlib import PurePosixPath
 
 from xontrib.xgit.types import GitEntryMode, GitObjectType, GitHash
-import xontrib.xgit.object_types_base as otb
 import xontrib.xgit.context_types as ct
 
 if TYPE_CHECKING:
@@ -36,7 +35,7 @@ else:
     O = TypeVar('O', covariant=True)
 
 @runtime_checkable
-class GitEntry(Generic[O], otb.GitObject, Protocol):
+class GitEntry(Generic[O], Protocol):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
     it supplies the mode and name.
@@ -89,10 +88,10 @@ class GitEntryTree(GitEntry, Protocol):
     def __getitem__(self, key: str) -> 'GitEntry': ...
 
 import xontrib.xgit.object_types as ot
-class GitEntryBlob(GitEntry, ot.GitBlob):
+class GitEntryBlob(GitEntry):
     ...
 
-class GitEntryCommit(GitEntry, ot.GitCommit):
+class GitEntryCommit(GitEntry):
     ...
 
 

@@ -14,20 +14,26 @@ classes are complex. It is very easy to end up with circular imports.
 '''
 
 from abc import abstractmethod
-from ast import TypeAlias
 from pathlib import Path, PurePosixPath
+from tkinter import E
 from typing import (
-    Literal, Protocol, overload, runtime_checkable, Optional, TypeAlias, TYPE_CHECKING
+    Literal, Mapping, Protocol, overload, runtime_checkable, Optional,
+    TypeAlias, TYPE_CHECKING, cast,
 )
 
-from xontrib.xgit.types import ContextKey, GitObjectType
+from xonsh.built_ins import XonshSession
+
+from xontrib.xgit.types import (
+    GitObjectReference, GitObjectType, GitException,
+    GitHash, GitRepositoryId, GitReferenceType,
+)
 from xontrib.xgit.json_types import Jsonable
+from xontrib.xgit.person import Person
 from xontrib.xgit.git_cmd import GitCmd
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
 if TYPE_CHECKING:
     from xontrib.xgit.context_types import GitWorktree
-
 
 WorktreeMap: TypeAlias = dict[Path, 'GitWorktree']
 
@@ -36,22 +42,58 @@ WorktreeMap: TypeAlias = dict[Path, 'GitWorktree']
 class GitRepository(Jsonable, GitCmd, Protocol):
     """
     A git repository.
+
+    This is the repository, not a worktree (`GitWorktree`).
+    This includes the worktree that is the parent of thee
+    `.git` directory. That is a worktree with a repository
+    inside it.
     """
+
     @property
     @abstractmethod
-    def path(self) -> Path:
+    def id(self) -> str:
         """
-        The path to the common part of the repository. This is the same for all worktrees.
+        A semi-unique identifier for the repository.
+
+        Repositories which are clones of each other will have the same id.
+        This is the xor of the hashes of repository's root commits.
+
+        Repositories which have the same `id` will have some history in common.
+        New branches can be pushed and pulled between them.
         """
         ...
 
     @property
     @abstractmethod
-    def worktree(self) -> 'GitWorktree': ...
+    def context(self) -> 'GitContext':
+        '''
+        The context for git commands.
+        '''
+        ...
 
     @property
     @abstractmethod
-    def worktrees(self) -> dict[Path, 'GitWorktree']:
+    def path(self) -> Path:
+        """
+        The path to the common part of the repository. This is the same for all worktrees
+        associated with a repository.
+        """
+        ...
+
+
+    @property
+    @abstractmethod
+    def worktree(self) -> 'GitWorktree':
+        '''
+        The main worktree associated with this repository.
+
+        This is used by default for some operation which require a worktree.
+        '''
+        ...
+
+    @property
+    @abstractmethod
+    def worktrees(self) -> Mapping[Path, 'GitWorktree']:
         '''
         Worktrees known to be associated with this repository.
         '''
@@ -63,12 +105,7 @@ class GitRepository(Jsonable, GitCmd, Protocol):
         Get a worktree by its path. Canonicalizes the path first,
         making this the preferred way to get a worktree.
         '''
-
-    @abstractmethod
-    def get_reference(self, ref: 'rt.RefSpec|None' =None) -> 'rt.GitRef|None':
-        '''
-        Get a reference by name.
-        '''
+        ...
 
     @overload
     def get_object(self, hash: 'ot.Commitish', type: Literal['commit']) -> 'ot.GitCommit':
@@ -91,7 +128,30 @@ class GitRepository(Jsonable, GitCmd, Protocol):
     def get_object(self, hash: 'ot.Objectish',
                    type: Optional[GitObjectType]=None,
                    size: int=-1) -> 'ot.GitObject':
+        '''
+        Get an object by its hash. If the type is given, the object is checked and
+        cast to the appropriate type. If the type is not given, the object is
+        returned as `GitObject`.
+
+        It will, however, be converted to the appropriate type when the object is
+        dereferenced.
+        '''
         ...
+
+    @abstractmethod
+    def get_ref(self, ref: 'rt.RefSpec|None' =None) -> 'rt.GitRef|None':
+        '''
+        Get a reference (branch, tag, etc.) by name.
+        '''
+        ...
+
+    @abstractmethod
+    def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
+        '''
+        Add a reference to an object.
+        '''
+        ...
+
 
 @runtime_checkable
 class GitWorktree(Jsonable, GitCmd, Protocol):
@@ -133,47 +193,168 @@ class GitContext(Jsonable, Protocol):
     """
     A git context.
     """
+
+    @staticmethod
+    def get() -> 'GitContext':
+        '''
+        Get the current context.
+        '''
+        from xonsh.built_ins import XSH
+        assert XSH.env is not None, "Xonsh environment not initialized."
+        context = cast(GitContext|None, XSH.env.get('XGIT', None))
+        if context is None:
+            raise GitException("No git context.")
+        return context
+
+
     @property
     @abstractmethod
-    def worktree(self) -> GitWorktree: ...
+    def objects(self) -> 'Mapping[ot.GitHash, ot.GitObject]':
+        '''
+        The objects in the repositories.
+        '''
+        ...
+
     @property
     @abstractmethod
-    def repository(self) -> GitRepository: ...
+    def session(self) -> XonshSession:
+        '''
+        The `xonsh` session.
+        '''
+        ...
+
+    @abstractmethod
+    def open_repository(self, path: 'Path|str|GitRepository',
+                        select: bool=True
+                        ) -> 'GitRepository':
+        '''
+        Open a git repository.
+
+        PARAMETERS
+        ----------
+        path : Path | str | GitRepository
+            The path to the repository, or a repository object.
+        select : bool
+            If True, select the repository as the current repository.
+            Default: True
+
+        RETURNS
+        -------
+        GitRepository
+            The repository object.
+        '''
+        ...
+
+    @abstractmethod
+    def open_worktree(self, path: 'Path|str|GitRepository|GitWorktree',
+                        select: bool=True
+                        ) -> 'GitWorktree':
+        '''
+        Open a git repository.
+
+        PARAMETERS
+        ----------
+        path : Path | str | GitRepository
+            The path to the repository, or a repository object.
+        select : bool
+            If True, select the repository as the current repository.
+            Default: True
+
+        RETURNS
+        -------
+        GitRepository
+            The repository object.
+        '''
+        ...
+
     @property
     @abstractmethod
-    def path(self) -> PurePosixPath: ...
+    def worktree(self) -> GitWorktree:
+        '''
+        The current worktree being explored.
+
+        This is a worktree associated with the current repository.
+        If there is no known worktree a `GitException` is raised.
+
+        If there is no current repository, a `GitException` is raised.
+        '''
+        ...
+
+    @property
+    @abstractmethod
+    def repository(self) -> GitRepository:
+        '''
+        The current repository being explored.
+
+        RETURNS
+        -------
+        GitRepository
+            The repository object.
+        '''
+        ...
+
+    @property
+    @abstractmethod
+    def path(self) -> PurePosixPath:
+        '''
+        The path within the worktree that we are exploring.
+        '''
+        ...
+
     @path.setter
     @abstractmethod
     def path(self, value: PurePosixPath|str): ...
+
+
     @property
     @abstractmethod
-    def branch(self) -> 'rt.GitRef': ...
+    def branch(self) -> 'rt.GitRef':
+        '''
+        The current branch being explored.
+        '''
+        ...
+
     @branch.setter
     @abstractmethod
     def branch(self, value: 'rt.GitRef|str'): ...
+
     @property
     @abstractmethod
-    def commit(self) -> 'ot.GitCommit': ...
+    def commit(self) -> 'ot.GitCommit':
+        '''
+        The current commit being explored.
+        '''
     @commit.setter
     @abstractmethod
     def commit(self, value: 'ot.GitCommit|str'): ...
     @property
+
     @abstractmethod
-    def cwd(self) -> Path: ...
-
-    #@property
-    #def root(self) -> 'et.GitEntryTree': ...
-
-    def reference(self, subpath: Optional[Path | str] = None) -> ContextKey:
+    def cwd(self) -> Path:
+        '''
+        The current working directory. Same as `Path.cwd()`.
+        '''
         ...
 
-    def new_context(
-        self,
-        /,
-        worktree: Optional[Path] = None,
-        repository: Optional[Path] = None,
-        git_path: Optional[PurePosixPath] = None,
-        branch: Optional[str] = None,
-        commit: Optional[str] = None,
-    ) -> "GitContext":
+    @property
+    @abstractmethod
+    def people(self) -> set['Person']:
+        '''
+        The people associated with the repository.
+        '''
+        ...
+
+    @property
+    @abstractmethod
+    def object_references(self) -> Mapping[GitHash, GitObjectReference]:
+        '''
+        The references associated with the repository.
+        '''
+        ...
+
+    @abstractmethod
+    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType) -> None:
+        '''
+        Add a reference to an object.
+        '''
         ...
