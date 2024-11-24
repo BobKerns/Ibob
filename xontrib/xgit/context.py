@@ -254,7 +254,7 @@ class _GitContext(_GitCmd, GitContext):
                  branch: Optional['str|rt.GitRef'] = None,
                  commit: Optional['ot.Commitish'] = None,
                  **kwargs):
-        #super().__init__(**kwargs)
+        super().__init__(**kwargs)
         self.__session = session
         self.__worktree = worktree
         self.__path = PurePosixPath()

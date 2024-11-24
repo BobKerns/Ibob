@@ -386,7 +386,7 @@ class _GitCmd:
         all_params = [param, *params]
         val = self.git_lines("rev-parse", *all_params)
         if val:
-            return val
+            result = val
         else:
             # Try running them individually.
             result = [self.git("rev-parse", param) for param in all_params]
