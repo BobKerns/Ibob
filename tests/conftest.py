@@ -13,7 +13,9 @@ from typing import (
 import sys
 import os
 
+import xonsh
 from xonsh.built_ins import XonshSession
+
 if TYPE_CHECKING:
     from xontrib.xgit.context_types import GitRepository, GitWorktree
 
@@ -201,9 +203,11 @@ def with_xgit(xonsh_session, modules, sysdisplayhook):
                             **kwargs,
                             **more_kwargs
                         }
-                        return t(xontrib_module, **params)
+                        yield from t(xontrib_module, **params)
+                        return
             with session_active(module, xonsh_session) as xontrib_module:
-                return t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
+                yield from t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
+            return
         yield _with_xgit
 
 CWD_LOCK = RLock()
@@ -283,10 +287,20 @@ def git():
                 ).stdout.rstrip()
     return git
 
+@pytest.fixture()
+def git_context(with_xgit, xonsh_session):
+    '''
+    Fixture to create a test context.
+    '''
+    def _t(*_, XSH, **__):
+        from xontrib.xgit.context import _GitContext
+        yield _GitContext(xonsh_session)
+    yield from with_xgit(_t, 'xontrib.xgit.context')
+
 repository_lock = RLock()
 @pytest.fixture()
 def repository(with_xgit,
-               xonsh_session,
+               git_context,
                chdir,
                tmp_path,
                ) -> Generator['GitRepository', None, None]:
@@ -314,7 +328,7 @@ def repository(with_xgit,
         chdir(worktree)
         def _t(*_, _GitRepository, **__) -> Generator[GitRepository, None, None]:
             from xontrib.xgit.repository import _GitRepository
-            yield _GitRepository(path=to_git)
+            yield _GitRepository(path=to_git, context=git_context)
         yield from with_xgit(_t, 'xontrib.xgit.repository')
         chdir(old)
         os.environ['HOME'] = old_home
@@ -350,30 +364,31 @@ def worktree(
     yield from with_xgit(_t, 'xontrib.xgit.worktree', 'xontrib.xgit.ref', 'xontrib.xgit.objects')
 
 @pytest.fixture()
-def cmd_args(modules):
+def cmd_args(modules, xonsh_session):
     '''
     Fixture to test command line arguments.
     '''
     with modules('xontrib.xgit.decorators') as ((m_cmd,), vars):
-        command = vars['command']
-        def _cmd_args(*args, **kwargs):
-            _aliases = {}
-            _exports = []
-            def _export(*args):
-                _exports.append(args)
-            # Wrap our test command in the decorator
-            f = command(*args,
-                        _export=_export,
-                        _aliases=_aliases,
-                        **kwargs)
-            def wrap_and_apply(cmd: Callable):
-                f(cmd)
-                info = cmd.info
-                def apply(*args, **kwargs):
-                    return info.wrapper(args, _info=info, **kwargs)
-                return apply
-            return wrap_and_apply
-        return _cmd_args
+        with session_active(m_cmd, xonsh_session) as xontrib_module:
+            command = vars['command']
+            def _cmd_args(*args, **kwargs):
+                _aliases = {}
+                _exports = []
+                def _export(*args):
+                    _exports.append(args)
+                # Wrap our test command in the decorator
+                f = command(*args,
+                            _export=_export,
+                            _aliases=_aliases,
+                            **kwargs)
+                def wrap_and_apply(cmd: Callable):
+                    f(cmd)
+                    info = cmd.info
+                    def apply(*args, **kwargs):
+                        return info.wrapper(args, _info=info, **kwargs)
+                    return apply
+                return wrap_and_apply
+            return _cmd_args
 
 _autolock: Lock = Lock()
 @pytest.fixture(autouse=True)
