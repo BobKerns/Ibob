@@ -270,6 +270,7 @@ class _GitContext(_GitCmd, GitContext):
             self.commit = self.repository.get_object(commit, 'commit')
         self.branch = branch
         self.__people = dict()
+        self.__object_references = defaultdict(set)
 
 
     @property
