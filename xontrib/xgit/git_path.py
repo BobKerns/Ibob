@@ -35,6 +35,7 @@ class GitPath(PurePath):
 
     __base: PathBase
     __object: 'xo.GitObject'
+    _flavour = PurePath._flavour # type: ignore
 
     def __init__(self, *args,
                 object: 'xo.GitObject',
