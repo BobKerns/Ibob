@@ -29,6 +29,7 @@ from xontrib.xgit.decorators import (
     _unload_actions,
     _do_unload_actions,
     _do_load_actions,
+    _add_unload_action,
     _aliases,
     session,
 )
@@ -158,14 +159,13 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     # Install our displayhook
     global _xonsh_displayhook
     hook = _xonsh_displayhook
-    #target(XSH, xsh)
 
     ctx['-']  = None
     def unhook_display():
         sys.displayhook = hook
 
-    _unload_actions[xsh].append(unhook_display)
     _xonsh_displayhook = hook
+    _add_unload_action(xsh, unhook_display)
     sys.displayhook = _xgit_displayhook
 
     prompt_fields = env['PROMPT_FIELDS']

@@ -84,7 +84,7 @@ setattr(_xgit_displayhook, "original", _xonsh_displayhook)
 
 @events.on_xgit_predisplay
 @session()
-def _xgit_on_predisplay(value: Any, /, *, XSH: XonshSession, **_):
+def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
@@ -107,7 +107,7 @@ def _xgit_on_predisplay(value: Any, /, *, XSH: XonshSession, **_):
 
 @events.on_xgit_postdisplay
 @session()
-def _xgit_on_postdisplay(value: Any, /, *, XSH: XonshSession, **_):
+def _xgit_on_postdisplay(value: Any, XSH: XonshSession, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
@@ -120,7 +120,7 @@ def _xgit_on_postdisplay(value: Any, /, *, XSH: XonshSession, **_):
 _count_lock = Lock()
 # Set up the notebook-style convenience history variables.
 @session()
-def _xgit_count(*, XGIT: GitContext):
+def _xgit_count(*, XGIT: GitContext, **_):
     """
     Set up and use the counter for notebook-style history.
     """
@@ -132,10 +132,9 @@ def _xgit_count(*, XGIT: GitContext):
         return next(counter)
 
 
-
 @events.on_precommand
 @session()
-def _on_precommand(cmd: str, /, *, XSH: XonshSession, **_):
+def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     """
     Before running a command, save our temporary variables.
     We associate them with the session rather than the module.

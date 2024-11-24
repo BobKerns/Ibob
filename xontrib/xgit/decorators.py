@@ -25,7 +25,7 @@ from xonsh.completers.path import (
     _complete_path_raw
 )
 from xonsh.parsers.completion_context import CompletionContext
-from xonsh.built_ins import XonshSession
+from xonsh.built_ins import XonshSession, XSH as GLOBAL_XSH
 from xonsh.events import events
 
 from xontrib.xgit.types import (
@@ -37,15 +37,17 @@ from xontrib.xgit.ref_types import (
 )
 from xontrib.xgit.context import GitContext, _GitContext
 
+
 _load_actions: list[LoadAction] = []
 
 _unload_actions: WeakKeyDictionary[XonshSession, list[CleanupAction]] = WeakKeyDictionary()
 """
 Actions to take when unloading the module.
 """
+
 def _do_load_actions(xsh: XonshSession):
     """
-    Load a value supplied by the xontrib.
+    Load values supplied by the xontrib.
     """
     global _load_actions
     if not isinstance(_load_actions, list):
@@ -57,20 +59,26 @@ def _do_load_action(action: LoadAction, xsh: XonshSession):
         try:
             unloader = action(xsh)
             if unloader is not None:
-                default: list[CleanupAction] = []
-                unloaders = _unload_actions.get(xsh, default)
-                if unloaders is default:
-                    _unload_actions[xsh] = unloaders
-                unloaders.append(unloader)
+                _add_unload_action(xsh, unloader)
         except Exception:
             from traceback import print_exc
             print_exc()
 
-def _add_load_action(action: LoadAction, xsh: XonshSession|None):
+def _add_load_action(action: LoadAction):
     """
     Add an action to take when loading the xontrib.
     """
     _load_actions.append(action)
+    
+def _add_unload_action(xsh: XonshSession, action: CleanupAction):
+    """
+    Add an action to take when unloading the xontrib.
+    """
+    default: list[CleanupAction] = []
+    unloaders = _unload_actions.get(xsh, default)
+    if unloaders is default:
+        _unload_actions[xsh] = unloaders
+    unloaders.append(action)
 
 def _do_unload_actions(xsh: XonshSession):
     """
@@ -111,21 +119,27 @@ _aliases: dict[str, Callable] = {}
 Dictionary of aliases defined on loading this xontrib.
 """
 
-def context(xsh: Optional[XonshSession] = None) -> GitContext:
+def context(xsh: Optional[XonshSession] = GLOBAL_XSH) -> GitContext:
     if xsh is None:
         raise GitError('No xonsh session supplied.')
-    if xsh.env is None:
+    env = xsh.env
+    if env is None:
         raise GitError('xonsh session has no env attribute.')
-    XGIT = xsh.env.get('XGIT')
+    XGIT = env.get('XGIT')
     if XGIT is None:
         XGIT = _GitContext(xsh)
-        xsh.env['XGIT'] = XGIT
+        env['XGIT'] = XGIT
+        def unload_context(): 
+            del env['XGIT']
+        _add_unload_action(xsh, unload_context)
     return cast(GitContext, XGIT)
 
 F = TypeVar('F', bound=Callable)
 T =  TypeVar('T')
 P = ParamSpec('P')
-def session(event_name: Optional[str] = None):
+def session(
+    event_name: Optional[str] = None,
+    ):
     '''
     Decorator to bind functions such as event handlers to a session.
 
@@ -137,58 +151,38 @@ def session(event_name: Optional[str] = None):
     def decorator(func: Callable[P,T]) -> Callable[...,T]:
         active = True
         last_return = None
-        XSH: XonshSession|None = None
-        XGIT: GitContext|None = None
+        _XSH: XonshSession|None = None
+        _XGIT: GitContext|None = None
         def loader(xsh: XonshSession):
-            nonlocal XSH, XGIT
-            XSH = xsh
-            XGIT = context(xsh)
-            def unloader():
-                nonlocal active, XSH, XGIT
-                active = False
-                XGIT = None
-                if XSH is not None:
-                    env = XSH.env
-                    if env is not None:
-                        with suppress(KeyError):
-                            del env['XGIT']
-                    XSH = None
-            return unloader
+            nonlocal _XSH, _XGIT
+            _XSH = xsh
+            _XGIT = context(xsh)
+            if event_name is not None:
+                ev = getattr(events, event_name)
+                ev(wrapper)
+                _add_unload_action(_XSH, lambda: ev.remove(wrapper))
 
-        @wraps(func)
-        def wrapper(*args, XSH: XonshSession, XGIT: GitContext, **kwargs):
+        #@wraps(func)
+        def wrapper(*args,
+                    XSH: XonshSession=_XSH or GLOBAL_XSH,
+                    XGIT: GitContext=_XGIT or context(GLOBAL_XSH),
+                    **kwargs):
             t_func = cast(Callable, func)
             nonlocal last_return
             if active:
                 last_return = t_func(*args,
-                                   XSH=XSH,
-                                   XGIT=context(XSH),
+                                   XSH=_XSH,
+                                   XGIT=context(_XSH),
                                    **kwargs)
             return last_return
 
-        def rewrap(*args,
-                    XSH:XonshSession,
-                    XGIT:GitContext,
-                    **kwargs):
-            if XSH is None:
-                raise GitError('No xonsh session')
-            if XGIT is None:
-                raise GitError('No git context')
-            return wrapper(*args,
-                           XSH=XSH,
-                           XGIT=XGIT,
-                           **kwargs)
-
-        _add_load_action(loader, XSH)
-        rewrap.__doc__ = func.__doc__
-        rewrap.__name__ = func.__name__
-        rewrap.__qualname__ = func.__qualname__ + '_session'
-        rewrap.__module__ = func.__module__
+        _add_load_action(loader)
         wrapper.__doc__ = func.__doc__
         wrapper.__name__ = func.__name__
-        wrapper.__qualname__ = func.__qualname__ + '_session_inner'
+        wrapper.__qualname__ = func.__qualname__ + '_session'
         wrapper.__module__ = func.__module__
-        return cast(Callable[...,T], rewrap)
+        
+        return cast(Callable[...,T], wrapper)
     return decorator
 
 @contextual_completer
