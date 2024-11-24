@@ -289,9 +289,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                         prunable = ''
             return result
         self.__worktrees = init_worktrees
-        self.__repository = repository
         self.__objects = {}
-
 
     def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
         '''
@@ -313,6 +311,28 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 self.context.add_reference(target, self.id, PurePosixPath(source.name), 'ref')
             case _:
                 return
+
+    def open_worktree(self, path: Path|str, /, *,
+                    branch: 'rt.GitRef|str|None'=None,
+                    commit: 'ot.Commitish|None'=None,
+                    **kwargs) -> 'ct.GitWorktree':
+        '''
+        Open a worktree associated with this repository.
+        '''
+        return self.context.open_worktree(path,
+                                        repository=self,
+                                        branch=branch,
+                                        commit=commit,
+                                        **kwargs)
+
+    def _add_worktree(self, worktree: 'ct.GitWorktree'):
+        '''
+        Add a worktree to the repository.
+        '''
+        if callable(self.__worktrees):
+            self.__worktrees = self.__worktrees(self)
+        if worktree.path not in self.__worktrees:
+            self.__worktrees[worktree.path] = worktree
 
     def to_json(self, describer: JsonDescriber):
         return str(self.path)

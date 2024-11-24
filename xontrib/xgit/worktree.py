@@ -2,7 +2,7 @@
 Worktree implementation.
 '''
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -10,8 +10,7 @@ from xontrib.xgit.context_types import GitWorktree, GitRepository
 from xontrib.xgit.git_cmd import _GitCmd
 import xontrib.xgit.ref as ref
 import xontrib.xgit.ref_types as rt
-import xontrib.xgit.objects as obj
-from xontrib.xgit.object_types import GitCommit
+from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
 
@@ -65,10 +64,10 @@ class _GitWorktree(_GitCmd, GitWorktree):
         assert self.__commit is not None, "Commit has not been set."
         return self.__commit
     @commit.setter
-    def commit(self, value: str|GitCommit):
+    def commit(self, value: Commitish):
         match value:
-            case str():
-                value = value.strip()
+            case str() | PurePosixPath():
+                value = str(value).strip()
                 hash = self.git('rev-parse', value)
                 self.__commit = self.repository.get_object(hash, 'commit')
             case GitCommit():
@@ -83,7 +82,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 path: Path,
                 repository_path: Path,
                 branch: 'rt.GitRef|str|None',
-                commit: GitCommit,
+                commit: 'Commitish',
                 locked: str = '',
                 prunable: str = '',
                 **kwargs

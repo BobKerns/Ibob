@@ -65,17 +65,70 @@ class _GitContext(_GitCmd, GitContext):
 
     __repositories: dict[Path, GitRepository]
     def repositories(self) -> dict[Path, GitRepository]:
-        return _GitContext.__repositories
+        return self.__repositories
 
     def open_repository(self, path: Path|str) -> GitRepository:
         path = Path(path)
-        repository = _GitContext.__repositories.get(path)
+        repository = self.__repositories.get(path)
         if repository is None:
             repository = rr._GitRepository(path=path,
                                            context=self,
                                            )
-            _GitContext.__repositories[path] = repository
+            self.__repositories[path] = repository
         return repository
+
+
+    def open_worktree(self, path: Path|str, /, *,
+                    repository: Optional[GitRepository|str|Path]=None,
+                    branch: Optional['PurePosixPath|str|rt.GitRef']=None,
+                    commit: Optional['ot.Commitish']=None,
+                    select: bool=True
+                    ) -> 'GitWorktree':
+        '''
+        Open a worktree associated with this repository.
+        '''
+        path = Path(path).resolve()
+        worktree = self.worktrees.get(path)
+        if worktree is not None:
+            return worktree
+        if not path.is_dir():
+            raise WorktreeNotFoundError(path)
+        match repository:
+            case GitRepository():
+                pass
+            case str() | Path():
+                repository = self.open_repository(repository)
+            case None:
+                repo_path = path / '.git'
+                if repo_path.exists():
+                    repository = self.open_repository(repo_path)
+                else:
+                    raise RepositoryNotFoundError(path)
+            case _:
+                raise ValueError(f"Invalid repository: {repository}")
+        if commit is None:
+            head = self.rev_parse('HEAD')
+            commit = repository.get_object(head, 'commit')
+        if branch is None:
+            branch_name = self.git('symbolic-ref', 'HEAD')
+            if branch_name is not None:
+                branch = repository.get_ref(branch_name)
+        else:
+            branch = repository.get_ref(branch)
+        worktree = wt._GitWorktree(
+            path=path,
+            repository=repository,
+            repository_path=repository.path,
+            branch=branch,
+            commit=commit,
+            locked='',
+            prunable='',
+        )
+        if callable(self.__worktrees):
+            self.__worktrees = self.__worktrees(self)
+        self.__worktrees[path] = worktree
+        repository._add_worktree(worktree)
+        return worktree
 
     __worktrees: dict[Path, GitWorktree]
     @property
@@ -102,53 +155,6 @@ class _GitContext(_GitCmd, GitContext):
             raise GitNoRepositoryException()
 
         return self.__repository
-
-    def open_worktree(self, path: 'Path|str|GitWorktree|GitRepository',
-                      select: bool=True,
-                      ) -> GitWorktree:
-        match path:
-            case GitWorktree():
-                if select:
-                    self.worktree = path
-                return path
-            case GitRepository():
-                if select:
-                    self.__repository = path
-                worktree = path.worktree
-                if select:
-                    self.__worktree = worktree
-                    return path.worktree
-                return worktree
-            case Path()|str():
-                path = Path(path)
-                worktree = _GitContext.__worktrees.get(path)
-                if worktree is not None:
-                    if select:
-                        self.__worktree = worktree
-                    return worktree
-                root, private_repo, repo_path, commit_id = self.worktree_locations(path)
-                worktree = _GitContext.__worktrees.get(path)
-                if worktree is not None:
-                    if select:
-                        self.__worktree = worktree
-                        self.__repository = worktree.repository
-                    return worktree
-                repository = self.open_repository(repo_path)
-                commit = repository.get_object(commit_id, 'commit')
-                worktree = wt._GitWorktree(
-                    path=path,
-                    repository=self.repository,
-                    repository_path=repo_path,
-                    branch=None,
-                    commit=commit,
-                    )
-        path = Path(path)
-        worktree = _GitContext.__worktrees.get(path)
-        if worktree is None:
-            worktree = repository.worktree
-            _GitContext.__worktrees[path] = worktree
-        self.__worktree = worktree
-        return worktree
 
     __path: PurePosixPath
     @property
@@ -246,19 +252,19 @@ class _GitContext(_GitCmd, GitContext):
     def __init__(self, session: XonshSession, /, *,
                  worktree: Optional[GitWorktree] = None,
                  branch: Optional['str|rt.GitRef'] = None,
-                 commit: Optional['str|ot.GitCommit'] = None,
+                 commit: Optional['ot.Commitish'] = None,
                  **kwargs):
         #super().__init__(**kwargs)
         self.__session = session
+        self.__worktree = worktree
+        self.__path = PurePosixPath()
+        self.__repositories = {}
+        self.__worktrees = {}
         self.__objects = {}
         if worktree is None:
             self.__repository = None
         else:
             self.__repository = worktree.repository
-        self.__worktree = worktree
-        self.__path = PurePosixPath()
-        self.__repositories = {}
-        self.__worktrees = {}
         self.branch = branch
         if commit is None:
             b = self.__branch

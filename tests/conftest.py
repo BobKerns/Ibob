@@ -299,7 +299,7 @@ def git_context(with_xgit, xonsh_session):
 
 repository_lock = RLock()
 @pytest.fixture()
-def repository(with_xgit,
+def repository(
                git_context,
                chdir,
                tmp_path,
@@ -326,10 +326,7 @@ def repository(with_xgit,
         with gitconfig.open('w') as f:
             f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
         chdir(worktree)
-        def _t(*_, _GitRepository, **__) -> Generator[GitRepository, None, None]:
-            from xontrib.xgit.repository import _GitRepository
-            yield _GitRepository(path=to_git, context=git_context)
-        yield from with_xgit(_t, 'xontrib.xgit.repository')
+        yield git_context.open_repository(worktree / '.git')
         chdir(old)
         os.environ['HOME'] = old_home
         # Clean up, or try to: Windows is a pain
@@ -350,17 +347,10 @@ def worktree(
         from xontrib.xgit.worktree import _GitWorktree
         from xontrib.xgit.ref import _GitRef
         from xontrib.xgit.objects import _GitCommit
-        commit = git('rev-parse', 'HEAD', cwd=repository.path)
-        branch = git('symbolic-ref', 'HEAD', cwd=repository.path, check=False)
         worktree = repository.path.parent
         chdir(worktree)
         git('reset', '--hard', 'HEAD', cwd=worktree)
-        yield _GitWorktree(repository=repository,
-                           path=worktree,
-                           repository_path=repository.path,
-                           branch=_GitRef(branch, repository=repository),
-                           commit=_GitCommit(commit, repository=repository),
-                           )
+        yield  repository.open_worktree(worktree)
     yield from with_xgit(_t, 'xontrib.xgit.worktree', 'xontrib.xgit.ref', 'xontrib.xgit.objects')
 
 @pytest.fixture()

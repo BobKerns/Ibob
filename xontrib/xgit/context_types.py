@@ -152,6 +152,19 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         '''
         ...
 
+    @abstractmethod
+    def open_worktree(self, path: Path|str) -> 'GitWorktree':
+        '''
+        Open a worktree associated with this repository.
+        '''
+        ...
+
+    def _add_worktree(self, worktree: 'GitWorktree'):
+        '''
+        Add a worktree to the repository. Internal use only.
+        '''
+        ...
+
 
 @runtime_checkable
 class GitWorktree(Jsonable, gc.GitCmd, Protocol):
@@ -184,7 +197,7 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     def commit(self) -> 'ot.GitCommit': ...
     @commit.setter
     @abstractmethod
-    def commit(self, value: 'ot.GitCommit|str'): ...
+    def commit(self, value: 'ot.Commitish'): ...
     locked: str
     prunable: str
 
@@ -227,28 +240,6 @@ class GitContext(Jsonable, Protocol):
     def open_repository(self, path: 'Path|str|GitRepository',
                         select: bool=True
                         ) -> 'GitRepository':
-        '''
-        Open a git repository.
-
-        PARAMETERS
-        ----------
-        path : Path | str | GitRepository
-            The path to the repository, or a repository object.
-        select : bool
-            If True, select the repository as the current repository.
-            Default: True
-
-        RETURNS
-        -------
-        GitRepository
-            The repository object.
-        '''
-        ...
-
-    @abstractmethod
-    def open_worktree(self, path: 'Path|str|GitRepository|GitWorktree',
-                        select: bool=True
-                        ) -> 'GitWorktree':
         '''
         Open a git repository.
 
@@ -326,7 +317,7 @@ class GitContext(Jsonable, Protocol):
         '''
     @commit.setter
     @abstractmethod
-    def commit(self, value: 'ot.GitCommit|str'): ...
+    def commit(self, value: 'PurePosixPath|ot.GitCommit|str'): ...
     @property
 
     @abstractmethod
@@ -370,5 +361,33 @@ class GitContext(Jsonable, Protocol):
     def _do_unload_actions(self):
         '''
         Perform the unload actions.
+        '''
+        ...
+
+    @abstractmethod
+    def open_worktree(self, path: Path|str, /, *,
+                    repository: Optional[GitRepository|str|Path]=None,
+                    branch: Optional['PurePosixPath|str|rt.GitRef']=None,
+                    commit: Optional['ot.Commitish']=None,
+                    select: bool=True,
+                    ) -> 'GitWorktree':
+        '''
+        Open a worktree associated with this repository.
+
+        PARAMETERS
+        ----------
+        path : Path | str
+            The path to the worktree.
+        repository : GitRepository | str | Path
+            The repository associated with the worktree.
+            If not given, the current repository is used.
+        branch : PurePosixPath | str | rt.GitRef
+            The branch to explore.
+        commit : ot.Commitish
+            The commit to explore. If not given, the current commit is used.
+        select : bool
+            If True, select the worktree as the current worktree.
+            Default: True
+
         '''
         ...
