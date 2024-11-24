@@ -37,6 +37,7 @@ from xontrib.xgit.types import (
     GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
     GitNoBranchException, GitValueError,
     GitRepositoryId, GitReferenceType,
+    JsonData,
 )
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
@@ -337,14 +338,14 @@ class _GitContext(_GitCmd, GitContext):
                 p.break_()
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
 
-    def to_json(self, describer: JsonDescriber):
+    def to_json(self, describer: JsonDescriber) -> JsonData:
         branch = self.branch.name if self.branch else None
-        return {
+        return cast(JsonData, {
             "worktree": describer.to_json(self.worktree),
             "path": str(self.path),
             "branch": branch,
             "commit": self.commit.hash,
-        }
+        })
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):

@@ -3,10 +3,11 @@ Worktree implementation.
 '''
 
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import GitNoBranchException
+from xontrib.xgit.types import GitNoBranchException, JsonData
 from xontrib.xgit.context_types import GitWorktree, GitRepository
 from xontrib.xgit.git_cmd import _GitCmd
 import xontrib.xgit.ref as ref
@@ -42,7 +43,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
     @path.setter
     def path(self, value: PurePosixPath|str):
         self.__path = PurePosixPath(value)
-    
+
     __location: Path
     @property
     def location(self):
@@ -111,7 +112,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
 
     def to_json(self, describer: JsonDescriber):
         branch = self.branch.name if self.branch else None
-        return {
+        return cast(JsonData,{
             "repository": str(self.repository.path),
             "repository_path": str(self.repository_path),
             "path": str(self.path),
@@ -119,7 +120,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
             "commit": self.commit.hash,
             "locked": self.locked,
             "prunable": self.prunable,
-        }
+        })
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
