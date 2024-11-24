@@ -176,8 +176,9 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                     yield name, entry
             self.__lazy_loader = None
             self._size = dict.__len__(self)
+            for entry in self.values():
+                repository.add_reference(entry.hash, entry)
         self.__lazy_loader = _lazy_loader
-
         dict.__init__(self)
         _GitObject.__init__(
             self,
@@ -450,8 +451,6 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                             parent_object=cast(ParentObject, parent))
             case _:
                 raise ValueError(f"Unknown type {type}")
-
-        repository.add_reference(hash, self)
         return name, cast(GitEntry[O], entry)
 
 
