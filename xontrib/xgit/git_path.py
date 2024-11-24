@@ -3,7 +3,7 @@ Path-like interface for git objects.
 '''
 
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import PurePath, PurePosixPath
 from typing import Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
@@ -35,7 +35,7 @@ class GitPath(PurePath):
 
     __base: PathBase
     __object: 'xo.GitObject'
-    _flavour = PurePath._flavour # type: ignore
+    _flavour = PurePosixPath._flavour # type: ignore
 
     def __init__(self, *args,
                 object: 'xo.GitObject',
@@ -44,7 +44,7 @@ class GitPath(PurePath):
         super().__init__(*args, **kwargs)
         self.__base = base
         self.__object = object
-        
+
     def __new__(cls, *args,
                 object: 'xo.GitObject',
                 base: PathBase,
@@ -57,12 +57,12 @@ class GitPath(PurePath):
 
     @property
     def repository(self) -> 'ct.GitRepository':
-        return self.__base.repository 
-    
+        return self.__base.repository
+
     @property
     def root_object(self) -> Optional['xo.GitCommit|xo.GitTagObject']:
         return self.__base.root_object
-    
+
     @property
     def top(self) -> 'ot.EntryObject':
         return self.__base.top
