@@ -69,7 +69,7 @@ def _add_load_action(action: LoadAction):
     Add an action to take when loading the xontrib.
     """
     _load_actions.append(action)
-    
+
 def _add_unload_action(xsh: XonshSession, action: CleanupAction):
     """
     Add an action to take when unloading the xontrib.
@@ -129,7 +129,7 @@ def context(xsh: Optional[XonshSession] = GLOBAL_XSH) -> GitContext:
     if XGIT is None:
         XGIT = _GitContext(xsh)
         env['XGIT'] = XGIT
-        def unload_context(): 
+        def unload_context():
             del env['XGIT']
         _add_unload_action(xsh, unload_context)
     return cast(GitContext, XGIT)
@@ -171,8 +171,8 @@ def session(
             nonlocal last_return
             if active:
                 last_return = t_func(*args,
-                                   XSH=_XSH,
-                                   XGIT=context(_XSH),
+                                   XSH=XSH,
+                                   XGIT=context(XSH),
                                    **kwargs)
             return last_return
 
@@ -181,7 +181,7 @@ def session(
         wrapper.__name__ = func.__name__
         wrapper.__qualname__ = func.__qualname__ + '_session'
         wrapper.__module__ = func.__module__
-        
+
         return cast(Callable[...,T], wrapper)
     return decorator
 
@@ -468,7 +468,7 @@ def command(
                 pass
             print(f"{ex!s}", file=stderr)
         return ()
-    
+
     @wraps(cmd)
     def caller(*args,
             stdin=sys.stdin,
@@ -495,10 +495,10 @@ def command(
                         stdout=stdout,
                         stderr=stderr,
                         **kwargs)
-        
+
     caller.__name__ = cmd.__name__ + '_caller'
     caller.__qualname__ = cmd.__qualname__ + '_caller'
-    
+
     # @wraps(cmd) copies the signature, which we don't want.
 
     alias_fn.__name__ = cmd.__name__ + '_alias'
