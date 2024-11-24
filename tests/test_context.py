@@ -11,18 +11,19 @@ from_json: Any
 
 
 def test_context_loads(modules, sysdisplayhook):
-    with modules('xontrib.xgit.context', 'xontrib.xgit.vars') as ((m_ctx, _), vars):
+    with modules('xontrib.xgit.context') as ((m_ctx), vars):
         assert m_ctx is not None
 
 def test_context_simple(with_xgit, worktree, sysdisplayhook):
     def _t(*_, **__):
         import xontrib.xgit.context as ctx
-        ctx = ctx._GitContext(worktree.session, worktree=worktree)
+        ctx = ctx._GitContext(worktree.repository.context.session, worktree=worktree)
         assert ctx is not NonCallableMock
-    with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.vars')
+    with_xgit(_t, 'xontrib.xgit.context')
 
 def test_context_json(with_xgit,
                       worktree,
+                      git_context,
                       git,
                       sysdisplayhook,
                       test_branch):
@@ -30,7 +31,10 @@ def test_context_json(with_xgit,
         import xontrib.xgit.context as ctx
         head = worktree.git('rev-parse', 'HEAD')
         branch = worktree.git('symbolic-ref', 'HEAD')
-        ctx = ctx._GitContext(worktree.session, worktree=worktree)
+        ctx = git_context
+        ctx.worktree=worktree
+        ctx.branch = branch
+        ctx.commit = head
         j = to_json(ctx, repository=worktree.repository)
         path = worktree.path
         expected = {
@@ -49,4 +53,4 @@ def test_context_json(with_xgit,
         }
         assert j['worktree'] == expected['worktree']
         assert j == expected
-    with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.to_json', 'xontrib.xgit.vars')
+    with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.to_json')

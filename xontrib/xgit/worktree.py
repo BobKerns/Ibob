@@ -111,7 +111,8 @@ class _GitWorktree(_GitCmd, GitWorktree):
 
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
-        repository = repo._GitRepository(Path(data['repository']))
+        repository = repo._GitRepository(Path(data['repository']),
+                                         context=describer.context)
         j: str = data["commit"]
         commit,=repository.get_object(j, 'commit'),
 

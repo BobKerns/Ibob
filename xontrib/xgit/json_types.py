@@ -125,6 +125,7 @@ class JsonDescriber(Protocol):
     class_names: dict[type,str]
     include_private: bool
     repository: 'ct.GitRepository' # (a refractory circular reference)
+    context: 'ct.GitContext' # (a refractory circular reference)
     def to_json(self, obj: Any, cls: Optional[type|str]=None) -> JsonReturn:
         """
         Perform the conversion to JSON.

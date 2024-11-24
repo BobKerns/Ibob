@@ -19,23 +19,24 @@ classes are complex. It is very easy to end up with circular imports.
 '''
 
 from collections import defaultdict
-from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import (
-    Callable, Mapping, Optional, cast
+    Mapping, Optional, cast
 )
 from pathlib import Path, PurePosixPath
 
 from xonsh.built_ins import XonshSession
 from xonsh.tools import chdir
 from xonsh.lib.pretty import RepresentationPrinter
+import yaml
 
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person
 from xontrib.xgit.types import (
-    GitHash, GitObjectReference,
+    GitHash, GitObjectReference, CleanupAction,
     GitNoRepositoryException, GitNoWorktreeException, GitException, GitError,
     GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
+    GitRepositoryId, GitReferenceType,
 )
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
@@ -49,7 +50,6 @@ from xontrib.xgit.context_types import (
 import xontrib.xgit.repository as rr
 import xontrib.xgit.worktree as wt
 
-@dataclass
 class _GitContext(_GitCmd, GitContext):
     """
     Context for working within a git repository.
@@ -63,7 +63,7 @@ class _GitContext(_GitCmd, GitContext):
     def session(self) -> XonshSession:
         return self.__session
 
-    __repositories: dict[Path, GitRepository] = field(default_factory=dict)
+    __repositories: dict[Path, GitRepository]
     def repositories(self) -> dict[Path, GitRepository]:
         return _GitContext.__repositories
 
@@ -71,26 +71,29 @@ class _GitContext(_GitCmd, GitContext):
         path = Path(path)
         repository = _GitContext.__repositories.get(path)
         if repository is None:
-            repository = rr._GitRepository(path=path)
+            repository = rr._GitRepository(path=path,
+                                           context=self,
+                                           )
             _GitContext.__repositories[path] = repository
         return repository
 
-    __worktrees: dict[Path, GitWorktree] = field(default_factory=dict)
+    __worktrees: dict[Path, GitWorktree]
     @property
     def worktrees(self) -> Mapping[Path, GitWorktree]:
         return MappingProxyType(self.__worktrees)
 
-    __worktree: GitWorktree|None = None
+    __worktree: GitWorktree|None
     @property
     def worktree(self) -> GitWorktree:
-        raise ValueError("Worktree has not been set")
+        if self.__worktree is None:
+            raise ValueError("Worktree has not been set")
         return self.__worktree
     @worktree.setter
     def worktree(self, value: GitWorktree):
         self.__worktree = value
         self.__repository = value.repository
 
-    __repository: GitRepository|None = None
+    __repository: GitRepository|None
     # Set for bare repositories; otherwise we use the one from
     # the current worktree.
     @property
@@ -147,7 +150,7 @@ class _GitContext(_GitCmd, GitContext):
         self.__worktree = worktree
         return worktree
 
-    __path: PurePosixPath = PurePosixPath()
+    __path: PurePosixPath
     @property
     def path(self) -> PurePosixPath:
         return self.__path
@@ -156,10 +159,12 @@ class _GitContext(_GitCmd, GitContext):
     def path(self, value: PurePosixPath|str):
         self.__path = PurePosixPath(value)
 
-    __branch: 'rt.GitRef|None' = None
+    __branch: 'rt.GitRef|None'
     @property
     def branch(self) -> 'rt.GitRef|None':
         if self.__branch is None:
+            if self.__worktree is None:
+                raise ValueError("Branch has not been set")
             return self.worktree.branch
         return self.__branch
     @branch.setter
@@ -178,7 +183,7 @@ class _GitContext(_GitCmd, GitContext):
             case _:
                 raise ValueError(f"Invalid branch: {value!r}")
 
-    __commit: 'ot.GitCommit|None' = None
+    __commit: 'ot.GitCommit|None'
     @property
     def commit(self) -> ot.GitCommit:
         if self.__commit is None:
@@ -207,7 +212,7 @@ class _GitContext(_GitCmd, GitContext):
             case _:
                 raise ValueError(f'Not a commit: {value}')
 
-    __objects: dict[GitHash, 'ot.GitObject'] =  field(default_factory=dict)
+    __objects: dict[GitHash, 'ot.GitObject']
     @property
     def objects(self) -> Mapping[GitHash, 'ot.GitObject']:
         return MappingProxyType(self.__objects)
@@ -224,36 +229,48 @@ class _GitContext(_GitCmd, GitContext):
                                  path=PurePosixPath("."))
         return entry
 
-    __people: dict[str, Person] = field(default_factory=dict)
+    __people: dict[str, Person]
     @property
-    def people(self) -> set[Person]:
-        return set(self.__people.values())
+    def people(self) -> dict[str, Person]:
+        return self.__people
 
-    __object_references: defaultdict[GitHash, set[GitObjectReference]] = field(default_factory=lambda: defaultdict(set))
+    __object_references: defaultdict[GitHash, set[GitObjectReference]]
     @property
     def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
         return MappingProxyType(self.__object_references)
 
-    def add_reference(self, hash: GitHash, reference: GitObjectReference) -> None:
-        self.__object_references[hash].add(reference)
+    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, t: GitReferenceType) -> None:
+        self.__object_references[target].add((repo, ref, t))
 
-    def __init__(self, session: XonshSession, /,
+
+    def __init__(self, session: XonshSession, /, *,
                  worktree: Optional[GitWorktree] = None,
                  branch: Optional['str|rt.GitRef'] = None,
                  commit: Optional['str|ot.GitCommit'] = None,
                  **kwargs):
-        super().__init__(**kwargs)
+        #super().__init__(**kwargs)
+        self.__session = session
+        self.__objects = {}
+        if worktree is None:
+            self.__repository = None
+        else:
+            self.__repository = worktree.repository
         self.__worktree = worktree
         self.__path = PurePosixPath()
+        self.__repositories = {}
+        self.__worktrees = {}
         self.branch = branch
         if commit is None:
-            b = self.branch
+            b = self.__branch
             if b is not None:
                 t = b.target
                 if t is not None:
                     commit = t.as_('commit')
         if commit is not None:
             self.commit = self.repository.get_object(commit, 'commit')
+        self.branch = branch
+        self.__people = dict()
+
 
     @property
     def cwd(self) -> Path:
@@ -332,8 +349,21 @@ class _GitContext(_GitCmd, GitContext):
             raise ValueError("No commit found")
         return branch, commit
 
-    ___unload_actions: list[Callable[[], None]] = field(default_factory=list)
+    __unload_actions: list[CleanupAction]
+    def add_unload_action(self, action: CleanupAction):
+        self.__unload_actions.append(action)
 
+    def _do_unload_actions(self):
+        """
+        Unload a value supplied by the xontrib.
+        """
+        while len(self.__unload_actions) > 0:
+            try:
+                action = self.__unload_actions.pop()
+                action()
+            except Exception:
+                from traceback import print_exc
+                print_exc()
 
 def _relative_to_home(path: Path) -> Path:
     """

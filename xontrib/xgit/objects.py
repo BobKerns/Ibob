@@ -44,11 +44,12 @@ from xontrib.xgit.object_types import (
     GitTagObject,
     Objectish,
 )
-from xontrib.xgit.context_types import GitCmd, GitContext, GitRepository
+from xontrib.xgit.context_types import GitContext, GitRepository
 from xontrib.xgit.entry_types import (
     O, ParentObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
 )
 import xontrib.xgit.entries as xe
+import xontrib.xgit.git_cmd as gc
 
 GitContextFn: TypeAlias = Callable[[], GitContext]
 
@@ -111,7 +112,7 @@ class _GitObject(_GitId, GitObject):
             hash
         )
 
-    def _size_loader(self, repository: GitCmd) -> InitFn['_GitObject',int]:
+    def _size_loader(self, repository: 'gc.GitCmd') -> InitFn['_GitObject',int]:
         '''
         Subclasses can call this when they don't know the size of the object
         '''
@@ -602,10 +603,12 @@ class _GitCommit(_GitObject, GitCommit):
                     self.__parents.append(repository.get_object(line.split()[1], 'commit'))
                 elif line.startswith("author"):
                     author_line = line.split(maxsplit=1)[1]
-                    self.__author = CommittedBy(author_line)
+                    self.__author = CommittedBy(author_line,
+                                                repository=repository)
                 elif line.startswith("committer"):
                     committer_line = line.split(maxsplit=1)[1]
-                    self.__committer = CommittedBy(committer_line)
+                    self.__committer = CommittedBy(committer_line,
+                                                   repository=repository)
                 elif line == 'gpgsig -----BEGIN PGP SIGNATURE-----':
                     in_sig = True
                     sig_lines.append(line)
@@ -737,7 +740,8 @@ class _GitTagObject(_GitObject, GitTagObject):
                     self.__tag_name = line.split(maxsplit=1)[1]
                 elif line.startswith("tagger"):
                     tagger_line = line.split(maxsplit=1)[1]
-                    self.__tagger = CommittedBy(tagger_line)
+                    self.__tagger = CommittedBy(tagger_line,
+                                                repository=repository)
                 elif line == "":
                     break
                 else:

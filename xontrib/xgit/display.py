@@ -42,7 +42,7 @@ Xonsh's original displayhook.
 """
 
 @session()
-def _xgit_displayhook(value: Any, *, XSH: XonshSession):
+def _xgit_displayhook(value: Any, /, *, XSH: XonshSession, **_):
     """
     Add handling for value-returning commands, pre- and post-display events,
     and exception protection.

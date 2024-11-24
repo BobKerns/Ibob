@@ -20,7 +20,8 @@ from xontrib.xgit.table import TableView
 @session()
 def git_ls(path: Path | str = Path('.'), /, *,
            XGIT: GitContext,
-           table: bool=False) -> GitEntry[EntryObject]|View:
+           table: bool=False,
+           **_) -> GitEntry[EntryObject]|View:
     """
     List the contents of the current directory or the directory provided.
     """

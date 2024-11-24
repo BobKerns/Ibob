@@ -9,6 +9,7 @@ import re
 
 from xonsh.lib.pretty import RepresentationPrinter
 
+import xontrib.xgit.context_types as ct
 from xontrib.xgit.types import GitLoader, InitFn
 
 class Person:
@@ -89,17 +90,17 @@ class CommittedBy:
         return self.__date
 
 
-    def __init__(self, line: str):
+    def __init__(self, line: str, *,
+                 repository: 'ct.GitRepository'):
         def loader():
-            import xontrib.xgit.vars as xv
             match = RE_SPLIT.match(line)
             if not match:
                 raise ValueError(f"Invalid CommittedBy line: {line!r}")
             person, date = match.groups()
-            person_ = xv.XGIT_PEOPLE.get(person)
+            person_ = repository.context.people.get(person)
             if person_ is None:
                 person_ = Person(person)
-                xv.XGIT_PEOPLE[person] = person_
+                repository.context.people[person] = person_
             self.__person = person_
             def date_loader(self):
                 timestamp, _tz = date.split(' ')

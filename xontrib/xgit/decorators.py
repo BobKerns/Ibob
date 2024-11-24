@@ -35,7 +35,7 @@ from xontrib.xgit.ref_types import (
 )
 from xontrib.xgit.context import GitContext, _GitContext
 
-_load_actions: list[LoadAction]|None = []
+_load_actions: list[LoadAction]|XonshSession = []
 
 _unload_actions: list[CleanupAction] = []
 """
@@ -46,13 +46,13 @@ def _do_load_actions(xsh: XonshSession):
     Load a value supplied by the xontrib.
     """
     global _load_actions
-    if _load_actions is None:
+    if not isinstance(_load_actions, list):
         return
     while _load_actions:
         _do_load_action(_load_actions.pop(), xsh)
     # All done, clear the list so no more actions are added.
     # They should be run immediately now.
-    _load_actions = None
+    _load_actions = xsh
 
 def _do_load_action(action: LoadAction, xsh: XonshSession):
         try:
@@ -67,12 +67,10 @@ def _add_load_action(action: LoadAction, xsh: XonshSession|None):
     """
     Add an action to take when loading the xontrib.
     """
-    if _load_actions is not None:
+    if isinstance(_load_actions, list):
         _load_actions.append(action)
     else:
-        if xsh is None:
-            raise GitError("No xonsh session supplied.")
-        _do_load_action(action, xsh)
+        _do_load_action(action, _load_actions)
 
 def _do_unload_actions():
     """
@@ -152,11 +150,11 @@ def session(event_name: Optional[str] = None):
                 if XSH is not None:
                     env = XSH.env
                     if env is not None:
-                        del env['XGIT']
+                        with suppress(KeyError):
+                            del env['XGIT']
                     XSH = None
             return unloader
 
-        _add_load_action(loader, XSH)
         @wraps(func)
         def wrapper(*args, XSH: XonshSession, XGIT: GitContext, **kwargs):
             t_func = cast(Callable, func)
@@ -167,12 +165,24 @@ def session(event_name: Optional[str] = None):
                                    XGIT=context(XSH),
                                    **kwargs)
             return last_return
-        def unload():
-            active = False
-            if event_name is not None:
-                getattr(events, event_name).remove(wrapper)
-        _unload_actions.append(unload)
-        return cast(Callable[...,T], wrapper)
+
+        def rewrap(*args, **kwargs):
+            if XSH is None:
+                raise GitError('No xonsh session')
+            if XGIT is None:
+                raise GitError('No git context')
+            return wrapper(*args, XSH=XSH, XGIT=XGIT, **kwargs)
+
+        _add_load_action(loader, XSH)
+        rewrap.__doc__ = func.__doc__
+        rewrap.__name__ = func.__name__
+        rewrap.__qualname__ = func.__qualname__ + '_session'
+        rewrap.__module__ = func.__module__
+        wrapper.__doc__ = func.__doc__
+        wrapper.__name__ = func.__name__
+        wrapper.__qualname__ = func.__qualname__ + '_session_inner'
+        wrapper.__module__ = func.__module__
+        return cast(Callable[...,T], rewrap)
     return decorator
 
 @contextual_completer
@@ -458,7 +468,7 @@ def command(
 
     # @wrap(cmd) copies the signature, which we don't want.
     wrapper.__name__ = cmd.__name__
-    wrapper.__qualname__ = cmd.__qualname__
+    wrapper.__qualname__ = cmd.__qualname__ + '_command'
     wrapper.__doc__ = cmd.__doc__
     wrapper.__module__ = cmd.__module__
     _aliases[alias] = wrapper

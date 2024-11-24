@@ -25,11 +25,11 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.types import (
     GitObjectReference, GitObjectType, GitException,
-    GitHash, GitRepositoryId, GitReferenceType,
+    GitHash, GitRepositoryId, GitReferenceType, CleanupAction,
 )
 from xontrib.xgit.json_types import Jsonable
-from xontrib.xgit.person import Person
-from xontrib.xgit.git_cmd import GitCmd
+from xontrib.xgit import person
+import xontrib.xgit.git_cmd as gc
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ WorktreeMap: TypeAlias = dict[Path, 'GitWorktree']
 
 
 @runtime_checkable
-class GitRepository(Jsonable, GitCmd, Protocol):
+class GitRepository(Jsonable, gc.GitCmd, Protocol):
     """
     A git repository.
 
@@ -154,7 +154,7 @@ class GitRepository(Jsonable, GitCmd, Protocol):
 
 
 @runtime_checkable
-class GitWorktree(Jsonable, GitCmd, Protocol):
+class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     """
     A git worktree. This is the root directory of where the files are checked out.
     """
@@ -338,7 +338,7 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def people(self) -> set['Person']:
+    def people(self) -> dict[str, 'people.Person']:
         '''
         The people associated with the repository.
         '''
@@ -356,5 +356,19 @@ class GitContext(Jsonable, Protocol):
     def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType) -> None:
         '''
         Add a reference to an object.
+        '''
+        ...
+
+    @abstractmethod
+    def add_unload_action(self, action: CleanupAction) -> None:
+        '''
+        Add an action to be performed when the context is unloaded.
+        '''
+        ...
+
+
+    def _do_unload_actions(self):
+        '''
+        Perform the unload actions.
         '''
         ...

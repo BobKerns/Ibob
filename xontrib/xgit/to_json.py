@@ -99,6 +99,7 @@ class _JsonDescriber(JsonDescriber):
         self.from_override_types.update({
             Path: cast(FromJsonOverride, json_to_path),
             })
+        self.context = self.repository.context
 
     @property
     @contextmanager

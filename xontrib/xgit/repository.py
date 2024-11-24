@@ -12,6 +12,7 @@ from functools import reduce
 
 from xonsh.lib.pretty import RepresentationPrinter
 
+from tests.conftest import repository
 from xontrib.xgit.types import InitFn, GitObjectType, GitHash
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
@@ -197,12 +198,25 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                     hash = self.git('rev-parse', '--verify', '--quiet', hash)
             case _:
                 raise ValueError(f"Invalid hash: {hash!r}")
+        match type:
+            case 'commit':
+                return obj._GitCommit(hash, repository=self)
+            case 'tree':
+                return obj._GitTree(hash, repository=self)
+            case 'blob':
+                return obj._GitBlob(hash, size, repository=self)
+            case 'tag':
+                return obj._GitTagObject(hash, repository=self)
+            case None:
+                type = cast(GitObjectType, self.git('cat-file', '-t', hash))
         return self.get_object(hash, type, size)
 
     def __init__(self, *args,
+                 context: 'ct.GitContext',
                  path: Path = Path(".git"),
                  **kwargs):
         super().__init__(path.parent)
+        self.__context = context
         self.__path = path
         def init_id(self: '_GitRepository') -> str:
             # This is a simple way to get a unique id for the repository.
@@ -213,7 +227,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
             # Any repo with the same ID will be clones of each other.
             return hex(reduce(xor, (
                 int(f'0{x}', 16)
-                for x in self.git_lines('log' '--format=%H', '--max-parents=0')),
+                for x in self.git_lines('log', '--format=%H', '--max-parents=0')),
                 0))
         self.__id = init_id
         def init_worktrees(self: '_GitRepository') -> 'ct.WorktreeMap':
@@ -275,6 +289,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                         prunable = ''
             return result
         self.__worktrees = init_worktrees
+        self.__repository = repository
         self.__objects = {}
 
 
@@ -304,7 +319,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
 
     @staticmethod
     def from_json(data: str, describer: JsonDescriber):
-        return _GitRepository(data)
+        return _GitRepository(data, context=describer.context)
 
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
         if cycle:
