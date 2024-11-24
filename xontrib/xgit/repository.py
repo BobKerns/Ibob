@@ -111,8 +111,8 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         if worktree is not None:
             self.__preferred_worktree = worktree
             return worktree
-        commit = self.git_string('rev-parse', '--verify', '--quiet', 'HEAD', check=False)
-        branch_name = self.git_string('symbolic-ref', '--quiet', 'HEAD', check=False)
+        commit = self.rev_parse('HEAD')
+        branch_name = self.symbolic_ref('HEAD')
         branch = None
         if branch_name:
             branch = _GitRef(branch_name, repository=self)
@@ -181,20 +181,20 @@ class _GitRepository(_GitCmd, ct.GitRepository):
             case ot.GitObject():
                 return hash
             case rt.GitRef():
-                hash = self.git_string('rev-parse', '--verify', '--quiet', hash.name)
+                hash = self.rev_parse(hash.name)
             case str():
                 hash = hash.strip()
                 if not hash:
                     raise ValueError(f"Invalid hash: {hash!r}")
                 if RE_HEX.match(hash):
                     try:
-                        hash = self.git_string('rev-parse', '--verify', '--quiet', hash)
+                        hash = self.rev_parse(hash)
                     except ValueError:
-                        hash = self.git_string('rev-parse', '--verify', '--quiet', f'refs/heads/{hash}')
+                        hash = self.rev_parse(f'refs/heads/{hash}')
                 else:
                     if not hash.startswith('refs/'):
                         hash = f'refs/heads/{hash}'
-                    hash = self.git_string('rev-parse', '--verify', '--quiet', hash)
+                    hash = self.rev_parse(hash)
             case _:
                 raise ValueError(f"Invalid hash: {hash!r}")
         match type:

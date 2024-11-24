@@ -30,15 +30,14 @@ class _GitRef(rt.GitRef):
         if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             repo = self.repository
             # Dereference on first use.
-            name = repo.git_string('symbolic-ref', '--quiet', self.__name,
-                                check=False)
+            name = repo.symbolic_ref(self.__name)
             if name:
                 self.__name = name
                 if self.__validate:
                     self.__validate()
             else:
                 # Detached or non-existent ref
-                ref = repo.git_string('rev-parse', '--verify', '--quiet', self.__name, check=False)
+                ref = repo.rev_parse(self.__name)
                 if ref:
                     self.__target = repo.get_object(ref)
         return self.__name
@@ -96,7 +95,7 @@ class _GitRef(rt.GitRef):
                     _name = repository.git_string('check-ref-format', '--branch', name,
                                            check=False)
                 if not _name:
-                    _name = repository.git_string('symbolic-ref', '--quiet', name,
+                    _name = repository.git_string('ref', '--quiet', name,
                                            check=False)
                 if not _name and name not in SYMBOLIC_REFS:
                     raise ValueError(f"Invalid ref name: {name!r}")

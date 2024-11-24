@@ -89,56 +89,60 @@ class _GitContext(_GitCmd, GitContext):
         return repository
 
 
-    def open_worktree(self, path: Path|str, /, *,
+    def open_worktree(self, location: Path|str, /, *,
                     repository: Optional[GitRepository|str|Path]=None,
                     branch: Optional['PurePosixPath|str|rt.GitRef']=None,
                     commit: Optional['ot.Commitish']=None,
+                    path: PurePosixPath=PurePosixPath(),
                     select: bool=True
                     ) -> 'GitWorktree':
         '''
         Open a worktree associated with this repository.
         '''
-        path = Path(path).resolve()
-        worktree = self.worktrees.get(path)
+        location = Path(location).resolve()
+        worktree = self.worktrees.get(location)
         if worktree is not None:
             return worktree
-        if not path.is_dir():
-            raise WorktreeNotFoundError(path)
+        if not location.is_dir():
+            raise WorktreeNotFoundError(location)
         match repository:
             case GitRepository():
                 pass
             case str() | Path():
                 repository = self.open_repository(repository)
             case None:
-                repo_path = path / '.git'
+                repo_path = location / '.git'
                 if repo_path.exists():
                     repository = self.open_repository(repo_path)
                 else:
-                    raise RepositoryNotFoundError(path)
+                    raise RepositoryNotFoundError(location)
             case _:
                 raise ValueError(f"Invalid repository: {repository}")
         if commit is None:
             head = self.rev_parse('HEAD')
             commit = repository.get_object(head, 'commit')
         if branch is None:
-            branch_name = self.git('symbolic-ref', 'HEAD')
+            branch_name = self.symbolic_ref('HEAD')
             if branch_name is not None:
                 branch = repository.get_ref(branch_name)
         else:
             branch = repository.get_ref(branch)
         worktree = wt._GitWorktree(
-            path=path,
+            location=location,
             repository=repository,
             repository_path=repository.path,
             branch=branch,
             commit=commit,
+            path=path,
             locked='',
             prunable='',
         )
         if callable(self.__worktrees):
             self.__worktrees = self.__worktrees(self)
-        self.__worktrees[path] = worktree
+        self.__worktrees[location] = worktree
         repository._add_worktree(worktree)
+        if select:
+            self.worktree = worktree
         return worktree
 
     __worktrees: dict[Path, GitWorktree]
@@ -312,7 +316,7 @@ class _GitContext(_GitCmd, GitContext):
             assert self.commit is not None, "Commit has not been set"
             with p.group(4, "Context:"):
                 p.break_()
-                wt = _relative_to_home(self.worktree.path)
+                wt = _relative_to_home(self.worktree.location)
                 p.text(f"worktree: {wt}")
                 with p.group(2):
                     p.break_()
@@ -361,7 +365,7 @@ class _GitContext(_GitCmd, GitContext):
         not actions. No branches or commits are created.
         """
         repository = worktree.repository
-        branch_name = repository.git("symbolic-ref", "--quiet", 'HEAD', check=False)
+        branch_name = repository.symbolic_ref('HEAD')
         if branch_name:
             branch = repository.get_ref(branch_name)
         else:

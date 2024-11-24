@@ -103,7 +103,7 @@ class GitObject(GitId, Protocol):
         return None
 
 
-@runtime_checkable
+#@runtime_checkable
 class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     """
     A git tree object.

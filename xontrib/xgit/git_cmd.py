@@ -5,7 +5,9 @@ A mixin class for git commands on a repository or worktree.
 from abc import abstractmethod
 from calendar import c
 from pathlib import Path
-from subprocess import run, PIPE, Popen, CompletedProcess
+from subprocess import (
+    run, PIPE, Popen, CompletedProcess,
+)
 import shutil
 from typing import (
     Optional, Sequence, overload, runtime_checkable, Protocol, Iterator,
@@ -283,6 +285,24 @@ class GitCmd(Protocol):
         - The current commit.
         '''
         ...
+        
+    def symbolic_ref(self, ref: str) -> str:
+        '''
+        Get the target of a symbolic reference.
+        
+        PARAMETERS
+        ----------
+        ref: str
+            The reference to get the target of.
+
+        RETURNS
+        -------
+        str
+            The target of the symbolic reference.
+            This is usually a branch or tag name,
+            but can be a commit id.
+        '''
+        ...
 
 class _GitCmd:
     """
@@ -343,6 +363,7 @@ class _GitCmd:
                 cwd: Optional[Path]=None,
                 stdout=PIPE,
                 text: bool=True,
+                check: bool=True,
                 **kwargs):
         '''
         Run a command in the git worktree, repository, or current directory,
@@ -375,6 +396,8 @@ class _GitCmd:
         for line in stream:
             yield line.rstrip()
         proc.wait()
+        if code := proc.returncode:
+            raise GitException(f"Command failed: {cmd} {args} {code}")
 
     def run_stream(self, cmd: str|Path, *args,
                 cwd: Optional[Path]=None,
@@ -537,3 +560,24 @@ class _GitCmd:
                 )
                 return Path(worktree), Path(private), Path(common), commit
         raise GitException(f"   Not a git repository: {path}")
+    
+    
+    def symbolic_ref(self, ref: str) -> str:
+        '''
+        Get the target of a symbolic reference.
+        
+        PARAMETERS
+        ----------
+        ref: str
+            The reference to get the target of.
+
+        RETURNS
+        -------
+        str
+            The target of the symbolic reference.
+            This is usually a branch or tag name,
+            but can be a commit id.
+        '''
+        return self.git_string("symbolic-ref", '--quiet', ref,
+                               check=False)  
+    

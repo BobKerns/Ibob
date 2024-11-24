@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 
 from xonsh.lib.pretty import RepresentationPrinter
 
+from xontrib.xgit.types import GitNoBranchException
 from xontrib.xgit.context_types import GitWorktree, GitRepository
 from xontrib.xgit.git_cmd import _GitCmd
 import xontrib.xgit.ref as ref
@@ -49,7 +50,9 @@ class _GitWorktree(_GitCmd, GitWorktree):
 
     __branch: 'rt.GitRef|None'
     @property
-    def branch(self) -> 'rt.GitRef|None':
+    def branch(self) -> 'rt.GitRef':
+        if self.__branch is None:
+            raise GitNoBranchException()
         return self.__branch
     @branch.setter
     def branch(self, value: 'rt.GitRef|str|None'):

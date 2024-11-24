@@ -373,7 +373,7 @@ def cmd_args(modules, xonsh_session):
                             **kwargs)
                 def wrap_and_apply(cmd: Callable):
                     f(cmd)
-                    info = cmd.info
+                    info = cmd.info # type: ignore
                     def apply(*args, **kwargs):
                         return info.wrapper(args, _info=info, **kwargs)
                     return apply

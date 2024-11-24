@@ -17,9 +17,16 @@ import xontrib.xgit.ref_types as rt
 class PathBase:
     repository: 'ct.GitRepository'
     top: 'ot.EntryObject'
-    root: 'GitPath'
     root_object: Optional['xo.GitCommit|xo.GitTagObject']
     origin: Optional['xo.GitCommit|xo.GitTagObject|rt.GitRef']
+    root: Optional['GitPath']=None
+    def __post_init__(self):
+        if self.root is None:
+            self.root = GitPath(
+                '.',
+                object=self.top,
+                base=self,
+                )
 
 class GitPath(PurePath):
     '''
@@ -37,6 +44,11 @@ class GitPath(PurePath):
         self.__base = base
         self.__object = object
         
+    def __new__(cls, *args,
+                object: 'xo.GitObject',
+                base: PathBase,
+                **kwargs):
+        return super().__new__(cls, *args, **kwargs)
 
     @property
     def object(self) -> xo.GitObject:

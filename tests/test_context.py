@@ -29,8 +29,8 @@ def test_context_json(with_xgit,
                       test_branch):
     def _t(*_, to_json, **__):
         import xontrib.xgit.context as ctx
-        head = worktree.git('rev-parse', 'HEAD')
-        branch = worktree.git('symbolic-ref', 'HEAD')
+        head = worktree.rev_parse('HEAD')
+        branch = worktree.symbolic_ref('HEAD')
         ctx = git_context
         ctx.worktree=worktree
         ctx.branch = branch

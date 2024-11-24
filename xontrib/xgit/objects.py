@@ -244,13 +244,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         self._expand()
         return super().__reversed__()
 
-    def items(self) -> dict_items[str, GitEntry[EntryObject]]:
+    def items(self):
         return dict.items(self._expand())
 
-    def keys(self) -> dict_keys[str, GitEntry[EntryObject]]:
+    def keys(self):
         return dict.keys(self._expand())
 
-    def values(self) -> dict_values[str, GitEntry[EntryObject]]:
+    def values(self):
         return dict.values(self._expand())
 
     def get(self, key: str|PurePosixPath, default: Any = None) -> 'GitEntry[xe.EntryObject]':
