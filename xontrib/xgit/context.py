@@ -28,7 +28,6 @@ from pathlib import Path, PurePosixPath
 from xonsh.built_ins import XonshSession
 from xonsh.tools import chdir
 from xonsh.lib.pretty import RepresentationPrinter
-import yaml
 
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person

@@ -23,7 +23,7 @@ if not TYPE_CHECKING:
         "20000",  # symlink
     ]
     GitObjectType = Literal["blob", "tree", "commit", "tag"]
-    GitEntryKey = tuple[Path, PrePosixPath|None, str, str|None]
+    GitEntryKey = tuple[Path, PurePosixPath|None, str, str|None]
     GitRepositoryId = str
     GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
     GitObjectReference = tuple[GitRepositoryId, GitHash|PurePosixPath, GitReferenceType]

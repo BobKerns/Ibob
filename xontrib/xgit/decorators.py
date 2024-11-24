@@ -3,15 +3,17 @@ Various decorators for xgit commands and functions.
 
 """
 
+from calendar import c
 from contextlib import suppress
 from functools import wraps
 from typing import (
     Any, MutableMapping, NamedTuple, Optional, Callable, Union,
-    TypeAlias, cast, TypeVar, ParamSpec,
+    TypeAlias, cast, TypeVar, ParamSpec, Sequence
 )
-from inspect import signature, Signature, Parameter
+from inspect import signature, Signature, Parameter, stack
 import sys
 from pathlib import Path
+from weakref import WeakKeyDictionary
 
 from xonsh.completers.tools import (
     contextual_completer, ContextualCompleter, CompletionContext,
@@ -35,9 +37,9 @@ from xontrib.xgit.ref_types import (
 )
 from xontrib.xgit.context import GitContext, _GitContext
 
-_load_actions: list[LoadAction]|XonshSession = []
+_load_actions: list[LoadAction] = []
 
-_unload_actions: list[CleanupAction] = []
+_unload_actions: WeakKeyDictionary[XonshSession, list[CleanupAction]] = WeakKeyDictionary()
 """
 Actions to take when unloading the module.
 """
@@ -50,15 +52,16 @@ def _do_load_actions(xsh: XonshSession):
         return
     while _load_actions:
         _do_load_action(_load_actions.pop(), xsh)
-    # All done, clear the list so no more actions are added.
-    # They should be run immediately now.
-    _load_actions = xsh
 
 def _do_load_action(action: LoadAction, xsh: XonshSession):
         try:
             unloader = action(xsh)
             if unloader is not None:
-                _unload_actions.append(unloader)
+                default: list[CleanupAction] = []
+                unloaders = _unload_actions.get(xsh, default)
+                if unloaders is default:
+                    _unload_actions[xsh] = unloaders
+                unloaders.append(unloader)
         except Exception:
             from traceback import print_exc
             print_exc()
@@ -67,16 +70,13 @@ def _add_load_action(action: LoadAction, xsh: XonshSession|None):
     """
     Add an action to take when loading the xontrib.
     """
-    if isinstance(_load_actions, list):
-        _load_actions.append(action)
-    else:
-        _do_load_action(action, _load_actions)
+    _load_actions.append(action)
 
-def _do_unload_actions():
+def _do_unload_actions(xsh: XonshSession):
     """
     Unload a value supplied by the xontrib.
     """
-    for action in _unload_actions:
+    for action in _unload_actions[xsh]:
         try:
             action()
         except Exception:
@@ -166,12 +166,18 @@ def session(event_name: Optional[str] = None):
                                    **kwargs)
             return last_return
 
-        def rewrap(*args, **kwargs):
+        def rewrap(*args,
+                    XSH:XonshSession,
+                    XGIT:GitContext,
+                    **kwargs):
             if XSH is None:
                 raise GitError('No xonsh session')
             if XGIT is None:
                 raise GitError('No git context')
-            return wrapper(*args, XSH=XSH, XGIT=XGIT, **kwargs)
+            return wrapper(*args,
+                           XSH=XSH,
+                           XGIT=XGIT,
+                           **kwargs)
 
         _add_load_action(loader, XSH)
         rewrap.__doc__ = func.__doc__
@@ -222,7 +228,8 @@ class CommandInfo(NamedTuple):
     Information about a command.
     """
     cmd: Callable
-    wrapper: Callable
+    alias_fn: Callable
+    caller_fn: Callable
     alias: str
     signature: Signature
     # Below only in test hardness
@@ -234,7 +241,7 @@ class InvocationInfo(NamedTuple):
     Information about a command invocation.
     """
     cmd: CommandInfo
-    args: list
+    args: Sequence
     kwargs: dict
     stdin: Any
     stdout: Any
@@ -310,20 +317,22 @@ def command(
         ...
     """
     if cmd is None:
-        return lambda cmd: command(
-            cmd,
-            flags=flags,
-            for_value=for_value,
-            alias=alias,
-            export=export,
-            prefix=prefix,
-        )
+        def command_(cmd):
+            return command(
+                cmd,
+                flags=flags,
+                for_value=for_value,
+                alias=alias,
+                export=export,
+                prefix=prefix,
+            )
+        return command_
     if alias is None:
         alias = cmd.__name__.replace("_", "-")
 
     sig: Signature = signature(cmd)
     @session()
-    def wrapper(
+    def alias_fn(
         xargs,
         /, *,
         XSH: XonshSession,
@@ -465,20 +474,51 @@ def command(
                 pass
             print(f"{ex!s}", file=stderr)
         return ()
+    
+    @wraps(cmd)
+    def caller(*args,
+            stdin=sys.stdin,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            **kwargs):
+        f = stack()[1]
+        XSH = f.frame.f_globals['XSH']
+        XGIT = context(XSH)
+        info = InvocationInfo(
+            cmd=cmd.info, # type: ignore
+            args=args,
+            kwargs=kwargs,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            env=XSH.env,
+        )
+        return alias_fn(args,
+                        XSH=XSH,
+                        XGIT=XGIT,
+                        _info=info,
+                        stdin=stdin,
+                        stdout=stdout,
+                        stderr=stderr,
+                        **kwargs)
+        
+    caller.__name__ = cmd.__name__ + '_caller'
+    caller.__qualname__ = cmd.__qualname__ + '_caller'
+    
+    # @wraps(cmd) copies the signature, which we don't want.
 
-    # @wrap(cmd) copies the signature, which we don't want.
-    wrapper.__name__ = cmd.__name__
-    wrapper.__qualname__ = cmd.__qualname__ + '_command'
-    wrapper.__doc__ = cmd.__doc__
-    wrapper.__module__ = cmd.__module__
-    _aliases[alias] = wrapper
+    alias_fn.__name__ = cmd.__name__ + '_alias'
+    alias_fn.__qualname__ = cmd.__qualname__ + '_alias'
+    alias_fn.__doc__ = cmd.__doc__
+    alias_fn.__module__ = cmd.__module__
+    _aliases[alias] = alias_fn
     if export:
         _export(cmd)
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
-        prefix_cmd._subcmds[prefix_alias] = wrapper # type: ignore
-    cmd.info =  CommandInfo(cmd, wrapper, alias, sig)   # type: ignore
-    return cmd
+        prefix_cmd._subcmds[prefix_alias] = alias_fn # type: ignore
+    cmd.info =  CommandInfo(cmd, alias_fn, caller, alias, sig)   # type: ignore
+    return caller
 
 def prefix_command(alias: str):
     """
@@ -496,8 +536,7 @@ def prefix_command(alias: str):
         args = args[1:]
         return subcmds[subcmd](args, **kwargs)
     prefix_name = alias.replace("-", "_")
-    import inspect
-    module = inspect.stack()[1].__module__
+    module = stack()[1].__module__
     qual_name = f'{module}.{prefix_name}'
     setattr(prefix_cmd, "__name__", prefix_name)
     setattr(prefix_cmd, "__qualname__", qual_name)

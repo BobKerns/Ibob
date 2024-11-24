@@ -78,7 +78,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         dict: this will get loaded into the current execution context
     """
     from xontrib.xgit.context import _GitContext
-    _do_load_actions(xsh)
     env =  xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
@@ -96,14 +95,14 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
             def restore_item():
                 ns[name] = old_value
 
-            _unload_actions.append(restore_item)
+            _unload_actions[xsh].append(restore_item)
         else:
 
             def del_item():
                 with suppress(KeyError):
                     del ns[name]
 
-            _unload_actions.append(del_item)
+            _unload_actions[xsh].append(del_item)
 
 
     @events.on_chdir
@@ -132,6 +131,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
             XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
 
 
+    _do_load_actions(xsh)
+    
     for name, value in _exports.items():
         set_unload(xsh.ctx, name, value)
     for name, value in _aliases.items():
@@ -163,7 +164,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     def unhook_display():
         sys.displayhook = hook
 
-    _unload_actions.append(unhook_display)
+    _unload_actions[xsh].append(unhook_display)
     _xonsh_displayhook = hook
     sys.displayhook = _xgit_displayhook
 
@@ -188,7 +189,7 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloading xontrib-xgit", file=sys.stderr)
-    _do_unload_actions()
+    _do_unload_actions(xsh)
 
     if "_XGIT_RETURN" in xsh.ctx:
         del xsh.ctx["_XGIT_RETURN"]

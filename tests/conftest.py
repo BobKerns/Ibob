@@ -362,6 +362,7 @@ def cmd_args(modules, xonsh_session):
         with session_active(m_cmd, xonsh_session) as xontrib_module:
             command = vars['command']
             def _cmd_args(*args, **kwargs):
+                from xontrib.xgit.decorators import context
                 _aliases = {}
                 _exports = []
                 def _export(*args):
@@ -375,7 +376,12 @@ def cmd_args(modules, xonsh_session):
                     f(cmd)
                     info = cmd.info # type: ignore
                     def apply(*args, **kwargs):
-                        return info.wrapper(args, _info=info, **kwargs)
+                        XSH = xonsh_session
+                        return info.alias_fn(args,
+                                             XSH=XSH,
+                                             XGIT=context(XSH),
+                                             _info=info,
+                                             **kwargs)
                     return apply
                 return wrap_and_apply
             return _cmd_args

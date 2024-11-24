@@ -17,7 +17,6 @@ from xontrib.xgit.table import TableView
     prefix=(xgit, 'ls'),
     flags={'table'}
 )
-@session()
 def git_ls(path: Path | str = Path('.'), /, *,
            XGIT: GitContext,
            table: bool=False,

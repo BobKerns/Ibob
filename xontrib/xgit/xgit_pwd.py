@@ -13,7 +13,6 @@ from xontrib.xgit.types import GitNoRepositoryException
     export=True,
     prefix=(xgit, 'pwd'),
 )
-@session()
 def git_pwd(*, XGIT: GitContext, **_):
     """
     Print the current working directory and git context information if available.
