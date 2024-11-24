@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
 
+from xontrib.xgit.types import GitHash
 from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
 import xontrib.xgit.object_types as ot
@@ -29,7 +30,7 @@ class _GitRef(rt.GitRef):
         if self.__name in ('HEAD', 'MERGE_HEAD', 'ORIG_HEAD', 'FETCH_HEAD'):
             repo = self.repository
             # Dereference on first use.
-            name = repo.git('symbolic-ref', '--quiet', self.__name,
+            name = repo.git_string('symbolic-ref', '--quiet', self.__name,
                                 check=False)
             if name:
                 self.__name = name
@@ -37,7 +38,7 @@ class _GitRef(rt.GitRef):
                     self.__validate()
             else:
                 # Detached or non-existent ref
-                ref = repo.git('rev-parse', '--verify', '--quiet', self.__name, check=False)
+                ref = repo.git_string('rev-parse', '--verify', '--quiet', self.__name, check=False)
                 if ref:
                     self.__target = repo.get_object(ref)
         return self.__name
@@ -60,7 +61,7 @@ class _GitRef(rt.GitRef):
         # Validation will set the target if it's a symbolic ref.
         name = self.name
         if self.__target is None:
-            target = self.__repository.git('show-ref', '--hash', name)
+            target = self.__repository.git_string('show-ref', '--hash', name)
             if not target:
                 raise ValueError(f"Ref not found: {name!r}")
             self.__target = self.__repository.get_object(target)
@@ -88,23 +89,23 @@ class _GitRef(rt.GitRef):
             self.__validate = None
             target = None
             if not no_check:
-                _name = repository.git('check-ref-format', '--normalize', name,
+                _name = repository.git_string('check-ref-format', '--normalize', name,
                                        check=False)
                 if not _name:
                     # Try it as a branch name
-                    _name = repository.git('check-ref-format', '--branch', name,
+                    _name = repository.git_string('check-ref-format', '--branch', name,
                                            check=False)
                 if not _name:
-                    _name = repository.git('symbolic-ref', '--quiet', name,
+                    _name = repository.git_string('symbolic-ref', '--quiet', name,
                                            check=False)
                 if not _name and name not in SYMBOLIC_REFS:
                     raise ValueError(f"Invalid ref name: {name!r}")
             if no_exists_ok:
                 self.__name = name
             else:
-                result = repository.git('show-ref', '--verify', name)
+                result = repository.git_string('show-ref', '--verify', name)
                 if not result:
-                    result = repository.git('show-ref', '--verify', f'refs/heads/{name}')
+                    result = repository.git_string('show-ref', '--verify', f'refs/heads/{name}')
                 if not result:
                     raise ValueError(f"Ref not found: {name!r}")
                 target, name = result.split()
@@ -197,13 +198,14 @@ class _Replacement(rt.Replacement, _GitRef):
         '''
         if self._replaced is None:
             repo = self.__repository
-            target = repo.git('show-ref', '--hash', self.name)
+            target = repo.git_string('show-ref', '--hash', self.name)
             if not target:
                 raise ValueError(f"Ref not found: {self.name!r}")
             self._replaced = repo.get_object(target)
         return self._replaced
 
-    def replacement_name(self) -> str:
+    @property
+    def replacement_name(self) -> GitHash:
         '''
         The Sha1 hash of the object being replaced.
         '''

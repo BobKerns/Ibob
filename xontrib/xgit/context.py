@@ -36,6 +36,7 @@ from xontrib.xgit.types import (
     GitHash, GitObjectReference, CleanupAction,
     GitNoRepositoryException, GitNoWorktreeException, GitException, GitError,
     GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
+    GitNoBranchException, GitValueError,
     GitRepositoryId, GitReferenceType,
 )
 import xontrib.xgit.ref_types as rt
@@ -67,14 +68,24 @@ class _GitContext(_GitCmd, GitContext):
     def repositories(self) -> dict[Path, GitRepository]:
         return self.__repositories
 
-    def open_repository(self, path: Path|str) -> GitRepository:
-        path = Path(path)
-        repository = self.__repositories.get(path)
-        if repository is None:
-            repository = rr._GitRepository(path=path,
-                                           context=self,
-                                           )
-            self.__repositories[path] = repository
+    def open_repository(self, path: Path|str|GitRepository, /, *,
+                        select: bool=True) -> GitRepository:
+        """
+        Open a repository at the given path. If the path is already open,
+        return the existing repository.
+        """
+        if isinstance(path, GitRepository):
+            repository = path
+        else:
+            path = Path(path)
+            repository = self.__repositories.get(path)
+            if repository is None:
+                repository = rr._GitRepository(path=path,
+                                            context=self,
+                                            )
+                self.__repositories[path] = repository
+        if select and (self.__repository is not repository):
+            self.repository = repository
         return repository
 
 
@@ -155,6 +166,14 @@ class _GitContext(_GitCmd, GitContext):
             raise GitNoRepositoryException()
 
         return self.__repository
+    @repository.setter
+    def repository(self, value: GitRepository):
+        if value != self.__repository:
+            self.__worktree = None
+            self.__branch = None
+            self.__commit = None
+            self.__path = PurePosixPath()
+        self.__repository = value
 
     __path: PurePosixPath
     @property
@@ -167,10 +186,10 @@ class _GitContext(_GitCmd, GitContext):
 
     __branch: 'rt.GitRef|None'
     @property
-    def branch(self) -> 'rt.GitRef|None':
+    def branch(self) -> 'rt.GitRef':
         if self.__branch is None:
             if self.__worktree is None:
-                raise ValueError("Branch has not been set")
+                raise GitNoBranchException()
             return self.worktree.branch
         return self.__branch
     @branch.setter
@@ -187,7 +206,7 @@ class _GitContext(_GitCmd, GitContext):
                 else:
                     self.__branch = None
             case _:
-                raise ValueError(f"Invalid branch: {value!r}")
+                raise GitValueError(f"Invalid branch: {value!r}")
 
     __commit: 'ot.GitCommit|None'
     @property
@@ -245,7 +264,7 @@ class _GitContext(_GitCmd, GitContext):
     def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
         return MappingProxyType(self.__object_references)
 
-    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, t: GitReferenceType) -> None:
+    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, t: GitReferenceType, /) -> None:
         self.__object_references[target].add((repo, ref, t))
 
 
@@ -316,7 +335,6 @@ class _GitContext(_GitCmd, GitContext):
                 p.text(f"cwd: {_relative_to_home(Path.cwd())}")
 
     def to_json(self, describer: JsonDescriber):
-        assert self.commit is not None, "Commit has not been set"
         branch = self.branch.name if self.branch else None
         return {
             "worktree": describer.to_json(self.worktree),

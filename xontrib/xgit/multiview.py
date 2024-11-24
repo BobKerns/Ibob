@@ -155,18 +155,18 @@ def default_extractor(x: T) -> Iterable[tuple[int|str, T]]:
     return [(0, x)]
 
 @dataclass
-class MultiViewConfig(Generic[T, K, X, Rcv], ViewConfig[T, Iterable[tuple[K, Rcv]]]):
+class MultiViewConfig(Generic[Txv, Kxv, Xxv, Rcv]):
     '''
     Configuration for a `MultiView`.
     '''
-    extractor: Optional[ExtractorFnMulti[T,K,X]] = None
-    prefilter: Optional[FilterFnMulti[K, X]] = None
-    converter: Optional[ConverterFnMulti[K, X, Rcv]] = None
-    postfilter: Optional[FilterFnMulti[K, Rcv]] = None
-    sort: Optional[SortFnMulti[K, Rcv]] = None
-    str_method: Optional[DisplayFnMulti[K, Rcv]] = None
-    repr_method: Optional[DisplayFnMulti[K, Rcv]] = None
-    pretty_method: Optional[PrettyFnMulti[K, Rcv]] = None
+    extractor: Optional[ExtractorFnMulti[Txv,Kxv,Xxv]] = None
+    prefilter: Optional[FilterFnMulti[Kxv, Xxv]] = None
+    converter: Optional[ConverterFnMulti[Kxv, Xxv, Rcv]] = None
+    postfilter: Optional[FilterFnMulti[Kxv, Rcv]] = None
+    sort: Optional[SortFnMulti[Kxv, Rcv]] = None
+    str_method: Optional[DisplayFnMulti[Kxv, Rcv]] = None
+    repr_method: Optional[DisplayFnMulti[Kxv, Rcv]] = None
+    pretty_method: Optional[PrettyFnMulti[Kxv, Rcv]] = None
         
 
 class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
@@ -274,7 +274,7 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
             kwargs['pretty_method'] = _pretty_method
         
         self.__extractor = extractor
-        self.__converter = converter
+        self.__multi_converter = converter
         self.__prefilter = prefilter
         self.__postfilter = postfilter
         self.__sort = sort
@@ -292,9 +292,9 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
         self.__extractor = value
 
 
-    __converter: Optional[ConverterFnMulti[K, X, Rcv]] = None
+    __multi_converter: Optional[ConverterFnMulti[K, X, Rcv]] = None
     @property
-    def _converter(self) -> ConverterFnMulti[K, X, Rcv]:
+    def _multi_converter(self) -> ConverterFnMulti[K, X, Rcv]:
         '''
         The conversion function from the target object to the intermediate
         representation. If not supplied, the identity function is used.
@@ -305,16 +305,16 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
         If the target object is already in the intermediate representation,
         this function should be the omitted.
         '''
-        converter = self.__converter
+        converter = self.__multi_converter
         if converter is None:
             def _converter(k: K, x: X) -> tuple[K, Rcv]:
                 return cast(tuple[K, Rcv], (k, x))
             converter = cast(ConverterFnMulti[K, X, Rcv], _converter)
-            self.__converter = converter
+            self.__multi_converter = converter
         return converter
-    @_converter.setter
-    def _converter(self, value: Optional[ConverterFnMulti[K, X, Rcv]]) -> None:
-        self.__converter = value
+    @_multi_converter.setter
+    def _multi_converter(self, value: Optional[ConverterFnMulti[K, X, Rcv]]) -> None:
+        self.__multi_converter = value
 
     @property
     def _target_value(self) -> Iterable[tuple[K, Rcv]]:
@@ -331,8 +331,8 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
 
         if self.__prefilter:
             x_target = (e for e in x_target if self.__prefilter(*e))
-        if self.__converter:
-            target = ((k, self.__converter(k,v)) for k,v in x_target)
+        if self.__multi_converter:
+            target = ((k, self.__multi_converter(k,v)) for k,v in x_target)
         else:
             target = cast(Iterable[tuple[K, Rcv]], x_target)
 

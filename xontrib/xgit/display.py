@@ -35,7 +35,7 @@ events.on_xgit_postdisplay.clear()
 _xonsh_displayhook = sys.displayhook
 
 while hasattr(_xonsh_displayhook, "original"):
-    _xonsh_displayhook = _xonsh_displayhook.original
+    _xonsh_displayhook = _xonsh_displayhook.original    # type: ignore
 
 """
 Xonsh's original displayhook.

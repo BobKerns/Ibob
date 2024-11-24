@@ -3,7 +3,7 @@ Path-like interface for git objects.
 '''
 
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import PurePath
 from typing import Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
@@ -17,27 +17,26 @@ import xontrib.xgit.ref_types as rt
 class PathBase:
     repository: 'ct.GitRepository'
     top: 'ot.EntryObject'
-    root: Optional['xo.GitCommit|xo.GitTagObject']
+    root: 'GitPath'
+    root_object: Optional['xo.GitCommit|xo.GitTagObject']
     origin: Optional['xo.GitCommit|xo.GitTagObject|rt.GitRef']
 
-class GitPath(PurePosixPath):
+class GitPath(PurePath):
     '''
     A path-like object that references a git object.
     '''
 
     __base: PathBase
-    __path: PurePosixPath
     __object: 'xo.GitObject'
 
     def __init__(self, *args,
                 object: 'xo.GitObject',
-                path: PurePosixPath,
                 base: PathBase,
                 **kwargs):
         super().__init__(*args, **kwargs)
         self.__base = base
-        self.__path = path
         self.__object = object
+        
 
     @property
     def object(self) -> xo.GitObject:
@@ -48,8 +47,8 @@ class GitPath(PurePosixPath):
         return self.__base.repository 
     
     @property
-    def root(self) -> Optional['xo.GitCommit|xo.GitTagObject']:
-        return self.__base.root
+    def root_object(self) -> Optional['xo.GitCommit|xo.GitTagObject']:
+        return self.__base.root_object
     
     @property
     def top(self) -> 'ot.EntryObject':
@@ -67,11 +66,11 @@ class GitPath(PurePosixPath):
 
     def __eq__(self, other):
         if isinstance(other, GitPath):
-            return self.__object.hash == other.__object.hash and PurePosixPath.__eq__(self, other)
+            return self.__object.hash == other.__object.hash and PurePath.__eq__(self, other)
         return False
 
     def __hash__(self):
-        return hash(self.__object) + hash(PurePosixPath.__hash__(self))
+        return hash(self.__object) + hash(PurePath.__hash__(self))
 
     def __truediv__(self, other):
         return super().__truediv__(other)

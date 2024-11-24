@@ -28,7 +28,7 @@ from xontrib.xgit.types import (
     GitHash, GitRepositoryId, GitReferenceType, CleanupAction,
 )
 from xontrib.xgit.json_types import Jsonable
-from xontrib.xgit import person
+import xontrib.xgit.person as people
 import xontrib.xgit.git_cmd as gc
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
@@ -153,7 +153,10 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @abstractmethod
-    def open_worktree(self, path: Path|str) -> 'GitWorktree':
+    def open_worktree(self, path: Path|str, /, *,
+                    branch: 'rt.GitRef|str|None'=None,
+                    commit: 'ot.Commitish|None'=None,
+                    **kwargs) -> 'GitWorktree':
         '''
         Open a worktree associated with this repository.
         '''
@@ -185,10 +188,22 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
         ...
     @property
     @abstractmethod
-    def path(self) -> Path: ...
+    def path(self) -> PurePosixPath: ...
+    @path.setter
+    @abstractmethod
+    def path(self, value: PurePosixPath|str): ...
+    
     @property
     @abstractmethod
-    def branch(self) -> 'rt.GitRef': ...
+    def location(self) -> Path:
+        '''
+        The location of the worktree.
+        '''
+        ...
+        
+    @property
+    @abstractmethod
+    def branch(self) -> 'rt.GitRef|None': ...
     @branch.setter
     @abstractmethod
     def branch(self, value: 'rt.GitRef|str|None'): ...
@@ -237,7 +252,7 @@ class GitContext(Jsonable, Protocol):
         ...
 
     @abstractmethod
-    def open_repository(self, path: 'Path|str|GitRepository',
+    def open_repository(self, path: 'Path|str|GitRepository', /, *,
                         select: bool=True
                         ) -> 'GitRepository':
         '''
@@ -317,7 +332,7 @@ class GitContext(Jsonable, Protocol):
         '''
     @commit.setter
     @abstractmethod
-    def commit(self, value: 'PurePosixPath|ot.GitCommit|str'): ...
+    def commit(self, value: 'ot.Commitish'): ...
     @property
 
     @abstractmethod
@@ -337,14 +352,14 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def object_references(self) -> Mapping[GitHash, GitObjectReference]:
+    def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
         '''
         The references associated with the repository.
         '''
         ...
 
     @abstractmethod
-    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType) -> None:
+    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType, /) -> None:
         '''
         Add a reference to an object.
         '''

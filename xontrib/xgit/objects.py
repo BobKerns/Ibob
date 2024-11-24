@@ -12,14 +12,17 @@ These are the four types that live in a git object database:
 '''
 
 from multiprocessing import parent_process
-from tkinter import Entry
+from tkinter import TRUE, Entry
 from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
-    Callable, overload, Iterable, Iterator, Mapping,
+    Callable, overload, Iterable, Iterator, Mapping
 )
 from types import MappingProxyType
 from pathlib import PurePosixPath
 from collections import defaultdict
+
+# Highly dubious for future compatibility
+from _collections_abc import dict_items, dict_keys, dict_values
 
 from xonsh.built_ins import XSH
 from xonsh.lib.pretty import RepresentationPrinter
@@ -46,7 +49,7 @@ from xontrib.xgit.object_types import (
 )
 from xontrib.xgit.context_types import GitContext, GitRepository
 from xontrib.xgit.entry_types import (
-    O, ParentObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
+    O, ParentObject, EntryObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
 )
 import xontrib.xgit.entries as xe
 import xontrib.xgit.git_cmd as gc
@@ -117,7 +120,7 @@ class _GitObject(_GitId, GitObject):
         Subclasses can call this when they don't know the size of the object
         '''
         def loader(self: _GitObject):
-            size = repository.git("cat-file", "-s", self.hash)
+            size = repository.git_string("cat-file", "-s", self.hash)
             return int(size)
         return loader
 
@@ -132,7 +135,7 @@ class _GitObject(_GitId, GitObject):
         p.text(f"{type(self).__name__.strip('_')}({self.hash})")
 
 
-class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
+class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     """
     A directory ("tree") stored in a git repository.
 
@@ -181,6 +184,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
             tree,
             lambda _: len(self._expand()),
         )
+        ent = xe._GitEntryTree(self, '.', "040000", repository, PurePosixPath())
+        dict.__setitem__(self, '.', ent)
 
     def _expand(self):
         if self.__lazy_loader is not None:
@@ -192,8 +197,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
     def type(self) -> Literal["tree"]:
         return "tree"
 
-    def __hash__(self):
-        _GitObject.__hash__(self._expand())
+    def __hash__(self): # type: ignore
+        return _GitObject.__hash__(self._expand())
 
     def __eq__(self, other):
         return _GitObject.__eq__(self._expand(), other)
@@ -208,20 +213,22 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
         return dict.__contains__(self._expand(), key)
 
 
-    def __getitem__(self, key: str) -> _GitObject:
+    def __getitem__(self, key: str) -> GitEntry[EntryObject]:
         path = key.split("/")
         loc = self
+        ent = self['.']
         for p in path:
             match p:
                 case '' | '.':
                     pass
                 case '..':
-                    raise ValueError("Cannot use '..' in a path")
+                    raise KeyError("Cannot use '..' in a path")
                 case _:
-                    loc = dict.__getitem__(loc, p)
-        return loc
+                    ent = dict.__getitem__(loc, p)
+                    loc = ent.object
+        return ent
 
-    def __setitem__(self, key: str, value: _GitObject):
+    def __setitem__(self, key: str, value: GitEntry[EntryObject]):
         raise NotImplementedError("Cannot set items in a GitTree")
 
     def __delitem__(self, key: str):
@@ -237,13 +244,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
         self._expand()
         return super().__reversed__()
 
-    def items(self):
+    def items(self) -> dict_items[str, GitEntry[EntryObject]]:
         return dict.items(self._expand())
 
-    def keys(self):
+    def keys(self) -> dict_keys[str, GitEntry[EntryObject]]:
         return dict.keys(self._expand())
 
-    def values(self):
+    def values(self) -> dict_values[str, GitEntry[EntryObject]]:
         return dict.values(self._expand())
 
     def get(self, key: str|PurePosixPath, default: Any = None) -> 'GitEntry[xe.EntryObject]':
@@ -421,7 +428,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[GitTree]]):
         if path is not None:
             this_path = path / name
         else:
-            this_path = None
+            this_path = PurePosixPath() / name
         match type:
             case 'tree':
                 entry = xe._GitEntryTree(cast(GitTree, obj), name, mode,
@@ -513,11 +520,11 @@ class _GitBlob(_GitObject, GitBlob):
         p.text(f"GitBlob({self.hash!r}, {self.size})")
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         """
         Return the contents of the file.
         """
-        return self.__repository.git_binary("cat-file", "blob", self.hash)
+        return self.__repository.git_binary("cat-file", "blob", self.hash).read()
 
     @property
     def stream(self):
@@ -532,8 +539,9 @@ class _GitBlob(_GitObject, GitBlob):
 
     @property
     def text(self):
-        lines = self.__repository.git_lines("cat-file", "blob", self.hash)
-        return "\n".join(lines)
+        return self.__repository.git_stream("cat-file", "blob", self.hash,
+                                            text=True,
+                                            ).read()
 
 class _GitCommit(_GitObject, GitCommit):
     """
@@ -589,7 +597,7 @@ class _GitCommit(_GitObject, GitCommit):
 
     def __init__(self, hash: str, /, *, repository: GitRepository):
         def loader():
-            lines = repository.git_stream("cat-file", "commit", hash)
+            lines = repository.git_lines("cat-file", "commit", hash)
             tree = next(lines).split()[1]
             def load_tree(_):
                 return repository.get_object(tree, 'tree')
@@ -697,7 +705,7 @@ class _GitTagObject(_GitObject, GitTagObject):
 
     __tag_type: GitObjectType
     @property
-    def tag_type(self) -> str:
+    def tag_type(self) -> GitObjectType:
         if self.__loader:
             self.__loader()
         return self.__tag_type

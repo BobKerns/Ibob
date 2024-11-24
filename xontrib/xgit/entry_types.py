@@ -24,15 +24,15 @@ from pathlib import PurePosixPath
 from xontrib.xgit.types import GitEntryMode, GitObjectType, GitHash
 import xontrib.xgit.context_types as ct
 
-if TYPE_CHECKING:
-    ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
-    EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
-    O = TypeVar('O', bound='EntryObject', covariant=True)
-else:
-    import xontrib.xgit.object_types as ot
-    ParentObject = None
-    EntryObject = None
-    O = TypeVar('O', covariant=True)
+#if TYPE_CHECKING:
+ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
+EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
+O = TypeVar('O', bound='EntryObject', covariant=True)
+#else:
+#    import xontrib.xgit.object_types as ot
+#    ParentObject = None
+#    EntryObject = None
+#    O = TypeVar('O', covariant=True)
 
 @runtime_checkable
 class GitEntry(Generic[O], Protocol):

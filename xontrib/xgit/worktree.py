@@ -34,10 +34,18 @@ class _GitWorktree(_GitCmd, GitWorktree):
         """
         return self.__repository_path
 
-    __path: Path | None = Path(".")
+    __path: PurePosixPath = PurePosixPath(".")
     @property
-    def path(self) -> Path | None:
+    def path(self) -> PurePosixPath:
         return self.__path
+    @path.setter
+    def path(self, value: PurePosixPath|str):
+        self.__path = PurePosixPath(value)
+    
+    __location: Path
+    @property
+    def location(self):
+        return self.__location
 
     __branch: 'rt.GitRef|None'
     @property
@@ -68,7 +76,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
         match value:
             case str() | PurePosixPath():
                 value = str(value).strip()
-                hash = self.git('rev-parse', value)
+                hash = self.rev_parse(value)
                 self.__commit = self.repository.get_object(hash, 'commit')
             case GitCommit():
                 self.__commit = value
@@ -79,18 +87,20 @@ class _GitWorktree(_GitCmd, GitWorktree):
 
     def __init__(self, *args,
                 repository: GitRepository,
-                path: Path,
+                location: Path,
                 repository_path: Path,
                 branch: 'rt.GitRef|str|None',
                 commit: 'Commitish',
+                path: PurePosixPath = PurePosixPath("."),
                 locked: str = '',
                 prunable: str = '',
                 **kwargs
             ):
-            super().__init__(path)
+            super().__init__(location)
             self.__repository = repository
-            self.__path = path
+            self.__location= location
             self.__repository_path = repository_path
+            self.__path = path
             self.branch = branch
             self.commit = commit
             self.locked = locked
@@ -118,7 +128,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
         return _GitWorktree(
             repository=repository,
             repository_path=Path(data["repository_path"]),
-            path=Path(data["path"]),
+            location=Path(data["path"]),
             branch=ref._GitRef(data["branch"], repository=describer.repository),
             commit=commit,
             locked=data["locked"],

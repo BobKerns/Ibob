@@ -44,7 +44,7 @@ class _GitEntry(GitEntry[O]):
     __name: str
     __object: O
     __mode: GitEntryMode
-    __path: Optional[PurePosixPath]
+    __path: PurePosixPath
     __parent_object: Optional[ParentObject]
     __parent: Optional['GitEntryTree']
     __repository: GitRepository
@@ -122,7 +122,7 @@ class _GitEntry(GitEntry[O]):
         return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
 
     @property
-    def path(self):
+    def path(self) -> PurePosixPath:
         return self.__path
 
     def __init__(self,
@@ -130,9 +130,10 @@ class _GitEntry(GitEntry[O]):
                  name: str,
                  mode: GitEntryMode,
                  repository: GitRepository,
+                 path: PurePosixPath,
                  parent_object: Optional['ParentObject|GitHash']=None,
                  parent: Optional['GitEntryTree']=None,
-                 path: Optional[PurePosixPath] = None):
+            ):
         self.__object = object
         self.__name = name
         self.__mode = mode

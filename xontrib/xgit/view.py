@@ -146,8 +146,8 @@ class PrettyFn(Generic[Rxv], Protocol):
     
 
 @dataclass
-class ViewConfig(Generic[T, Rcv]):
-    converter: Optional[ConverterFn[T,Rcv]] = None
+class ViewConfig(Generic[Txv, Rcv]):
+    converter: Optional[ConverterFn[Txv,Rcv]] = None
     str_method: Optional[DisplayFn[Rcv]] = None
     repr_method: Optional[DisplayFn[Rcv]] = None
     pretty_method: Optional[PrettyFn[Rcv]] = None

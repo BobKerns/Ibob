@@ -13,7 +13,7 @@ classes are complex. It is very easy to end up with circular imports.
 from pathlib import PurePosixPath
 from typing import (
     Optional, Protocol, overload, runtime_checkable, Any, Iterator, Literal,
-    Sequence, Mapping, TypeAlias,
+    Sequence, Mapping, TypeAlias, IO,
 )
 from abc import abstractmethod
 from io import IOBase
@@ -21,8 +21,8 @@ from io import IOBase
 from xontrib.xgit.types import (
     CleanupAction, GitHash, GitObjectType, GitEntryMode,
 )
+from xontrib.xgit.identity_set import IdentitySet
 import xontrib.xgit.person as xp
-
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
 import xontrib.xgit.ref_types as rt
@@ -104,7 +104,7 @@ class GitObject(GitId, Protocol):
 
 
 @runtime_checkable
-class GitTree(GitObject, Protocol):
+class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     """
     A git tree object.
     """
@@ -112,21 +112,12 @@ class GitTree(GitObject, Protocol):
     def type(self) -> Literal['tree']:
         return 'tree'
 
-    @abstractmethod
-    def items(self) -> Iterator[tuple[str, EntryObject]]: ...
-
-    @abstractmethod
-    def keys(self) -> Iterator[str]: ...
-
-    @abstractmethod
-    def values(self) -> Iterator[EntryObject]: ...
-
     @property
     @abstractmethod
-    def hashes(self) -> Mapping[GitHash, 'et.GitEntry']: ...
+    def hashes(self) -> Mapping[GitHash, IdentitySet['et.GitEntry', int]]: ...
 
     @abstractmethod
-    def __getitem__(self, key: str) -> EntryObject: ...
+    def __getitem__(self, key: str) -> 'et.GitEntry[EntryObject]': ...
 
     @abstractmethod
     def __iter__(self) -> Iterator[str]:  ...
@@ -135,7 +126,7 @@ class GitTree(GitObject, Protocol):
     def __len__(self) -> int: ...
 
     @abstractmethod
-    def __contains__(self, key: str) -> bool: ...
+    def __contains__(self, key: object) -> bool: ...
 
     @abstractmethod
     def get(self, key: str, default: Any = None) -> et.GitEntry[EntryObject]: ...
@@ -238,7 +229,7 @@ class GitBlob(GitObject, Protocol):
         ...
     @property
     @abstractmethod
-    def stream(self) -> IOBase:
+    def stream(self) -> IO[str]:
         ...
 
 

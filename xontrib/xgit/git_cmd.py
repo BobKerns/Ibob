@@ -5,12 +5,12 @@ A mixin class for git commands on a repository or worktree.
 from abc import abstractmethod
 from calendar import c
 from pathlib import Path
-from subprocess import run, PIPE, Popen
+from subprocess import run, PIPE, Popen, CompletedProcess
 import shutil
 from typing import (
     Optional, Sequence, overload, runtime_checkable, Protocol, Iterator,
+    IO, cast,
 )
-from io import IOBase
 
 from xontrib.xgit.types import GitHash, GitException
 import xontrib.xgit.context_types as ct
@@ -23,7 +23,7 @@ class GitCmd(Protocol):
     @abstractmethod
     def run(self, cmd: str|Path, *args,
             cwd: Optional[Path]=None,
-            **kwargs):
+            **kwargs) -> CompletedProcess:
         '''
         Run a command in the git worktree, repository, or current directory,
         depending on which subclass this is run from.
@@ -70,7 +70,7 @@ class GitCmd(Protocol):
         ...
 
     @abstractmethod
-    def run_lines(self, cmd: str|Path, *args,
+    def run_list(self, cmd: str|Path, *args,
                   cwd: Optional[Path]=None,
                   **kwargs) -> list[str]:
         '''
@@ -96,9 +96,9 @@ class GitCmd(Protocol):
         ...
 
     @abstractmethod
-    def run_stream(self, *args,
+    def run_lines(self, *args,
                    cwd: Optional[Path]=None,
-                   **kwargs):
+                   **kwargs) -> Iterator[str]:
         '''
         Run a command in the git worktree, repository, or current directory,
         depending on which subclass this is run from.
@@ -111,9 +111,9 @@ class GitCmd(Protocol):
         ...
 
     @abstractmethod
-    def run_binary(self, cmd: str|Path, *args,
+    def run_stream(self, cmd: str|Path, *args,
                    cwd: Optional[Path]=None,
-                   **kwargs):
+                   **kwargs) -> IO[str]:
         '''
         Run a command in the git worktree, repository, or current directory,
         depending on which subclass this is run from.
@@ -137,13 +137,65 @@ class GitCmd(Protocol):
         ...
 
     @abstractmethod
-    def git(self, subcmd: str, *args, **kwargs) -> str: ...
+    def git_string(self, subcmd: str, *args, **kwargs) -> str:
+        '''
+        Run a git command and return the output as a string.
+        
+        PARAMETERS
+        ----------
+        subcmd: str
+            The git subcommand to run.
+        args: Any
+            The arguments to the command.
+        kwargs: Any
+            Additional arguments to pass to `subprocess.Popen`.
+        '''
+        ...
+    
     @abstractmethod
-    def git_lines(self, subcmd: str, *args, **kwargs) -> list[str]: ...
+    def git_list(self, subcmd: str, *args, **kwargs) -> list[str]:
+        '''
+        Run a git command and return the output as a list of lines.
+        
+        PARAMETERS
+        ----------
+        subcmd: str
+            The git subcommand to run.
+        args: Any
+            The arguments to the command.
+        kwargs: Any
+            Additional arguments to pass to `subprocess.Popen`.
+        
+        RETURNS
+        -------
+        list[str]
+            The output of the command.
+        '''
+        ...
+    
     @abstractmethod
-    def git_stream(self, subcmd: str, *args, **kwargs) -> Iterator[str]: ...
+    def git_lines(self, subcmd: str, *args, **kwargs) -> Iterator[str]: 
+        '''
+        Run a git command and return the output as an iterator of lines.
+
+        PARAMETERS
+        ----------
+        subcmd: str
+            The git subcommand to run.
+        args: Any
+            The arguments to the command.
+        kwargs: Any
+            Additional arguments to pass to `subprocess.Popen`.
+
+        RETURNS
+        -------
+        Iterator[str]
+            The output of the command
+        '''
+        ...
+    
     @abstractmethod
-    def git_binary(self, subcmd: str, *args, **kwargs) -> IOBase:
+    def git_stream(self, subcmd: str, *args, **kwargs) -> IO[str]:
         '''
         Run a git command and return the output as a binary stream.
 
@@ -155,14 +207,52 @@ class GitCmd(Protocol):
             The arguments to the command.
         kwargs: Any
             Additional arguments to pass to `subprocess.Popen`.
+            
+        RETURNS
+        -------
+        IO[str]
+            The output of the command. .read() returns a str object
+        '''
+        
+    @abstractmethod
+    def git_binary(self, subcmd: str, *args, **kwargs) -> IO[bytes]:
+        '''
+        Run a git command and return the output as a binary stream.
+
+        PARAMETERS
+        ----------
+        subcmd: str
+            The git subcommand to run.
+        args: Any
+            The arguments to the command.
+        kwargs: Any
+            Additional arguments to pass to `subprocess.Popen`.
+
+        RETURNS
+        -------
+        IO[bytes]
+            The output of the command. .read() returns a bytes object.
         '''
 
-    @overload
-    def rev_parse(self, params: str, /) -> str: ...
-    @overload
-    def rev_parse(self,param: str, *_params: str) -> Sequence[str]: ...
     @abstractmethod
-    def rev_parse(self, param: str, *params: str) -> Sequence[str] | str:
+    def rev_parse(self, param: str, /) -> GitHash: 
+        '''
+        Use `git rev-parse` to get a single parameter.
+        
+        PARAMETERS
+        ----------
+        param: str
+            The parameter to get.
+
+        RETURNS
+        -------
+        str
+
+        '''
+        ...
+    
+    @abstractmethod
+    def rev_parse_n(self, /, *params: str) -> Sequence[str] | str:
         '''
         Use `git rev-parse` to get multiple parameters at once.
 
@@ -249,7 +339,7 @@ class _GitCmd:
                     check=check,
                     **kwargs)
 
-    def run_stream(self, cmd: str|Path, *args,
+    def run_lines(self, cmd: str|Path, *args,
                 cwd: Optional[Path]=None,
                 stdout=PIPE,
                 text: bool=True,
@@ -286,11 +376,47 @@ class _GitCmd:
             yield line.rstrip()
         proc.wait()
 
+    def run_stream(self, cmd: str|Path, *args,
+                cwd: Optional[Path]=None,
+                stdout=PIPE,
+                text: bool=False,
+                **kwargs) :
+        '''
+        Run a command in the git worktree, repository, or current directory,
+        depending on which subclass this is run from.
+
+        PARAMETERS
+        ----------
+        cmd: str|Path
+            The command to run.
+        args: Any
+            The arguments to the command.
+        cwd: Optional[Path]:
+            The directory to run the command in, relative to this context.
+        kwargs: Any
+            Additional arguments to pass to `subprocess.Popen`.
+
+        RETURNS
+        -------
+        bytes
+
+        '''
+        proc = Popen([cmd, *(str(a) for a in args)],
+            stdout=PIPE,
+            text=True,
+            cwd=self.__get_path(cwd),
+            **kwargs)
+        stream = proc.stdout
+        if stream is None:
+            raise ValueError("No stream")
+        return stream
+    
+    
     def run_binary(self, cmd: str|Path, *args,
                 cwd: Optional[Path]=None,
                 stdout=PIPE,
                 text: bool=False,
-                **kwargs):
+                **kwargs)  -> IO[bytes]:
         '''
         Run a command in the git worktree, repository, or current directory,
         depending on which subclass this is run from.
@@ -319,83 +445,79 @@ class _GitCmd:
         stream = proc.stdout
         if stream is None:
             raise ValueError("No stream")
-        return stream
+        return cast(IO[bytes], stream)
 
     def run_string(self, cmd: str|Path, *args,
                    **kwargs) -> str:
         return self.run(cmd, *args, **kwargs).stdout.strip()
 
-    def run_lines(self, cmd: str|Path, *args,
+    def run_list(self, cmd: str|Path, *args,
                     **kwargs) -> list[str]:
-        return self.run_string(cmd, *args, **kwargs).splitlines()
+        return list(self.run_lines(cmd, *args, **kwargs))
 
-    def git(self, subcmd: str, *args,
+    def git_string(self, subcmd: str, *args,
             path: Optional[str|Path]=None,
             stdout=PIPE,
             text: bool=True,
             check: bool=True,
             **kwargs) -> str:
-        return self.run(str(self.__git), subcmd, *args,
+        return self.run_string(str(self.__git), subcmd, *args,
             stdout=stdout,
             text=text,
             check=check,
-            **kwargs).stdout.strip()
+            **kwargs)
 
-    def git_lines(self, subcmd: str, *args,
+    def git_list(self, subcmd: str, *args,
             path: Optional[str|Path]=None,
             stdout=PIPE,
             text: bool=True,
             check: bool=True,
             **kwargs) -> list[str]:
-        return self.run(str(self.__git), subcmd, *args,
+        return self.run_list(str(self.__git), subcmd, *args,
             stdout=stdout,
             text=text,
             check=check,
-            **kwargs).stdout.splitlines()
-
-    def git_stream(self, subcmd: str, *args,
-                path: Optional[str|Path]=None,
-                **kwargs):
-        return self.run_stream(str(self.__git), subcmd, *args,
             **kwargs)
 
-    def git_binary(self, subcmd: str, *args,
+    def git_lines(self, subcmd: str, *args,
+                path: Optional[str|Path]=None,
+                **kwargs):
+        return self.run_lines(str(self.__git), subcmd, *args,
+            **kwargs)
+
+    def git_stream(self, subcmd: str, *args,
                 cwd: Optional[str|Path]=None,
                 stdout=PIPE,
                 text: bool=False,
                 **kwargs):
-
-        proc = Popen([str(self.__git), subcmd, *args],
+        return self.run_stream(str(self.__git), subcmd, *args,
             stdout=stdout,
             text=text,
-            cwd=self.__get_path(cwd),
             **kwargs)
-        stream = proc.stdout
-        if stream is None:
-            raise ValueError("No stream")
-        return stream
+        
+    def git_binary(self, subcmd: str, *args,
+                cwd: Optional[str|Path]=None,
+                stdout=PIPE,
+                text: bool=False,
+                **kwargs) -> IO[bytes]:
+        return self.run_binary(str(self.__git), subcmd, *args,
+            stdout=stdout,
+            text=text,
+            **kwargs)
 
-    @overload
-    def rev_parse(self, params: str, /) -> str: ...
-    @overload
-    def rev_parse(self,param: str, *_params: str) -> Sequence[str]: ...
-    def rev_parse(self, param: str, *params: str) -> Sequence[str] | str:
+    def rev_parse(self, param: str, /) -> GitHash:
+        return self.rev_parse_n(param)[0]
+    
+    def rev_parse_n(self, /, *params: str) -> Sequence[str]:
         """
         Use `git rev-parse` to get multiple parameters at once.
         """
-        all_params = [param, *params]
-        val = self.git_lines("rev-parse", *all_params)
+        val = self.git_list("rev-parse", *params)
         if val:
             result = val
         else:
             # Try running them individually.
-            result = [self.git("rev-parse", param) for param in all_params]
-        if len(all_params) == 1:
-            # Otherwise we have to assign like `value, = multi_params(...)`
-            # The comma is` necessary to unpack the single value
-            # but is confusing and easy to forget
-            # (or not understand if you don't know the syntax).
-            return result[0]
+            result = [self.git_string("rev-parse", param) for param in params]
         return result
 
     def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, GitHash]:
@@ -408,7 +530,7 @@ class _GitCmd:
             git_file = path / ".git"
 
             if git_file.is_file():
-                worktree, private, common, commit = self.rev_parse(
+                worktree, private, common, commit = self.rev_parse_n(
                     "--show-toplevel",
                     "--absolute-git-path",
                     "--git-common-dir", "HEAD"

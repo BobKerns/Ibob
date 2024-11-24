@@ -360,7 +360,7 @@ def command(
             f"XSH.env not a MutableMapping: {env!r}"
 
         info = InvocationInfo(
-            cmd=cmd.info,
+            cmd=cmd.info, # type: ignore
             args=args,
             kwargs=kwargs,
             stdin=stdin,
@@ -476,8 +476,8 @@ def command(
         _export(cmd)
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
-        prefix_cmd._subcmds[prefix_alias] = wrapper
-    cmd.info =  CommandInfo(cmd, wrapper, alias, sig)
+        prefix_cmd._subcmds[prefix_alias] = wrapper # type: ignore
+    cmd.info =  CommandInfo(cmd, wrapper, alias, sig)   # type: ignore
     return cmd
 
 def prefix_command(alias: str):

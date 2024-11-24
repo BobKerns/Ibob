@@ -94,11 +94,25 @@ class GitNoRepositoryException(GitNoWorktreeException):
     '''
     def __init__(self):
         super().__init__('No repository is current.')
+        
+class GitNoBranchException(GitException):
+    '''
+    Thrown when attempting an operation that requires a branch.
+    '''
+    def __init__(self):
+        super().__init__('No branch is current.')
 
 class GitError(GitException):
     '''
     Thrown when you an error is detected, other than not having a repo or worktree.
     '''
+    
+class GitValueError(GitError, ValueError):
+    '''
+    Thrown when a value supplied to Git is invalid.
+    '''
+    def __init__(self, message: str, /):
+        super().__init__(message)
 
 DirectoryKind = Literal['repository', 'worktree', 'directory']
 class GitDirNotFoundError(GitError):
