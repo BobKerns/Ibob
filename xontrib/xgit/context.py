@@ -116,6 +116,8 @@ class _GitContext(_GitCmd, GitContext):
                     repository = self.open_repository(repo_path)
                 else:
                     raise RepositoryNotFoundError(location)
+            case _ if hasattr(repository, 'get_object'):
+                pass
             case _:
                 raise ValueError(f"Invalid repository: {repository}")
         if commit is None:
