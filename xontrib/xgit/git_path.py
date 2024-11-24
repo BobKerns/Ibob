@@ -41,7 +41,7 @@ class GitPath(PurePath):
                 object: 'xo.GitObject',
                 base: PathBase,
                 **kwargs):
-        super().__init__(self)
+        super().__init__(self, self)
         self.__base = base
         self.__object = object
 
