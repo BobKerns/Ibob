@@ -174,8 +174,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                     name, entry = self._parse_git_entry(line, repository, tree)
                     self.__hashes[entry.hash].add(entry)
                     yield name, entry
-            self._size = dict.__len__(self)
             self.__lazy_loader = None
+            self._size = dict.__len__(self)
         self.__lazy_loader = _lazy_loader
 
         dict.__init__(self)
