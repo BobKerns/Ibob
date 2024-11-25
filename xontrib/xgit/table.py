@@ -12,10 +12,9 @@ from itertools import count
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue
+from xontrib.xgit.type_aliases import HeadingStrategy, ColumnKeys
 from xontrib.xgit.view import T, K, X, Rcv
 from xontrib.xgit.multiview import MultiView, default_extractor
-
-HeadingStrategy: TypeAlias = Literal['none', 'name', 'heading', 'heading-or-name']
 
 class ExtractorFnMulti(Generic[T,K,Rcv]):
     '''
@@ -84,7 +83,6 @@ class Column:
         return ', '.join(a for a in args if a is not None)
 
 ColumnDict: TypeAlias = dict[str|int, Column]|dict[str, Column]|dict[int, Column]
-ColumnKeys: TypeAlias = list[str|int]|list[str]|list[int]
 
 class TableView(MultiView[T,K,X,Rcv]):
     '''

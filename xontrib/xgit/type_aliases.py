@@ -88,3 +88,85 @@ A directory path.
 '''
 type File[_Suffix] = Path
 type PythonFile = File[Literal['.py']]
+
+# Invoker
+
+type KeywordArity = Literal['+', '*', 0, 1, True, False]
+'''
+The number of arguments a keyword takes.
+
+- `True`: Zero argument boolean flag, `True` if supplied
+- `False`: Zero argument boolean flag, `False` if supplied
+- `0`: Zero argument keyword, the flag name if supplied
+- `1`: One argument follows the keyword.
+- `+`: One or more arguments follow the keyword.
+- `*`: Zero or more arguments follow the keyword.
+'''
+
+type KeywordSpec = tuple[KeywordArity, str]
+'''
+A keyword specification for a command.
+
+PARAMETERS
+----------
+    - nargs: The number of arguments the keyword takes,
+      or the boolean value for an un-negated (`--no-`)
+      0-argument keyword.
+    - key: The keyword supplied to the function.
+
+USAGE
+-----
+See: `KeywordSpecs` for more information.
+'''
+
+type KeywordSpecs = dict[str, KeywordSpec]
+'''
+A dictionary of keyword specifications for a command.
+
+PARAMETERS
+----------
+    - key: The keyword supplied to the function.
+    - value: The keyword specification.
+
+>>> `{'g': (1, 'gobbler')}`: -g <value> => `{'gobbler': 'value'}`
+
+>>> `{'g': (0, 'gobbler')}`: -g => `['--gobbler']`
+
+>>> `{'g': (True, 'gobbler')}`: -g => `{'gobbler': True}`
+
+>>> `{'flag': (True, 'flag')}`: --flag => `{'flag': True}`
+
+>>> `{'flag': (1, 'flag')}`: --flag value => `{'flag': 'value'}`
+
+>>> `{'flag': ('+', 'flag')}`: --flag value1 value2 => `{'flag': ['value1', 'value2']}`
+
+>>> `{'flag': ('*', 'flag'})`: --flag value1 value2 value3 => `{'flag': ['value1', 'value2']}`
+
+>>> `{'flag': (0, 'flag')}`: --no-flag => `['--no-flag']`
+
+The default behavior is to treat `--foo` if specified by
+`{'foo': (True, 'foo')}` and `--no-foo` as if specified by
+`{'no-foo': (False, 'foo')}`.
+
+In addition, hyphens are mapped to underscore, so that
+`--foo-bar` is treated as `{'foo-bar': (True, 'foo_bar')}`.
+'''
+
+type KeywordInputSpec = str|KeywordArity|KeywordSpec
+'''
+Input for a keyword specification. If only a `KeywordArity` is supplied,
+the keyword is assumed to be the same as the flag name. Otherwise, if
+a string is supplied, the keyword is assumed to be the string and the
+`KeywordArity` is assumed to be `True`.
+'''
+
+type KeywordInputSpecs = dict[str, KeywordInputSpec]
+'''
+Input to specify keyword specifications for a command. This is converted
+to `KeywordSpecs` for use in the invoker.
+'''
+# Tables
+
+type HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
+
+type ColumnKeys = list[str|int]|list[str]|list[int]

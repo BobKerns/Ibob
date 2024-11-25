@@ -10,6 +10,8 @@ from pathlib import Path, PurePosixPath
 
 from xonsh.built_ins import XonshSession
 
+from xontrib.xgit.view import K
+
 if not TYPE_CHECKING:
 
     GitHash = str
@@ -45,6 +47,14 @@ if not TYPE_CHECKING:
     Directory = Path|str
     File = Path | _FileMarker
     PythonFile = Path | _FileMarker[Literal['.py']]
+
+    KeywordArity = Literal['+', '*', 0, 1, True, False]
+    KeywordSpec = tuple[KeywordArity, str]
+    KeywordSpecs = dict[str, KeywordSpec]
+    KeywordInputSpec = str|KeywordArity|KeywordSpec
+    KeywordInputs = dict[str, KeywordInputSpec]
+
+    HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
 else:
     GitHash = str
     ContextKey =  tuple[Path, PurePosixPath, GitHash, GitHash]
@@ -71,3 +81,11 @@ else:
     Directory = Path|str
     File = Path
     PythonFile = Path
+
+    KeywordArity = Literal['+', '*', 0, 1, True, False]
+    KeywordSpec = tuple[KeywordArity, str]
+    KeywordSpecs = dict[str, KeywordSpec]
+    KeywordInputSpec = str|KeywordArity|KeywordSpec
+    KeywordInputs = dict[str, KeywordInputSpec]
+
+    HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
