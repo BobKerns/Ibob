@@ -6,8 +6,6 @@ from typing import Any, MutableMapping
 
 from xonsh.built_ins import XonshSession
 
-from xontrib.xgit.proxy_json import proxy_to_json
-
 def test_xsh(with_xgit):
     '''
     Test the xsh proxy.

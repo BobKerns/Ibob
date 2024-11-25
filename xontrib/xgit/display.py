@@ -4,18 +4,17 @@ This gives a notebook-style history of the last three values displayed, and
 allows display of python values returned from commands.
 """
 
+from threading import Lock
 from typing import Any, MutableMapping
 import sys
+import builtins
 
 from xonsh.procs.pipelines import HiddenCommandPipeline
 from xonsh.events import events
-import builtins
+from xonsh.built_ins import XonshSession
 
-from xontrib.xgit.vars import (
-    _xgit_count,
-    XSH,
-)
-from xontrib.xgit.proxy import XGitProxy, target
+from xontrib.xgit.context_types import GitContext
+from xontrib.xgit.decorators import session
 
 # Our events:
 
@@ -36,13 +35,14 @@ events.on_xgit_postdisplay.clear()
 _xonsh_displayhook = sys.displayhook
 
 while hasattr(_xonsh_displayhook, "original"):
-    _xonsh_displayhook = _xonsh_displayhook.original
+    _xonsh_displayhook = _xonsh_displayhook.original    # type: ignore
 
 """
 Xonsh's original displayhook.
 """
 
-def _xgit_displayhook(value: Any):
+@session()
+def _xgit_displayhook(value: Any, /, *, XSH: XonshSession, **_):
     """
     Add handling for value-returning commands, pre- and post-display events,
     and exception protection.
@@ -64,8 +64,6 @@ def _xgit_displayhook(value: Any):
                     + "result has been displayed with str() and suppressed"
                 )
                 print(msg, file=sys.stderr)
-    if isinstance(value, XGitProxy):
-        value = target(value)
 
     if env.get("XGIT_TRACE_DISPLAY") and ovalue is not value:
         sys.stdout.flush()
@@ -85,7 +83,8 @@ def _xgit_displayhook(value: Any):
 setattr(_xgit_displayhook, "original", _xonsh_displayhook)
 
 @events.on_xgit_predisplay
-def _xgit_on_predisplay(value: Any, **_):
+@session()
+def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
@@ -107,7 +106,8 @@ def _xgit_on_predisplay(value: Any, **_):
 
 
 @events.on_xgit_postdisplay
-def _xgit_on_postdisplay(value: Any, **_):
+@session()
+def _xgit_on_postdisplay(value: Any, XSH: XonshSession, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
@@ -117,8 +117,24 @@ def _xgit_on_postdisplay(value: Any, **_):
         XSH.ctx["___"] = XSH.ctx.get("++")
 
 
+_count_lock = Lock()
+# Set up the notebook-style convenience history variables.
+@session()
+def _xgit_count(*, XGIT: GitContext, **_):
+    """
+    Set up and use the counter for notebook-style history.
+    """
+    with _count_lock:
+        counter = XGIT.__dict__.get("_xgit_counter", None)
+        if not counter:
+            counter = iter(range(1, sys.maxsize))
+            XGIT.__dict__["_xgit_counter"] = counter
+        return next(counter)
+
+
 @events.on_precommand
-def _on_precommand(cmd: str, **_):
+@session()
+def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     """
     Before running a command, save our temporary variables.
     We associate them with the session rather than the module.

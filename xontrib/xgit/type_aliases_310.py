@@ -6,14 +6,14 @@ We try to make these invisible to type checkers; they're for
 downrev runtime compatibility only.
 '''
 from typing import Literal, TYPE_CHECKING, Any, Callable, Literal, TypeVar, Generic
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from pytest import Directory
+from xonsh.built_ins import XonshSession
 
 if not TYPE_CHECKING:
 
     GitHash = str
-    ContextKey = tuple[Path, Path, GitHash, GitHash]
+    ContextKey = tuple[Path, PurePosixPath, GitHash, GitHash]
     GitLoader = Callable[[], None]
     GitEntryMode = Literal[
         "040000",  # directory
@@ -23,16 +23,12 @@ if not TYPE_CHECKING:
         "20000",  # symlink
     ]
     GitObjectType = Literal["blob", "tree", "commit", "tag"]
-    GitEntryKey = tuple[Path, str, str, str|None]
-    GitObjectReference = tuple[ContextKey, str | None]
+    GitEntryKey = tuple[Path, PurePosixPath|None, str, str|None]
+    GitRepositoryId = str
+    GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
+    GitObjectReference = tuple[GitRepositoryId, GitHash|PurePosixPath, GitReferenceType]
     CleanupAction = Callable[[], None]
-
-    AdaptorMethod = Literal[
-        'getitem', 'setitem', 'delitem', 'setattr', 'getattr', 'contains', 'hasattr', 'bool'
-    ]
-    ProxyAction = Literal['get', 'set', 'delete', 'bool']
-    ProxyDeinitializer = Callable[[], None]
-
+    LoadAction = Callable[[XonshSession], None|CleanupAction]
     JsonAtomic = None|str|int|float|bool
     JsonArray = list['JsonData']
     JsonObject = dict[str,'JsonData']
@@ -50,21 +46,28 @@ if not TYPE_CHECKING:
     File = Path | _FileMarker
     PythonFile = Path | _FileMarker[Literal['.py']]
 else:
-    GitHash = Any
-    ContextKey = Any
-    GitLoader = Any
-    GitEntryMode = Any
-    GitObjectType = Any
+    GitHash = str
+    ContextKey =  tuple[Path, PurePosixPath, GitHash, GitHash]
+    GitLoader = Callable[[], None]
+    GitEntryMode = Literal[
+        "040000",  # directory
+        "100755",  # executable
+        "100644",  # normal file
+        "160000",  # submodule
+        "20000",  # symlink
+    ]
+    GitObjectType = Literal["blob", "tree", "commit", "tag"]
     GitEntryKey = Any
-    GitObjectReference = Any
-    CleanupAction = Any
-    AdaptorMethod = Any
-    ProxyAction = Any
-    ProxyDeinitializer = Any
+    GitObjectReference = tuple
+    GitRepositoryId = str
+    GitReferenceType = str
+    CleanupAction = Callable[[], None]
+    LoadAction = Callable[[XonshSession], None|CleanupAction]
     JsonAtomic = Any
-    JsonArray = Any
-    JsonObject = Any
+    JsonArray = list
+    JsonObject = dict
     JsonData = Any
-    Directory = Any
-    File = Any
-    PythonFile = Any
+
+    Directory = Path|str
+    File = Path
+    PythonFile = Path

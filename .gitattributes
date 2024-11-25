@@ -1,1 +1,2 @@
 *.xsh text linguist-language=Python
+*.zip filter=lfs diff=lfs merge=lfs -text

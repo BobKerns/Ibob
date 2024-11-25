@@ -14,17 +14,28 @@ See https://xonsh.org/ for more information about `xonsh`.
 from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
-    GitHash,    
+    GitHash,
 )
-from xontrib.xgit.git_types import (
-    GitId,
-    GitObject,
+from xontrib.xgit.object_types import (
+    GitId, GitObject,
     GitBlob,
     GitTree,
     GitCommit,
     GitTagObject,
-    GitTreeEntry,
+)
+from xontrib.xgit.entry_types import (
+    GitEntry,
+    GitEntryTree,
+    GitEntryBlob,
+    GitEntryCommit,
+    EntryObject,
+    ParentObject,
+)
+from xontrib.xgit.ref_types import (
     GitRef,
+    Branch,
+    Tag,
+    RemoteBranch
 )
 from xontrib.xgit.context_types import (
     GitRepository,
@@ -57,6 +68,14 @@ __all__ = (
     "GitContext",
     "GitEntryMode",
     "GitObjectType",
-    "GitTreeEntry",
+    "GitEntry",
+    "GitEntryTree",
+    "GitEntryBlob",
+    "GitEntryCommit",
+    "EntryObject",
+    "ParentObject",
     "GitRef",
+    "Branch",
+    "Tag",
+    "RemoteBranch",
 )

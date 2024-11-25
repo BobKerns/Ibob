@@ -1,0 +1,47 @@
+name: Testing
+
+on:
+  workflow_call:
+    inputs:
+      xontrib_name:
+        required: true
+        type: string
+      lfs:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  testing:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: ${{ inputs.lfs }}
+    - name: Install poetry
+      run: pipx install poetry
+    - name: Lock dependencies
+      if: hashFiles('poetry.lock') == ''
+      run: poetry lock
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '${{ matrix.python-version }}'
+        cache: poetry
+    - name: Install dependencies
+      run: poetry install
+    - name: Run tests
+      run: |
+        poetry run xonsh -c "xontrib load ${{ inputs.xontrib_name }}"
+        poetry run pytest

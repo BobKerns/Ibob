@@ -10,7 +10,7 @@
         "**/.ruby-lsp": true
     },
     "hide-files.files": [],
-    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.typeCheckingMode": "standard",
     "python.terminal.shellIntegration.enabled": true,
     "python.analysis.inlayHints.pytestParameters": true,
     "python.testing.pytestEnabled": true,

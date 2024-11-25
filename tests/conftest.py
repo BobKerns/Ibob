@@ -1,15 +1,25 @@
-from contextlib import contextmanager, suppress
+
+from contextlib import contextmanager
 from inspect import currentframe, stack
 from pathlib import Path
-from threading import RLock
+from threading import RLock, Lock
 from types import ModuleType as Module
 import pytest
 from importlib import import_module
-from typing import Callable, Any, Generator, NamedTuple, TypeAlias, cast
+from typing import (
+    Callable, Any, Generator, NamedTuple, Optional, TypeAlias, cast,
+    TYPE_CHECKING
+)
 import sys
 import os
 
+import xonsh
 from xonsh.built_ins import XonshSession
+
+if TYPE_CHECKING:
+    from xontrib.xgit.context_types import GitRepository, GitWorktree
+
+DATA_DIR = Path(__file__).parent / 'data'
 
 def run_stdout(args, **kwargs):
     from subprocess import run, PIPE
@@ -17,7 +27,7 @@ def run_stdout(args, **kwargs):
 
 def cleanup(target: dict[str, Any], before: dict[str, Any], loaded: dict[str, Any], after: dict[str, Any]):
     '''
-    Undo additions and deletionis, while preserving modifications.
+    Undo additions and deletions, while preserving modifications.
     '''
     all_vars = after.keys() | loaded.keys() | before.keys()
     for k in all_vars:
@@ -193,9 +203,11 @@ def with_xgit(xonsh_session, modules, sysdisplayhook):
                             **kwargs,
                             **more_kwargs
                         }
-                        return t(xontrib_module, **params)
+                        yield from t(xontrib_module, **params)
+                        return
             with session_active(module, xonsh_session) as xontrib_module:
-                return t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
+                yield from t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
+            return
         yield _with_xgit
 
 CWD_LOCK = RLock()
@@ -262,76 +274,123 @@ def git():
     _git = which('git')
     if _git is None:
         raise ValueError("git is not installed")
-    def git(*args, **kwargs):
+    def git(*args, cwd: Optional[Path|str], check=True, **kwargs):
+        if cwd is not None:
+            cwd = str(cwd)
         return run([_git, *args],
-                   check=True,
+                   check=check,
                    stdout=PIPE,
                    text=True,
                    env={**os.environ},
+                   cwd=cwd,
                    **kwargs
                 ).stdout.rstrip()
     return git
 
+@pytest.fixture()
+def git_context(with_xgit, xonsh_session):
+    '''
+    Fixture to create a test context.
+    '''
+    def _t(*_, XSH, **__):
+        from xontrib.xgit.context import _GitContext
+        yield _GitContext(xonsh_session)
+    yield from with_xgit(_t, 'xontrib.xgit.context')
+
 repository_lock = RLock()
 @pytest.fixture()
-def repository(with_xgit, git, chdir):
+def repository(
+               git_context,
+               chdir,
+               tmp_path,
+               ) -> Generator['GitRepository', None, None]:
     '''
     Fixture to create a test repository.
     '''
-    from tempfile import mkdtemp
+    from tests.zip_repo import unzip_repo
     from secrets import token_hex
     from shutil import rmtree
+
     with repository_lock:
-        tmpname = mkdtemp()
+        token = token_hex(16)
+        from_zip = DATA_DIR / 'test_repo.zip'
         old = Path.cwd()
-        with chdir(tmpname):
-            tmp = Path.cwd()
-            def _t(*_, _GitRepository, **__):
-                    parent = Path(tmp)
-                    token = token_hex(16)
-                    config = parent / f'.gitconfig-{token}'
-                    with config.open('w') as f:
-                        f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
-                    repo = parent / f'test-{token}'
-                    file= repo / 'test.txt'
-                    git('init', repo.name, cwd=parent)
-                    git('config', 'user.email', 'bogons@bogus.com', cwd=repo)
-                    git('config', 'user.name', 'Fake Name', cwd=repo)
-                    file.touch()
-                    git('add', 'test.txt', cwd=repo)
-                    git('commit', '-m', 'Initial commit', cwd=repo)
-                    chdir(repo)
-                    old = os.environ.get('GIT_CONFIG_GLOBAL')
-                    os.environ['GIT_CONFIG_GLOBAL'] = str(config)
-                    yield _GitRepository(path=repo / '.git')
-                    if old is None:
-                        del os.environ['GIT_CONFIG_GLOBAL']
-                    else:
-                        os.environ['GIT_CONFIG_GLOBAL'] = old
-            yield from with_xgit(_t, 'xontrib.xgit.context')
+        old_home = os.environ.get('HOME') or str(Path.home())
+        home = tmp_path
+        gitconfig = home / '.gitconfig'
+        worktree = home / token
+        to_git = worktree / '.git'
+        worktree.mkdir(parents=False, exist_ok=False)
+        unzip_repo(from_zip, to_git)
+        os.environ['HOME'] = str(home)
+        with gitconfig.open('w') as f:
+            f.write('[user]\n\temail = bogons@bogus.com\n\tname = Fake Name\n')
+        chdir(worktree)
+        yield git_context.open_repository(worktree / '.git')
         chdir(old)
+        os.environ['HOME'] = old_home
         # Clean up, or try to: Windows is a pain
-        with suppress(OSError):
-            rmtree(tmp)
-        try:
-            Path(tmpname).rmdir()
-        except OSError:
-            with suppress(OSError):
-                Path(tmpname).unlink()
+        #with suppress(OSError):
+        #    rmtree(tmp_path)
 
 @pytest.fixture()
-def worktree(with_xgit, git, repository, chdir):
+def worktree(
+    with_xgit,
+    git,
+    repository,
+    chdir,
+    ) -> Generator['GitWorktree', None, None]:
     '''
     Fixture to create a test worktree.
     '''
     def _t(*_, _GitWorktree, _GitCommit, _GitRef, **__):
-        commit = git('rev-parse', 'HEAD', cwd=repository.path)
-        branch = git('symbolic-ref', 'HEAD', cwd=repository.path)
-        chdir(repository.path.parent)
-        yield _GitWorktree(repository=repository,
-                           path=repository.path.parent,
-                           repository_path=repository.path,
-                           branch=_GitRef(branch),
-                           commit=_GitCommit(commit),
-                           )
-    yield from with_xgit(_t, 'xontrib.xgit.context', 'xontrib.xgit.objects')
+        from xontrib.xgit.worktree import _GitWorktree
+        from xontrib.xgit.ref import _GitRef
+        from xontrib.xgit.objects import _GitCommit
+        worktree = repository.path.parent
+        chdir(worktree)
+        git('reset', '--hard', 'HEAD', cwd=worktree)
+        yield  repository.open_worktree(worktree)
+    yield from with_xgit(_t, 'xontrib.xgit.worktree', 'xontrib.xgit.ref', 'xontrib.xgit.objects')
+
+@pytest.fixture()
+def cmd_args(modules, xonsh_session):
+    '''
+    Fixture to test command line arguments.
+    '''
+    with modules('xontrib.xgit.decorators') as ((m_cmd,), vars):
+        with session_active(m_cmd, xonsh_session) as xontrib_module:
+            command = vars['command']
+            def _cmd_args(*args, **kwargs):
+                from xontrib.xgit.decorators import context
+                _aliases = {}
+                _exports = []
+                def _export(*args):
+                    _exports.append(args)
+                # Wrap our test command in the decorator
+                f = command(*args,
+                            _export=_export,
+                            _aliases=_aliases,
+                            **kwargs)
+                def wrap_and_apply(cmd: Callable):
+                    f(cmd)
+                    info = cmd.info # type: ignore
+                    def apply(*args, **kwargs):
+                        XSH = xonsh_session
+                        return info.alias_fn(args,
+                                             XSH=XSH,
+                                             XGIT=context(XSH),
+                                             _info=info,
+                                             **kwargs)
+                    return apply
+                return wrap_and_apply
+            return _cmd_args
+
+_autolock: Lock = Lock()
+@pytest.fixture(autouse=True)
+def autolock(xonsh_session):
+    '''
+    Fixture to create a lock that unlocks automatically.
+    '''
+    with _autolock:
+        yield True

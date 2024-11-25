@@ -8,6 +8,7 @@ from typing import (
 from xontrib.xgit.types import (
     JsonData, JsonAtomic,
 )
+import xontrib.xgit.context_types as ct
 
 class JsonRepresentation(TypedDict):
     '''
@@ -96,7 +97,7 @@ JsonReturn: TypeAlias = JsonAtomic|ErrorJson|SequenceJson|InstanceJson\
 Any valid return type from the `to_json` function.
 '''
 
-JsonKV: TypeAlias = dict[str, JsonReturn]
+JsonKV: TypeAlias = dict[str, JsonReturn] # type: ignore # mypy bug
 '''
 Key-Value pairs for JSON objects, such as maps or instances.
 '''
@@ -117,12 +118,14 @@ class JsonDescriber(Protocol):
     references: dict[int, CircularRefJson]
     "Allows sharing of references within and between objects."
     max_depth: int = 100
-    special_types: dict[type,JsonHandler[JsonKV]]
+    special_types: dict[type,'JsonHandler[JsonKV]']
     from_override_types: dict[type,FromJsonOverride]
     to_override_types: dict[type,ToJsonOverride]
     class_map: dict[str,type]
     class_names: dict[type,str]
     include_private: bool
+    repository: 'ct.GitRepository' # (a refractory circular reference)
+    context: 'ct.GitContext' # (a refractory circular reference)
     def to_json(self, obj: Any, cls: Optional[type|str]=None) -> JsonReturn:
         """
         Perform the conversion to JSON.
@@ -136,7 +139,9 @@ class JsonDescriber(Protocol):
         - obj: Any
             The object to convert to JSON.
         """
-    def from_json(self, obj: Any, cls: Optional[type|str] = None, /, *,
+    def from_json(self, obj: Any,
+                    cls: Optional[type|str] = None, /, *,
+              repository: 'ct.GitRepository', # a refractory circular reference
               describer: Optional['JsonDescriber'] = None,
               references: dict[int,Any] = dict(),
               class_map: dict[str,type] = dict(),
@@ -156,10 +161,10 @@ class JsonDescriber(Protocol):
         - class_map: Optional[dict,type] = None
             A mapping of class names to types, for use in instantiating instances.
         '''
-        
+
 
 class Jsonable(Protocol):
     """
     A protocol for objects that can be converted to JSON.
     """
-    def to_json(self, desc: 'JsonDescriber') -> JsonData: ...
+    def to_json(self, describer: 'JsonDescriber') -> JsonData: ...
