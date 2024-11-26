@@ -10,8 +10,6 @@ from pathlib import Path, PurePosixPath
 
 from xonsh.built_ins import XonshSession
 
-from xontrib.xgit.view import K
-
 if not TYPE_CHECKING:
 
     GitHash = str
