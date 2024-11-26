@@ -7,7 +7,7 @@ from typing import cast
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import GitNoBranchException, JsonData
+from xontrib.xgit.types import GitNoBranchException, JsonData, ObjectId, CommitId
 from xontrib.xgit.context_types import GitWorktree, GitRepository
 from xontrib.xgit.git_cmd import _GitCmd
 import xontrib.xgit.ref as ref
@@ -79,9 +79,9 @@ class _GitWorktree(_GitCmd, GitWorktree):
     def commit(self, value: Commitish):
         match value:
             case str() | PurePosixPath():
-                value = str(value).strip()
-                hash = self.rev_parse(value)
-                self.__commit = self.repository.get_object(hash, 'commit')
+                v = str(value).strip()
+                id = self.rev_parse(v)
+                self.__commit = self.repository.get_object(id, 'commit')
             case GitCommit():
                 self.__commit = value
             case _:
@@ -126,7 +126,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
     def from_json(data: dict, describer: JsonDescriber):
         repository = repo._GitRepository(Path(data['repository']),
                                          context=describer.context)
-        j: str = data["commit"]
+        j: str = CommitId(ObjectId(data["commit"]))
         commit,=repository.get_object(j, 'commit'),
 
         return _GitWorktree(

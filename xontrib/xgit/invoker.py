@@ -5,7 +5,7 @@ Utilities for invoking commands based on their signatures.
 from collections.abc import Sequence
 from itertools import chain
 from typing import (
-    Any, Callable, Literal, NamedTuple, Optional, Generic, Union
+    Any, Callable, Literal, NamedTuple, Optional,
 )
 
 from inspect import Parameter, Signature
@@ -324,7 +324,7 @@ class Command:
     A command that can be invoked with the command-line calling sequence rather than
     the python one. This translates the command-line arguments (strings) into the
     appropriate types and injects session variables into the command.
-    
+
     A proxy to an `Invoker` that can be called directly with command-line arguments.
 
     We could use the bound method directly, but that won't allow setting the signature.
@@ -418,7 +418,7 @@ class ArgTransform:
         The argument name of this applies to.
         '''
         return self.__name
-    
+
     __declared: type
     @property
     def declared(self) -> type:
@@ -426,7 +426,7 @@ class ArgTransform:
         The annotation which appears on the variable.
         '''
         return self.__declared
-    
+
     __target: type
     @property
     def target(self) -> type:
@@ -434,7 +434,7 @@ class ArgTransform:
         The type to which the argument is transformed.
         '''
         return self.__target
-    
+
     __source: type
     @property
     def source(self) -> type:
@@ -442,13 +442,13 @@ class ArgTransform:
         The type from which the argument is transformed.
         '''
         return self.__source
-    
+
     def __call__(self, arg: Any) -> Any:
         '''
         Transforms the argument into the target type.
         '''
         return arg
-    
+
     def __init__(self, name: str, /, *,
                  declared: type,
                  target: type,
@@ -460,14 +460,14 @@ class ArgTransform:
         self.__declared = declared
         self.__target = target
         self.__source = source
-        
-        
-    
+
+
+
 class TypeTransform(ArgTransform):
     '''
     A transformation that converts the argument into a different type.
     '''
-    
+
     def __init__(self, name: str,
                  declared: type,
                  target: type,
@@ -477,7 +477,7 @@ class TypeTransform(ArgTransform):
             ):
         '''
         Initializes the transformation with the given types.
-        
+
         PARAMETERS
         ----------
         name: str
@@ -495,7 +495,7 @@ class TypeTransform(ArgTransform):
                          source=source)
         self.__converter = converter
         self.__completer = completer
-        
+
     __converter: Callable[[Any], Any]
     @property
     def converter(self) -> Callable[[Any], Any]:
@@ -503,7 +503,7 @@ class TypeTransform(ArgTransform):
         The function that is used to convert the argument.
         '''
         return self.__converter
-    
+
     __completer: Optional[Callable[[Any], Any]]
     @property
     def completer(self) -> Optional[Callable[[Any], Any]]:
@@ -511,7 +511,7 @@ class TypeTransform(ArgTransform):
         The function that is used to complete the argument.
         '''
         return self.__completer
-    
+
     def __call__(self, arg: Any) -> Any:
         '''
         Transforms the argument into the target type.

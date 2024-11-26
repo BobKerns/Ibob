@@ -17,11 +17,10 @@ classes are complex. It is very easy to end up with circular imports.
 from abc import abstractmethod
 from typing import (
     Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable,
-    TYPE_CHECKING
 )
 from pathlib import PurePosixPath
 
-from xontrib.xgit.types import GitEntryMode, GitObjectType, GitHash
+from xontrib.xgit.types import GitEntryMode, GitObjectType, ObjectId
 import xontrib.xgit.context_types as ct
 
 #if TYPE_CHECKING:
@@ -48,7 +47,7 @@ class GitEntry(Generic[O], Protocol):
         ...
     @property
     @abstractmethod
-    def hash(self) -> GitHash: ...
+    def hash(self) -> ObjectId: ...
     @property
     @abstractmethod
     def mode(self) -> GitEntryMode: ...

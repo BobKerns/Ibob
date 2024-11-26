@@ -9,19 +9,13 @@ from typing import Callable, Literal, TypeVar
 
 from xonsh.built_ins import XonshSession
 
+from xontrib.xgit.ids import ObjectId, GitRepositoryId
+
 type CleanupAction = Callable[[], None]
 '''
 An action to be taken when the xontrib is unloaded.
 '''
 type LoadAction = Callable[[XonshSession], None|CleanupAction]
-
-type GitHash = str
-'''
-A git hash. Defined as a string to make the code more self-documenting.
-
-Also allows using `GitHash` as a type hint that drives completion.
-'''
-
 
 type GitLoader = Callable[[], None]
 """
@@ -47,19 +41,12 @@ type GitObjectType = Literal["blob", "tree", "commit", "tag"]
 Valid types for a git object.
 """
 
-type GitEntryKey = tuple[Path, PurePosixPath|None, str, str, str|None]
-
-type GitRepositoryId = str
-"""
-A unique identifier for a git repository.
-"""
-
 type GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
 '''
 The type of a git reference, that is, how an object is referenced.
 '''
 
-type GitObjectReference = tuple[GitRepositoryId, GitHash|PurePosixPath, GitReferenceType]
+type GitObjectReference = tuple[GitRepositoryId, ObjectId|PurePosixPath, GitReferenceType]
 """
 A reference to a git object in a tree in a repository.
 """

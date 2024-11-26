@@ -16,10 +16,10 @@ from typing import (
     Sequence, Mapping, TypeAlias, IO,
 )
 from abc import abstractmethod
-from io import IOBase
 
 from xontrib.xgit.types import (
-    CleanupAction, GitHash, GitObjectType, GitEntryMode,
+    CleanupAction, ObjectId, GitObjectType, GitEntryMode,
+    CommitId, TreeId, TagId, BlobId,
 )
 from xontrib.xgit.identity_set import IdentitySet
 import xontrib.xgit.person as xp
@@ -34,23 +34,23 @@ EntryObject: TypeAlias = 'GitTree | GitBlob | GitCommit'
 A type alias for the types of objects that can be found in a git tree.
 '''
 
-Commitish: TypeAlias = 'str|ot.GitCommit|ot.GitTagObject|rt.GitRef'
+Commitish: TypeAlias = 'CommitId|ot.GitCommit|ot.GitTagObject|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify a commit.
 '''
-Treeish: TypeAlias = 'str|ot.GitCommit|ot.GitTree|ot.GitTagObject|rt.GitRef'
+Treeish: TypeAlias = 'TreeId|ot.GitCommit|ot.GitTree|ot.GitTagObject|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify a tree.
 '''
-Tagish: TypeAlias = 'str|ot.GitTagObject|rt.GitRef'
+Tagish: TypeAlias = 'TagId|ot.GitTagObject|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify a tag.
 '''
-Blobish: TypeAlias = 'str|ot.GitBlob|rt.GitRef'
+Blobish: TypeAlias = 'BlobId|ot.GitBlob|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify a blob.
 '''
-Objectish: TypeAlias = 'str|ot.GitObject|rt.GitRef'
+Objectish: TypeAlias = 'ObjectId|ot.GitObject|rt.GitRef'
 '''
 A type alias for the types of objects that can be used to identify any object.
 '''
@@ -62,12 +62,12 @@ class GitId(Protocol):
     Anything that has a hash in a git repository.
     """
     @abstractmethod
-    def __init__(self, hash: GitHash,
+    def __init__(self, hash: ObjectId,
                  cleanup: Optional[CleanupAction] = None):
         ...
     @property
     @abstractmethod
-    def hash(self) -> GitHash:
+    def hash(self) -> ObjectId:
         ...
 
 @runtime_checkable
@@ -79,6 +79,7 @@ class GitObject(GitId, Protocol):
     @abstractmethod
     def type(self) -> GitObjectType:
         ...
+
     @property
     @abstractmethod
     def size(self) -> int:
@@ -114,7 +115,11 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
 
     @property
     @abstractmethod
-    def hashes(self) -> Mapping[GitHash, IdentitySet['et.GitEntry', int]]: ...
+    def hash(self) -> TreeId: ...
+
+    @property
+    @abstractmethod
+    def hashes(self) -> Mapping[ObjectId, IdentitySet['et.GitEntry', int]]: ...
 
     @abstractmethod
     def __getitem__(self, key: str) -> 'et.GitEntry[EntryObject]': ...
@@ -140,7 +145,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: 'GitHash|ot.GitCommit',
+        hash_or_obj: 'CommitId|ot.GitCommit',
         name: str,
         mode: GitEntryMode,
         type: Literal['commit'],
@@ -154,7 +159,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: 'ot.GitHash|GitBlob',
+        hash_or_obj: 'ot.BlobId|GitBlob',
         name: str,
         mode: GitEntryMode,
         type: Literal['blob'],
@@ -168,7 +173,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: 'GitHash|ot.GitTree',
+        hash_or_obj: 'TreeId|ot.GitTree',
         name: str,
         mode: GitEntryMode,
         type: Literal['tree'],
@@ -182,7 +187,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: 'GitHash|et.O',
+        hash_or_obj: 'ObjectId|et.O',
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -196,7 +201,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     # Implementation
     def _git_entry(
         self,
-        hash_or_obj: 'GitHash|et.O',
+        hash_or_obj: 'ObjectId|et.O',
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -219,6 +224,11 @@ class GitBlob(GitObject, Protocol):
     @property
     def type(self) -> Literal['blob']:
         return 'blob'
+
+    @property
+    @abstractmethod
+    def hash(self) -> BlobId: ...
+
     @property
     @abstractmethod
     def data(self) -> bytes:
@@ -241,6 +251,10 @@ class GitCommit(GitObject, Protocol):
     @property
     def type(self) -> Literal['commit']:
         return 'commit'
+
+    @property
+    @abstractmethod
+    def hash(self) -> CommitId: ...
 
     @property
     @abstractmethod
@@ -273,6 +287,10 @@ class GitTagObject(GitObject, Protocol):
     @property
     def type(self) -> Literal['tag']:
         return 'tag'
+
+    @property
+    @abstractmethod
+    def hash(self) -> TagId: ...
 
     @property
     @abstractmethod

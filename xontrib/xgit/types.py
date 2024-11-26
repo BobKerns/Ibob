@@ -7,8 +7,10 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 
 from pathlib import Path
 from typing import (
-    Callable, Generic, Literal, Optional, Protocol, TypeVar, ParamSpec
+     Generic, Literal, NewType, Optional, Protocol, TypeVar, ParamSpec
 )
+
+from xontrib.xgit.ids import ObjectId
 
 try:
     from xontrib.xgit.type_aliases import (
@@ -17,9 +19,7 @@ try:
         GitLoader,
         GitEntryMode,
         GitObjectType,
-        GitEntryKey,
         GitObjectReference,
-        GitHash,
         JsonArray,
         JsonAtomic,
         JsonObject,
@@ -37,13 +37,10 @@ except SyntaxError:
     from xontrib.xgit.type_aliases_310 import (
         LoadAction,
         CleanupAction,
-        ContextKey,
         GitLoader,
         GitEntryMode,
         GitObjectType,
-        GitEntryKey,
         GitObjectReference,
-        GitHash,
         JsonArray,
         JsonAtomic,
         JsonObject,
@@ -51,12 +48,37 @@ except SyntaxError:
         Directory,
         File,
         PythonFile,
-        GitReferenceType, GitRepositoryId, GitObjectReference,
+        GitReferenceType, GitObjectReference,
         KeywordArity, KeywordSpec, KeywordSpecs,
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
-        Any as list_of,
     )
+
+if 'list_of' not in globals():
+    globals()['list_of'] = lambda t: list
+    globals()['list_of'].__doc__ = 'A type alias for a list of a type.'
+    globals()['list_of'].__annotations__ = {'t': TypeVar('t')}
+    globals()['list_of'].__module__ = __name__
+    globals()['list_of'].__qualname__ = 'xontrib.xgit.types.list_of'
+    globals()['list_of'].__name__ = 'list_of'
+
+ObjectId = NewType('ObjectId', str)
+'''
+A git hash. Defined as a string to make the code more self-documenting.
+
+Also allows using `GitHash` as a type hint that drives completion.
+'''
+CommitId = NewType('CommitId', ObjectId)
+TagId = NewType('TagId', ObjectId)
+TreeId = NewType('TreeId', ObjectId)
+BlobId = NewType('BlobId', ObjectId)
+
+GitRepositoryId = NewType('GitRepositoryId', str)
+'''
+A unique identifier for a git repository.
+
+XOR of the commit IDs of every root commit.
+'''
 
 class _NoValue:
     """A type for a marker for a value that is not passed in."""
@@ -102,7 +124,7 @@ class GitNoRepositoryException(GitNoWorktreeException):
     '''
     def __init__(self):
         super().__init__('No repository is current.')
-        
+
 class GitNoBranchException(GitException):
     '''
     Thrown when attempting an operation that requires a branch.
@@ -114,7 +136,7 @@ class GitError(GitException):
     '''
     Thrown when you an error is detected, other than not having a repo or worktree.
     '''
-    
+
 class GitValueError(GitError, ValueError):
     '''
     Thrown when a value supplied to Git is invalid.

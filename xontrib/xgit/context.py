@@ -32,7 +32,7 @@ from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person
 from xontrib.xgit.types import (
-    GitHash, GitObjectReference, CleanupAction,
+    ObjectId, CommitId, GitObjectReference, CleanupAction,
     GitNoRepositoryException, GitNoWorktreeException, GitException, GitError,
     GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
     GitNoBranchException, GitValueError,
@@ -226,8 +226,8 @@ class _GitContext(_GitCmd, GitContext):
         match value:
             case None:
                 self.__commit = None
-            case str():
-                value = value.strip()
+            case str(v):
+                value = CommitId(ObjectId(v.strip()))
                 if value == '':
                     self.__commit = None
                     return
@@ -243,9 +243,9 @@ class _GitContext(_GitCmd, GitContext):
             case _:
                 raise ValueError(f'Not a commit: {value}')
 
-    __objects: dict[GitHash, 'ot.GitObject']
+    __objects: dict[ObjectId, 'ot.GitObject']
     @property
-    def objects(self) -> Mapping[GitHash, 'ot.GitObject']:
+    def objects(self) -> Mapping[ObjectId, 'ot.GitObject']:
         return MappingProxyType(self.__objects)
 
     @property
@@ -265,13 +265,14 @@ class _GitContext(_GitCmd, GitContext):
     def people(self) -> dict[str, Person]:
         return self.__people
 
-    __object_references: defaultdict[GitHash, set[GitObjectReference]]
+    __object_references: defaultdict[ObjectId, set[GitObjectReference]]
     @property
-    def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
+    def object_references(self) -> Mapping[ObjectId, set[GitObjectReference]]:
         return MappingProxyType(self.__object_references)
 
-    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, t: GitReferenceType, /) -> None:
-        self.__object_references[target].add((repo, ref, t))
+    def add_reference(self, target: ObjectId, repo: GitRepositoryId, ref: ObjectId|PurePosixPath, t: GitReferenceType, /) -> None:
+        obj_ref = cast(GitObjectReference, (repo, ref, t))
+        self.__object_references[target].add(obj_ref)
 
 
     def __init__(self, session: XonshSession, /, *,

@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import Protocol, TypeAlias, runtime_checkable, Sequence
 from pathlib import PurePosixPath
 
-from xontrib.xgit.types import GitHash
+from xontrib.xgit.types import ObjectId
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
 
@@ -77,7 +77,7 @@ class Replacement(GitRef, Protocol):
     """
     @property
     @abstractmethod
-    def replacement_name(self) -> GitHash:
+    def replacement_name(self) -> ObjectId:
         "The Sha1 hash of the object being replaced."
 
     @property

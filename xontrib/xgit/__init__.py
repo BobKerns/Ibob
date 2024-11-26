@@ -14,7 +14,7 @@ See https://xonsh.org/ for more information about `xonsh`.
 from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
-    GitHash,
+    ObjectId,
 )
 from xontrib.xgit.object_types import (
     GitId, GitObject,
@@ -56,7 +56,7 @@ __all__ = (
     'git_cd',
     'git_pwd',
     'git_ls',
-    "GitHash",
+    "ObjectId",
     "GitId",
     "GitObject",
     "GitBlob",

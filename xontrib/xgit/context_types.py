@@ -15,7 +15,6 @@ classes are complex. It is very easy to end up with circular imports.
 
 from abc import abstractmethod
 from pathlib import Path, PurePosixPath
-from tkinter import E
 from typing import (
     Literal, Mapping, Protocol, overload, runtime_checkable, Optional,
     TypeAlias, TYPE_CHECKING, cast,
@@ -25,7 +24,7 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.types import (
     GitObjectReference, GitObjectType, GitException,
-    GitHash, GitRepositoryId, GitReferenceType, CleanupAction,
+    ObjectId, GitRepositoryId, GitReferenceType, CleanupAction,
 )
 from xontrib.xgit.json_types import Jsonable
 import xontrib.xgit.person as people
@@ -146,7 +145,7 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @abstractmethod
-    def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
+    def add_reference(self, target: ObjectId, source: 'ot.GitObject|rt.GitRef'):
         '''
         Add a reference to an object.
         '''
@@ -192,7 +191,7 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     @path.setter
     @abstractmethod
     def path(self, value: PurePosixPath|str): ...
-    
+
     @property
     @abstractmethod
     def location(self) -> Path:
@@ -200,28 +199,28 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
         The location of the worktree.
         '''
         ...
-        
+
     @property
     @abstractmethod
     def branch(self) -> 'rt.GitRef':
         '''
         The current branch checked out in the worktree.
-        
+
         If no branch is checked out, a `GitNoBranchException` is raised.
         '''
         ...
     @branch.setter
     @abstractmethod
     def branch(self, value: 'rt.GitRef|str|None'): ...
-    
-    
+
+
     @property
     @abstractmethod
     def commit(self) -> 'ot.GitCommit': ...
     @commit.setter
     @abstractmethod
     def commit(self, value: 'ot.Commitish'): ...
-    
+
 
     locked: str
     prunable: str
@@ -247,7 +246,7 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def objects(self) -> 'Mapping[ot.GitHash, ot.GitObject]':
+    def objects(self) -> 'Mapping[ot.ObjectId, ot.GitObject]':
         '''
         The objects in the repositories.
         '''
@@ -362,14 +361,14 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
+    def object_references(self) -> Mapping[ObjectId, set[GitObjectReference]]:
         '''
         The references associated with the repository.
         '''
         ...
 
     @abstractmethod
-    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType, /) -> None:
+    def add_reference(self, target: ObjectId, repo: GitRepositoryId, ref: ObjectId|PurePosixPath, type: GitReferenceType, /) -> None:
         '''
         Add a reference to an object.
         '''

@@ -3,18 +3,17 @@ A mixin class for git commands on a repository or worktree.
 '''
 
 from abc import abstractmethod
-from calendar import c
 from pathlib import Path
 from subprocess import (
     run, PIPE, Popen, CompletedProcess,
 )
 import shutil
 from typing import (
-    Optional, Sequence, overload, runtime_checkable, Protocol, Iterator,
+    Optional, Sequence, runtime_checkable, Protocol, Iterator,
     IO, cast,
 )
 
-from xontrib.xgit.types import GitHash, GitException
+from xontrib.xgit.types import ObjectId, CommitId, GitException
 import xontrib.xgit.context_types as ct
 
 @runtime_checkable
@@ -142,7 +141,7 @@ class GitCmd(Protocol):
     def git_string(self, subcmd: str, *args, **kwargs) -> str:
         '''
         Run a git command and return the output as a string.
-        
+
         PARAMETERS
         ----------
         subcmd: str
@@ -153,12 +152,12 @@ class GitCmd(Protocol):
             Additional arguments to pass to `subprocess.Popen`.
         '''
         ...
-    
+
     @abstractmethod
     def git_list(self, subcmd: str, *args, **kwargs) -> list[str]:
         '''
         Run a git command and return the output as a list of lines.
-        
+
         PARAMETERS
         ----------
         subcmd: str
@@ -167,16 +166,16 @@ class GitCmd(Protocol):
             The arguments to the command.
         kwargs: Any
             Additional arguments to pass to `subprocess.Popen`.
-        
+
         RETURNS
         -------
         list[str]
             The output of the command.
         '''
         ...
-    
+
     @abstractmethod
-    def git_lines(self, subcmd: str, *args, **kwargs) -> Iterator[str]: 
+    def git_lines(self, subcmd: str, *args, **kwargs) -> Iterator[str]:
         '''
         Run a git command and return the output as an iterator of lines.
 
@@ -195,7 +194,7 @@ class GitCmd(Protocol):
             The output of the command
         '''
         ...
-    
+
     @abstractmethod
     def git_stream(self, subcmd: str, *args, **kwargs) -> IO[str]:
         '''
@@ -209,13 +208,13 @@ class GitCmd(Protocol):
             The arguments to the command.
         kwargs: Any
             Additional arguments to pass to `subprocess.Popen`.
-            
+
         RETURNS
         -------
         IO[str]
             The output of the command. .read() returns a str object
         '''
-        
+
     @abstractmethod
     def git_binary(self, subcmd: str, *args, **kwargs) -> IO[bytes]:
         '''
@@ -237,10 +236,10 @@ class GitCmd(Protocol):
         '''
 
     @abstractmethod
-    def rev_parse(self, param: str, /) -> GitHash: 
+    def rev_parse(self, param: str, /) -> ObjectId:
         '''
         Use `git rev-parse` to get a single parameter.
-        
+
         PARAMETERS
         ----------
         param: str
@@ -252,7 +251,7 @@ class GitCmd(Protocol):
 
         '''
         ...
-    
+
     @abstractmethod
     def rev_parse_n(self, /, *params: str) -> Sequence[str] | str:
         '''
@@ -273,7 +272,7 @@ class GitCmd(Protocol):
         ...
 
     @abstractmethod
-    def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, GitHash]:
+    def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, ObjectId]:
         '''
         Get location info about worktree paths:
 
@@ -285,11 +284,11 @@ class GitCmd(Protocol):
         - The current commit.
         '''
         ...
-        
+
     def symbolic_ref(self, ref: str) -> str:
         '''
         Get the target of a symbolic reference.
-        
+
         PARAMETERS
         ----------
         ref: str
@@ -433,8 +432,8 @@ class _GitCmd:
         if stream is None:
             raise ValueError("No stream")
         return stream
-    
-    
+
+
     def run_binary(self, cmd: str|Path, *args,
                 cwd: Optional[Path]=None,
                 stdout=PIPE,
@@ -517,7 +516,7 @@ class _GitCmd:
             stdout=stdout,
             text=text,
             **kwargs)
-        
+
     def git_binary(self, subcmd: str, *args,
                 cwd: Optional[str|Path]=None,
                 stdout=PIPE,
@@ -528,9 +527,9 @@ class _GitCmd:
             text=text,
             **kwargs)
 
-    def rev_parse(self, param: str, /) -> GitHash:
-        return self.rev_parse_n(param)[0]
-    
+    def rev_parse(self, param: str, /) -> CommitId:
+        return CommitId(ObjectId(self.rev_parse_n(param)[0]))
+
     def rev_parse_n(self, /, *params: str) -> Sequence[str]:
         """
         Use `git rev-parse` to get multiple parameters at once.
@@ -543,7 +542,7 @@ class _GitCmd:
             result = [self.git_string("rev-parse", param) for param in params]
         return result
 
-    def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, GitHash]:
+    def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, CommitId]:
         path = path.resolve()
         for p in path.parents:
             git_dir = path / ".git"
@@ -558,14 +557,14 @@ class _GitCmd:
                     "--absolute-git-path",
                     "--git-common-dir", "HEAD"
                 )
-                return Path(worktree), Path(private), Path(common), commit
+                return Path(worktree), Path(private), Path(common), CommitId(ObjectId(commit))
         raise GitException(f"   Not a git repository: {path}")
-    
-    
+
+
     def symbolic_ref(self, ref: str) -> str:
         '''
         Get the target of a symbolic reference.
-        
+
         PARAMETERS
         ----------
         ref: str
@@ -579,5 +578,4 @@ class _GitCmd:
             but can be a commit id.
         '''
         return self.git_string("symbolic-ref", '--quiet', ref,
-                               check=False)  
-    
+                               check=False)

@@ -5,9 +5,7 @@ from typing import (
     TypeAlias, TypeVar, Optional, TypedDict, Protocol, Generic, Any,
 )
 
-from xontrib.xgit.types import (
-    JsonData, JsonAtomic,
-)
+from xontrib.xgit.types import JsonData, JsonAtomic
 import xontrib.xgit.context_types as ct
 
 class JsonRepresentation(TypedDict):

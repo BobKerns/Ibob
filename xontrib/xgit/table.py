@@ -4,7 +4,7 @@ A table view of objects.
 
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Generic, Iterable, Literal, Mapping, Optional, TypeAlias,
+    Any, Callable, Generic, Iterable, Optional, TypeAlias,
     cast
 )
 from itertools import count
@@ -45,7 +45,7 @@ class Column:
                 return 0
             self._width = max(self.heading_width,
                    max(len(e) for e in self.formatted))
-        return self._width            
+        return self._width
     formatter: Optional[Callable[[Any], str]] = field(default=None, repr=False)
     format: str = '{:<{width}}'
     missing: str = ''
@@ -71,7 +71,7 @@ class Column:
         self.elements.clear()
         self._formatted.clear()
         self._width = -1
-        
+
     def __repr__(self):
         args = [
             f'Column(name={self.name!r}',
@@ -157,14 +157,14 @@ class TableView(MultiView[T,K,X,Rcv]):
     '''
     The separator between cells.
     '''
-    
+
     _show_row_id: bool = False
     '''
     Whether to show the row ids.
     '''
-    
+
     x__column_extractor: Optional[ExtractorFnMulti[T,K,X]] = None
-    
+
     @property
     def _column_extractor(self) -> ExtractorFnMulti[T,K,X]:
         '''
@@ -174,7 +174,7 @@ class TableView(MultiView[T,K,X,Rcv]):
         if val is None:
             return cast(ExtractorFnMulti[T,K,X], default_extractor)
         return val
-    
+
     @_column_extractor.setter
     def _column_extractor(self, value: Optional[ExtractorFnMulti[T,K,X]]):
         self.x__column_extractor = value
@@ -309,28 +309,28 @@ class TableView(MultiView[T,K,X,Rcv]):
         Get the ordered columns.
         '''
         return self.__ordered(self._columns)
-    
+
     @property
     def _rows(self):
         '''
         Get the rows of the table.
         '''
         return zip(*(c.elements for c in self._ordered))
-    
+
     @property
     def _formatted(self):
         '''
         Get the string-formatted rows.
         '''
         return zip(*(c.formatted for c in self._ordered))
-    
+
     @property
     def _aligned(self):
         '''
         Get the rows with the cells padded and aligned.
         '''
         cols = self._ordered
-        
+
         for row in self._formatted:
             yield tuple(c.format.format(e, width=c.width) for c, e in zip(cols, row))
 

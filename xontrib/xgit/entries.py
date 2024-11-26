@@ -15,15 +15,16 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
 from types import MappingProxyType
-from typing import Optional, TypeAlias, cast, Mapping, Iterator
+from typing import ItemsView, Optional, TypeAlias, ValuesView, cast, Mapping
 from pathlib import PurePosixPath
 
 
 from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.context_types import GitRepository
+from xontrib.xgit.identity_set import IdentitySet
 import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
-    GitEntryMode, GitHash,
+    GitEntryMode, ObjectId,
 )
 from xontrib.xgit.entry_types import (
     GitEntry, ParentObject, O,
@@ -54,7 +55,7 @@ class _GitEntry(GitEntry[O]):
         return self.__object.type
 
     @property
-    def hash(self) -> GitHash:
+    def hash(self) -> ObjectId:
         return self.__object.hash
 
     @property
@@ -131,7 +132,7 @@ class _GitEntry(GitEntry[O]):
                  mode: GitEntryMode,
                  repository: GitRepository,
                  path: PurePosixPath,
-                 parent_object: Optional['ParentObject|GitHash']=None,
+                 parent_object: Optional['ParentObject|ObjectId']=None,
                  parent: Optional['GitEntryTree']=None,
             ):
         self.__object = object
@@ -181,7 +182,7 @@ class _GitEntry(GitEntry[O]):
 
 class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     @property
-    def hashes(self) -> Mapping[GitHash, GitEntry]:
+    def hashes(self) -> Mapping[ObjectId, IdentitySet[GitEntry, int]]:
         return MappingProxyType(self.object.hashes)
 
     def __getitem__(self, name):# -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
@@ -226,14 +227,14 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     def __contains__(self, name):
         return name in self.object
 
-    def items(self) -> Iterator[tuple[str, EntryObject]]:
-        return self.object.items()
+    def items(self) -> ItemsView[str, EntryObject]:
+        return cast(ItemsView[str,EntryObject], self.object.items())
 
     def keys(self):
         return self.object.keys()
 
-    def values(self) -> Iterator[EntryObject]:
-        return self.object.values()
+    def values(self) -> ValuesView[EntryObject]:
+        return cast(ValuesView[EntryObject], self.object.values())
 
     def __iter__(self):
         return self.object.__iter__()

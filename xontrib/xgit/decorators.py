@@ -3,7 +3,6 @@ Various decorators for xgit commands and functions.
 
 """
 
-from calendar import c
 from contextlib import suppress
 from functools import wraps
 from typing import (
@@ -29,7 +28,7 @@ from xonsh.built_ins import XonshSession, XSH as GLOBAL_XSH
 from xonsh.events import events
 
 from xontrib.xgit.types import (
-    LoadAction, CleanupAction, GitError, GitHash,
+    LoadAction, CleanupAction, GitError, ObjectId,
     Directory, File, PythonFile,
 )
 from xontrib.xgit.ref_types import (
@@ -394,7 +393,7 @@ def command(
                     return complete_ref("refs/remotes/")
                 case t if t == GitRef:
                     return complete_ref()
-                case t if t == GitHash:
+                case t if t == ObjectId:
                     return complete_hash
                 case t if isinstance(t, TypeAlias) and getattr(t, '__base__') == File:
                     return complete_path

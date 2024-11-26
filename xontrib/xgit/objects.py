@@ -11,8 +11,7 @@ These are the four types that live in a git object database:
     but are used to tag commits. (Unsigned tags are just references.)
 '''
 
-from multiprocessing import parent_process
-from tkinter import TRUE, Entry
+from abc import abstractmethod
 from typing import (
     MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
     Callable, overload, Iterable, Iterator, Mapping
@@ -21,9 +20,6 @@ from types import MappingProxyType
 from pathlib import PurePosixPath
 from collections import defaultdict
 
-# Highly dubious for future compatibility
-from _collections_abc import dict_items, dict_keys, dict_values
-
 from xonsh.built_ins import XSH
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -31,10 +27,13 @@ from xontrib.xgit.identity_set import IdentitySet
 from xontrib.xgit.person import CommittedBy
 from xontrib.xgit.types import (
     GitLoader,
-    GitHash,
+    ObjectId,
+    TagId,
+    TreeId,
+    CommitId,
+    BlobId,
     GitEntryMode,
     GitObjectType,
-    GitEntryKey,
     InitFn,
     _NO_VALUE,
 )
@@ -61,14 +60,14 @@ class _GitId(GitId):
     Anything that has a hash in a git repository.
     """
 
-    _hash: GitHash
+    _hash: ObjectId
     @property
-    def hash(self) -> GitHash:
+    def hash(self) -> ObjectId:
         return self._hash
 
     def __init__(
         self,
-        hash: GitHash,
+        hash: ObjectId,
         /,
         **kwargs,
     ):
@@ -82,7 +81,7 @@ class _GitId(GitId):
             return False
         return self.hash == other.hash
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.hash
 
     def __repr__(self):
@@ -105,7 +104,7 @@ class _GitObject(_GitId, GitObject):
 
     def __init__(
         self,
-        hash: GitHash,
+        hash: ObjectId,
         size: int|InitFn['_GitObject',int]=-1,
         /,
     ):
@@ -147,9 +146,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
 
     __lazy_loader: InitFn['_GitTree',Iterable[tuple[str,GitEntry]]] | None
 
-    __hashes: defaultdict[GitHash, IdentitySet[GitEntry,int]]
     @property
-    def hashes(self) -> Mapping[GitHash, IdentitySet[GitEntry,int]]:
+    def hash(self) -> TreeId:
+        return TreeId(super().hash)
+
+    __hashes: defaultdict[ObjectId, IdentitySet[GitEntry,int]]
+    @property
+    def hashes(self) -> Mapping[ObjectId, IdentitySet[GitEntry,int]]:
         '''
         A mapping of hashes to the entries that have that hash.
         This will usually be a one-to-one mapping, but it is possible for
@@ -162,7 +165,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
 
     def __init__(
         self,
-        tree: GitHash,
+        tree: TreeId,
         /,
         *,
         repository: GitRepository,
@@ -323,7 +326,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         self,
         line: str,
         repository: GitRepository,
-        parent_hash: GitHash | None = None
+        parent_hash: ObjectId | None = None
     ) -> tuple[str, GitEntry]:
         """
         Parse a line from `git ls-tree --long` and return a `GitObject`.
@@ -333,13 +336,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         type = cast(GitObjectType, type)
         parent = repository.get_object(parent_hash) if parent_hash is not None else None
         size = int(size)
-        return self._git_entry(hash, name, mode, type, size, repository, parent)
+        return self._git_entry(ObjectId(hash), name, mode, type, size, repository, parent)
 
 
     @overload
     def _git_entry(
         self,
-        hash_or_obj: GitHash|GitCommit,
+        hash_or_obj: CommitId|GitCommit,
         name: str,
         mode: GitEntryMode,
         type: Literal['commit'],
@@ -353,7 +356,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: GitHash|GitBlob,
+        hash_or_obj: BlobId|GitBlob,
         name: str,
         mode: GitEntryMode,
         type: Literal['blob'],
@@ -367,7 +370,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: GitHash|GitTree,
+        hash_or_obj: TreeId|GitTree,
         name: str,
         mode: GitEntryMode,
         type: Literal['tree'],
@@ -381,7 +384,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: GitHash|O,
+        hash_or_obj: ObjectId|O,
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -395,7 +398,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     # Implementation
     def _git_entry(
         self,
-        hash_or_obj: GitHash|O,
+        hash_or_obj: ObjectId|O,
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -470,9 +473,13 @@ class _GitBlob(_GitObject, GitBlob):
     def type(self) -> Literal["blob"]:
         return "blob"
 
+    @property
+    def hash(self) -> BlobId:
+        return BlobId(super().hash)
+
     def __init__(
         self,
-        hash: GitHash,
+        hash: BlobId,
         size: int|InitFn[_GitObject,int]=-1,
         /,
         *,
@@ -551,6 +558,10 @@ class _GitCommit(_GitObject, GitCommit):
     def type(self) -> Literal["commit"]:
         return "commit"
 
+    @property
+    def hash(self) -> CommitId:
+        return CommitId(super().hash)
+
     __tree: GitTree|InitFn[GitCommit, GitTree]
     @property
     def tree(self) -> GitTree:
@@ -597,7 +608,7 @@ class _GitCommit(_GitObject, GitCommit):
     def __init__(self, hash: str, /, *, repository: GitRepository):
         def loader():
             lines = repository.git_lines("cat-file", "commit", hash)
-            tree = next(lines).split()[1]
+            tree = TreeId(ObjectId(next(lines).split()[1]))
             def load_tree(_):
                 return repository.get_object(tree, 'tree')
             self.__tree = load_tree
@@ -607,7 +618,8 @@ class _GitCommit(_GitObject, GitCommit):
             sig_lines = []
             for line in lines:
                 if line.startswith("parent"):
-                    self.__parents.append(repository.get_object(line.split()[1], 'commit'))
+                    id = ObjectId(line.split()[1])
+                    self.__parents.append(repository.get_object(CommitId(id), 'commit'))
                 elif line.startswith("author"):
                     author_line = line.split(maxsplit=1)[1]
                     self.__author = CommittedBy(author_line,
@@ -632,7 +644,7 @@ class _GitCommit(_GitObject, GitCommit):
             self.__signature = "\n".join(sig_lines)
             self._size = 0
         self.__loader = loader
-        _GitObject.__init__(self, hash, self._size_loader(repository))
+        _GitObject.__init__(self, ObjectId(hash), self._size_loader(repository))
 
     def __str__(self):
         return f"commit {self.hash}"
@@ -686,6 +698,10 @@ class _GitTagObject(_GitObject, GitTagObject):
     def type(self) -> Literal["tag"]:
         return "tag"
 
+    @property
+    def hash(self) -> TagId:
+        return TagId(super().hash)
+
     __object: GitObject|InitFn[GitTagObject, GitObject]
     @property
     def object(self) -> GitObject:
@@ -730,14 +746,15 @@ class _GitTagObject(_GitObject, GitTagObject):
             self.__loader()
         return self.__signature
 
-    def __init__(self, hash: str, /, *,
+    def __init__(self, hash: TagId, /, *,
                  repository: GitRepository):
         def loader():
             lines = repository.git_lines("cat-file", "tag", hash)
             for line in lines:
                 if line.startswith("object"):
                     def load_object(_):
-                        return repository.get_object(line.split()[1])
+                        id = ObjectId(line.split()[1])
+                        return repository.get_object(TagId(id))
                     self.__object = load_object
                 elif line.startswith("type"):
                     tag_type = line.split()[1]
@@ -765,7 +782,7 @@ class _GitTagObject(_GitObject, GitTagObject):
                 sig_lines.append(line)
             self.__signature = "\n".join(sig_lines)
         self.__loader = loader
-        _GitObject.__init__(self, hash, self._size_loader(repository))
+        _GitObject.__init__(self, ObjectId(hash), self._size_loader(repository))
 
     def __str__(self):
         return f"tag {self.hash}"

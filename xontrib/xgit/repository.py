@@ -12,7 +12,10 @@ from functools import reduce
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import InitFn, GitObjectType, GitHash
+from xontrib.xgit.types import (
+    InitFn, GitObjectType, ObjectId, GitRepositoryId,
+    TreeId, BlobId, TagId, CommitId,
+)
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
@@ -41,9 +44,9 @@ class _GitRepository(_GitCmd, ct.GitRepository):
     A git repository.
     """
 
-    __id: GitHash|InitFn['_GitRepository', GitHash]
+    __id: GitRepositoryId|InitFn['_GitRepository', GitRepositoryId]
     @property
-    def id(self) -> str:
+    def id(self) -> GitRepositoryId:
         if callable(self.__id):
             self.__id = self.__id(self)
         return self.__id
@@ -130,7 +133,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         self.__worktrees[self.path.parent] = worktree
         return cast('ct.GitWorktree', worktree)
 
-    __objects: dict['ot.GitHash', 'ot.GitObject']
+    __objects: dict[ObjectId, 'ot.GitObject']
 
     def get_ref(self, ref: 'rt.RefSpec|None' = None) -> 'rt.GitRef|None':
         if ref is None:
@@ -182,30 +185,30 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 return hash
             case rt.GitRef():
                 hash = self.rev_parse(hash.name)
-            case str():
-                hash = hash.strip()
-                if not hash:
-                    raise ValueError(f"Invalid hash: {hash!r}")
-                if RE_HEX.match(hash):
+            case str(h):
+                h = h.strip()
+                if not h:
+                    raise ValueError(f"Invalid hash: {h!r}")
+                if RE_HEX.match(h):
                     try:
                         hash = self.rev_parse(hash)
                     except ValueError:
                         hash = self.rev_parse(f'refs/heads/{hash}')
                 else:
-                    if not hash.startswith('refs/'):
-                        hash = f'refs/heads/{hash}'
-                    hash = self.rev_parse(hash)
+                    if not h.startswith('refs/'):
+                        h = f'refs/heads/{hash}'
+                    hash = self.rev_parse(h)
             case _:
                 raise ValueError(f"Invalid hash: {hash!r}")
         match type:
             case 'commit':
                 return obj._GitCommit(hash, repository=self)
             case 'tree':
-                return obj._GitTree(hash, repository=self)
+                return obj._GitTree(TreeId(hash), repository=self)
             case 'blob':
-                return obj._GitBlob(hash, size, repository=self)
+                return obj._GitBlob(BlobId(hash), size, repository=self)
             case 'tag':
-                return obj._GitTagObject(hash, repository=self)
+                return obj._GitTagObject(TagId(hash), repository=self)
             case None:
                 type = cast(GitObjectType, self.git_string('cat-file', '-t', hash))
         return self.get_object(hash, type, size)
@@ -217,17 +220,17 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         super().__init__(path.parent)
         self.__context = context
         self.__path = path
-        def init_id(self: '_GitRepository') -> str:
+        def init_id(self: '_GitRepository') -> GitRepositoryId:
             # This is a simple way to get a unique id for the repository.
             # This xor's the hashes of all commits with no parents.
             # It is careful to do so in the positive domain `f'0{x}'`,
             # and it uses xor to ensure order independence.
 
             # Any repo with the same ID will be clones of each other.
-            return hex(reduce(xor, (
+            return GitRepositoryId(hex(reduce(xor, (
                 int(f'0{x}', 16)
                 for x in self.git_lines('log', '--format=%H', '--max-parents=0')),
-                0))
+                0)))
         self.__id = init_id
         def init_worktrees(self: '_GitRepository') -> 'ct.WorktreeMap':
             bare: bool = False
@@ -242,7 +245,8 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                     case ['worktree', wt]:
                         worktree = Path(wt).resolve()
                     case ['HEAD', c]:
-                        commit = self.get_object(c, 'commit')
+                        id = CommitId(ObjectId(c))
+                        commit = self.get_object(id, 'commit')
                         self.__objects[commit.hash] = commit
                     case ['branch', b]:
                         b = b.strip()
@@ -290,7 +294,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         self.__worktrees = init_worktrees
         self.__objects = {}
 
-    def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
+    def add_reference(self, target: ObjectId, source: 'ot.GitObject|rt.GitRef'):
         '''
         Add a reference to an object.
         '''
