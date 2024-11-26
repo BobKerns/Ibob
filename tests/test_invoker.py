@@ -5,7 +5,7 @@ from operator import inv
 from signal import raise_signal
 from pytest import raises
 
-from inspect import Signature
+from inspect import Signature, signature
 
 from xontrib.xgit.invoker import SimpleInvoker, Invoker, ArgSplit, ArgumentError
 
@@ -324,3 +324,45 @@ def test_invoker_cmdline_keyword_1():
     assert s.kwargs == {'e': 5}
     assert s.extra_kwargs == {}
     assert invoker(1, True, 3, 4, '--e', 5) == (1, True, 3, 5, (4,))
+
+def test_command_empty():
+    def f() -> int:
+        return 1
+    command = Invoker(f).command
+    assert command([]) == 1
+
+
+def test_command_positional():
+    def f(a:int, b:bool, c:str) -> int:
+        return 1
+    command = Invoker(f).command
+    assert command([1, True, '3']) == 1
+
+    assert signature(command).parameters
+    
+def test_command_positional_extra():
+    def f(a:int, b:bool, c:str, /, *args) -> int:
+        return 1
+    command = Invoker(f).command
+    assert command([1, True, '3', 4]) == 1
+
+def test_command_positional_extra_kw():
+    def f(a:int, b:bool, c:str, /, *args, **kwargs):
+        return  a, b, c, args, kwargs
+    command = Invoker(f, flags={'d': (True, 'debug')}).command
+    assert command([1, True, '3', 4, '--d', 5]) == (1, True, '3', (4, 5), {'debug': True})
+    
+
+def test_command_positional_decl_extra_kw():
+    def f(a:int, b:bool, c:str, /, *args, d: bool, **kwargs):
+        return  a, b, c, args, d, kwargs
+    command = Invoker(f).command
+    assert command([1, True, '3', 4, '--d', 5]) == (1, True, '3', (4,5), True, {})
+    
+    
+def test_command_kw_equals():
+    def f(a:int, b:bool, c:str, /, *args, d: str, **kwargs):
+        return  a, b, c, args, d, kwargs
+    command = Invoker(f).command
+    assert command([1, True, '3', 4, '--d=30']) == (1, True, '3', (4,), '30', {})
+    

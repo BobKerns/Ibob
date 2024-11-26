@@ -2,16 +2,14 @@
 Utilities for invoking commands based on their signatures.
 '''
 
-from collections.abc import Collection, Sequence
-from functools import cached_property
-from math import e
-from re import A
-from sys import flags
+from collections.abc import Sequence
+from itertools import chain
+from os import name
 from typing import (
-    Any, Callable, NamedTuple, Optional,
+    Any, Callable, Literal, NamedTuple, Optional, Generic, Union
 )
 
-from inspect import Signature
+from inspect import Parameter, Signature
 
 from xontrib.xgit.type_aliases import (
     KeywordSpec, KeywordSpecs, KeywordInputSpec, KeywordInputSpecs
@@ -79,10 +77,14 @@ class SimpleInvoker:
         '''
         return self.__flags
 
-    command: Callable
     '''
-    The command to be invoked.
+    The function to be invoked.
     '''
+
+    __function: Callable
+    @property
+    def function(self) -> Callable:
+        return self.__function
 
     def __init__(self,
                  cmd: Callable,
@@ -90,7 +92,7 @@ class SimpleInvoker:
                  ):
         if not callable(cmd):
             raise ValueError(f"Command must be callable: {cmd!r}")
-        self.command = cmd
+        self.__function = cmd
         if flags is None:
             flags = {}
         def flag_tuple(k: str, v: str|KeywordInputSpec) -> KeywordSpec:
@@ -105,14 +107,6 @@ class SimpleInvoker:
                     raise ValueError(f"Invalid flag value: {v!r}")
         self.__flags = {k:flag_tuple(k, s) for k, s in  flags.items()}
 
-    def invoke_args(self, args: Sequence[Any], kwargs: dict[str, Any] = {}) -> Any:
-        """
-        Invokes a command with the given arguments and keyword arguments.
-
-        """
-        split = self.extract_keywords(args)
-        return self.command(*split.args, **{**split.kwargs, **split.extra_kwargs, **kwargs})
-
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -120,7 +114,9 @@ class SimpleInvoker:
 
         """
         try:
-            return self.invoke_args(args, kwargs)
+            split = self.extract_keywords(args)
+            unified_kwargs = {**split.kwargs, **split.extra_kwargs, **kwargs}
+            return self.__function(*split.args, **unified_kwargs)
         except TypeError as e:
             if e.__traceback__ and e.__traceback__.tb_frame.f_locals.get('self') is self:
                 raise ArgumentError(str(e)) from None
@@ -133,13 +129,6 @@ class SimpleInvoker:
         split = self.extract_keywords(args)
         return self.__call__(*split.args, *split.extra_args,
                            **split.kwargs, **split.extra_kwargs)
-
-    def invoke_command(self, args: list[Any], kwargs: dict[str, Any], **extra_kwargs) -> Any:
-        """
-        Invokes a command with the given arguments and keyword arguments
-
-        """
-        return self(args, kwargs)
 
     def extract_keywords(self, arglist: Sequence[Any]) -> ArgSplit:
         """
@@ -204,7 +193,7 @@ class SimpleInvoker:
                     args = []
                 elif arg.startswith("--"):
                     if "=" in arg:
-                        k, v = arg.split("=", 1)
+                        k, v = arg[2:].split("=", 1)
                         args.insert(0, v)
                         if (n := flags.get(k)) is not None:
                             consume_kw_args(k, n)
@@ -222,9 +211,8 @@ class SimpleInvoker:
                 elif arg.startswith("-"):
                     arg = arg[1:]
                     for c in arg:
-                        spec = flags.get(c)
-                        if spec is not None:
-                            consume_kw_args(arg, spec)
+                        if (n := flags.get(c)) is not None:
+                            consume_kw_args(arg, n)
                         else:
                             s.extra_kwargs[c] = True
                 else:
@@ -233,11 +221,7 @@ class SimpleInvoker:
                 s.args.append(arg)
         return s
 
-class Invoker(SimpleInvoker):
-    '''
-    An invoker that can handle more complex argument parsing that
-    involves type checking, name-matching, and conversion.
-    '''
+class SignatureInvoker(SimpleInvoker):
 
     __signature: Signature|None = None
     @property
@@ -247,8 +231,14 @@ class Invoker(SimpleInvoker):
 
         """
         if self.__signature is None:
-            self.__signature = Signature.from_callable(self.command)
+            self.__signature = Signature.from_callable(self.function)
         return self.__signature
+
+class Invoker(SignatureInvoker, SimpleInvoker):
+    '''
+    An invoker that can handle more complex argument parsing that
+    involves type checking, name-matching, and conversion.
+    '''
 
     __flags_with_signature: KeywordSpecs|None = None
     @property
@@ -288,3 +278,132 @@ class Invoker(SimpleInvoker):
                  ):
         super().__init__(cmd, flags)
         self.__flags_with_signature = None
+
+    __command: 'Command|None' = None
+    @property
+    def command(self) -> Callable[[list[str|Any]], Any]:
+        if self.__command is None:
+            self.__command = Command(self)
+        return self.__command
+
+
+class SessionVariablesMixin(SignatureInvoker):
+    '''
+    A mixin that provides injected session variables to an invoker.
+    '''
+
+    __session_variables: dict[str, Any]
+    @property
+    def session_variables(self) -> dict[str, Any]:
+        '''
+        The session variables that are injected into the command.
+        '''
+        return self.__session_variables
+
+    def inject(self, **kwargs):
+        '''
+        Injects session variables into the invoker.
+        '''
+        sig = self.signature
+        self.__session_variables.update(kwargs)
+
+    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
+        super().__init__(cmd, flags, **kwargs)
+        self.__session_variables = {}
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        '''
+        Invokes the command with the given arguments and keyword arguments.
+
+        '''
+        return super().__call__(*args, **{**kwargs, **self.session_variables})
+
+class Command:
+    '''
+    A command that can be invoked with the command-line calling sequence rather than
+    the python one. This translates the command-line arguments (strings) into the
+    appropriate types and injects session variables into the command.
+    
+    A proxy to an `Invoker` that can be called directly with command-line arguments.
+
+    We could use the bound method directly, but that won't allow setting the signature.
+    '''
+
+    __invoker: SignatureInvoker
+    @property
+    def invoker(self) -> SignatureInvoker:
+        '''
+        The invoker that is used to invoke the command.
+        '''
+        return self.__invoker
+
+    __exclude: set[str]
+    @property
+    def exclude(self) -> set[str]:
+        '''
+        The names of the session variables that are excluded from the signature.
+        '''
+        return self.__exclude
+
+    __signature__: Signature
+
+    @property
+    def signature(self) -> Signature:
+        '''
+        The signature of the command.
+
+        '''
+        if self.__signature__ is not None:
+            return self.__signature__
+        else:
+            self.__signature__ = self._signature()
+            return self.__signature__
+
+    def _signature(self) -> Signature:
+            sig = self.invoker.signature
+            params = [
+                p.annotation|str for p in sig.parameters.values()
+                if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY, p.VAR_KEYWORD)
+            ]
+            keywords = [
+                t for ts in (
+                    (Literal[f'--{p.name}'], p.annotation)
+                    for p in sig.parameters.values()
+                    if p.kind is p.KEYWORD_ONLY
+                    if p.name not in self.__exclude
+                )
+                for t in ts
+            ]
+            session_keywords = [
+                p for p in sig.parameters.values()
+                if (p.kind in (p.KEYWORD_ONLY, p.VAR_KEYWORD)
+                    or p.name in self.__exclude)
+            ]
+
+            params = tuple(chain(keywords, params))
+            args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list[*params])
+
+            return Signature([args, *session_keywords],
+                                           return_annotation=sig.return_annotation)
+
+    def __init__(self, invoker : Invoker, /, *, exclude: set[str] = set()):
+        '''
+        Initializes the command with the given invoker.
+
+        PARAMETERS
+        ----------
+        invoker: Invoker
+            The invoker that is used to invoke the command.
+        exclude: set[str]
+            The names of the session variables that are excluded from the signature.
+        '''
+        self.__invoker = invoker
+        self.__exclude = exclude
+        self.__signature__ = self._signature()
+
+    def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
+        '''
+        Invokes the command with the given arguments and keyword arguments.
+
+        '''
+        return self.__invoker(*args, **kwargs)
