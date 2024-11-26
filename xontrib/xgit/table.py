@@ -11,8 +11,10 @@ from itertools import count
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import _NO_VALUE, _NoValue
-from xontrib.xgit.type_aliases import HeadingStrategy, ColumnKeys
+from xontrib.xgit.types import (
+    _NO_VALUE, _NoValue,
+    HeadingStrategy, ColumnKeys,
+)
 from xontrib.xgit.view import T, K, X, Rcv
 from xontrib.xgit.multiview import MultiView, default_extractor
 

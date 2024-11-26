@@ -28,6 +28,9 @@ try:
         File,
         PythonFile,
         GitReferenceType, GitRepositoryId, GitObjectReference,
+        KeywordArity, KeywordSpec, KeywordSpecs,
+        KeywordInputSpec, KeywordInputSpecs,
+        HeadingStrategy, ColumnKeys,
     )
 except SyntaxError:
     from xontrib.xgit.type_aliases_310 import (
@@ -48,6 +51,9 @@ except SyntaxError:
         File,
         PythonFile,
         GitReferenceType, GitRepositoryId, GitObjectReference,
+        KeywordArity, KeywordSpec, KeywordSpecs,
+        KeywordInputSpec, KeywordInputSpecs,
+        HeadingStrategy, ColumnKeys,
     )
 
 class _NoValue:

@@ -50,9 +50,10 @@ if not TYPE_CHECKING:
     KeywordSpec = tuple[KeywordArity, str]
     KeywordSpecs = dict[str, KeywordSpec]
     KeywordInputSpec = str|KeywordArity|KeywordSpec
-    KeywordInputs = dict[str, KeywordInputSpec]
+    KeywordInputSpecs = dict[str, KeywordInputSpec]
 
     HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
+    ColumnKeys = list[str|int]|list[str]|list[int]
 else:
     GitHash = str
     ContextKey =  tuple[Path, PurePosixPath, GitHash, GitHash]
@@ -84,6 +85,7 @@ else:
     KeywordSpec = tuple[KeywordArity, str]
     KeywordSpecs = dict[str, KeywordSpec]
     KeywordInputSpec = str|KeywordArity|KeywordSpec
-    KeywordInputs = dict[str, KeywordInputSpec]
+    KeywordInputSpecs = dict[str, KeywordInputSpec]
 
     HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
+    ColumnKeys = list[str|int]|list[str]|list[int]
