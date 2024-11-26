@@ -31,6 +31,7 @@ try:
         KeywordArity, KeywordSpec, KeywordSpecs,
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
+        list_of,
     )
 except SyntaxError:
     from xontrib.xgit.type_aliases_310 import (
@@ -54,6 +55,7 @@ except SyntaxError:
         KeywordArity, KeywordSpec, KeywordSpecs,
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
+        Any as list_of,
     )
 
 class _NoValue:

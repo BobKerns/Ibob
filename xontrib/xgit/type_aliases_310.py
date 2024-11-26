@@ -54,6 +54,7 @@ if not TYPE_CHECKING:
 
     HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
     ColumnKeys = list[str|int]|list[str]|list[int]
+   
 else:
     GitHash = str
     ContextKey =  tuple[Path, PurePosixPath, GitHash, GitHash]
@@ -89,3 +90,6 @@ else:
 
     HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
     ColumnKeys = list[str|int]|list[str]|list[int]
+    
+def type_of(e) -> type[list[Any]]:
+    return list

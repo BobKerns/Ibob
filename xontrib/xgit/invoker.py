@@ -13,6 +13,7 @@ from inspect import Parameter, Signature
 from xontrib.xgit.types import (
     KeywordSpec, KeywordSpecs,
     KeywordInputSpec, KeywordInputSpec, KeywordInputSpecs,
+    list_of,
 )
 
 class ArgSplit(NamedTuple):
@@ -381,7 +382,8 @@ class Command:
             ]
 
             params = tuple(chain(keywords, params))
-            args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list[*params])
+            # list_of is a workaround python 3.10.
+            args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list_of(params))
 
             return Signature([args, *session_keywords],
                                            return_annotation=sig.return_annotation)

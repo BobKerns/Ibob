@@ -170,3 +170,6 @@ to `KeywordSpecs` for use in the invoker.
 type HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
 
 type ColumnKeys = list[str|int]|list[str]|list[int]
+
+def list_of[E](e: E) -> type[list[E]]:
+    return list[*e]
