@@ -35,6 +35,7 @@ from xontrib.xgit.ref_types import (
     Branch, Tag, RemoteBranch, GitRef,
 )
 from xontrib.xgit.context import GitContext, _GitContext
+from xontrib.xgit.invoker import CommandInvoker
 
 
 _load_actions: list[LoadAction] = []

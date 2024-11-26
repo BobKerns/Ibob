@@ -9,6 +9,7 @@ from typing import (
 )
 
 from inspect import Parameter, Signature
+from unittest.mock import Base
 
 from xontrib.xgit.types import (
     KeywordSpec, KeywordSpecs,
@@ -43,7 +44,31 @@ def _u(s: str) -> str:
 def _h(s: str) -> str:
     return s.replace('_', '-')
 
-class SimpleInvoker:
+class BaseInvoker:
+    __function: Callable
+    @property
+    def function(self) -> Callable:
+        return self.__function
+
+    def __init__(self, cmd: Callable):
+        if not callable(cmd):
+            raise ValueError(f"Command must be callable: {cmd!r}")
+        self.__function = cmd
+
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """
+        Invokes a command with the given arguments and keyword arguments.
+        """
+        try:
+            return self.__function(*args, **kwargs)
+        except TypeError as e:
+            if e.__traceback__ and e.__traceback__.tb_frame.f_locals.get('self') is self:
+                raise ArgumentError(str(e)) from None
+            raise
+
+
+class SimpleInvoker(BaseInvoker):
     """
     Invokes commands based on normal conventions.
     """
@@ -82,18 +107,21 @@ class SimpleInvoker:
     The function to be invoked.
     '''
 
-    __function: Callable
-    @property
-    def function(self) -> Callable:
-        return self.__function
-
     def __init__(self,
                  cmd: Callable,
                  flags: Optional[KeywordInputSpecs] = None,
                  ):
-        if not callable(cmd):
-            raise ValueError(f"Command must be callable: {cmd!r}")
-        self.__function = cmd
+        '''
+        Initializes the invoker with the given command and flags.
+
+        PARAMETERS
+        ----------
+        cmd: Callable
+            The command to be invoked.
+        flags: Optional[KeywordInputSpecs]
+            The flags that are recognized by the invoker.
+        '''
+        super().__init__(cmd)
         if flags is None:
             flags = {}
         def flag_tuple(k: str, v: str|KeywordInputSpec) -> KeywordSpec:
@@ -114,22 +142,9 @@ class SimpleInvoker:
         Invokes a command with the given arguments and keyword arguments.
 
         """
-        try:
-            split = self.extract_keywords(args)
-            unified_kwargs = {**split.kwargs, **split.extra_kwargs, **kwargs}
-            return self.__function(*split.args, **unified_kwargs)
-        except TypeError as e:
-            if e.__traceback__ and e.__traceback__.tb_frame.f_locals.get('self') is self:
-                raise ArgumentError(str(e)) from None
-            raise
-
-        """
-        Invokes a command with the given arguments and keyword arguments.
-
-        """
         split = self.extract_keywords(args)
-        return self.__call__(*split.args, *split.extra_args,
-                           **split.kwargs, **split.extra_kwargs)
+        unified_kwargs = {**split.kwargs, **split.extra_kwargs, **kwargs}
+        return super().__call__(*split.args, **unified_kwargs)
 
     def extract_keywords(self, arglist: Sequence[Any]) -> ArgSplit:
         """
@@ -282,7 +297,7 @@ class Invoker(SignatureInvoker, SimpleInvoker):
 
     __command: 'Command|None' = None
     @property
-    def command(self) -> Callable[[list[str|Any]], Any]:
+    def command(self) -> 'Command':
         if self.__command is None:
             self.__command = Command(self)
         return self.__command
@@ -517,3 +532,45 @@ class TypeTransform(ArgTransform):
         Transforms the argument into the target type.
         '''
         return self.target(arg)
+
+class SessionInvoker(SessionVariablesMixin, SimpleInvoker):
+    '''
+    An invoker that just does session variable injection.
+    '''
+
+    __arg_transforms: dict[str, ArgTransform]
+    @property
+    def arg_transforms(self) -> dict[str, ArgTransform]:
+        '''
+        The transformations that are applied to the arguments.
+        '''
+        return self.__arg_transforms
+
+    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
+        super().__init__(cmd, flags, **kwargs)
+        self.__arg_transforms = {}
+
+class CommandInvoker(SessionVariablesMixin, Invoker):
+    '''
+    An invoker that can handle more complex argument parsing that
+    involves type checking, name-matching, and conversion.
+    '''
+
+    __arg_transforms: dict[str, ArgTransform]
+    @property
+    def arg_transforms(self) -> dict[str, ArgTransform]:
+        '''
+        The transformations that are applied to the arguments.
+        '''
+        return self.__arg_transforms
+
+    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
+        super().__init__(cmd, flags, **kwargs)
+        self.__arg_transforms = {}
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        '''
+        Invokes the command with the given arguments and keyword arguments.
+
+        '''
+        return super().__call__(*args, **kwargs)
