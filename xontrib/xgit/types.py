@@ -167,7 +167,7 @@ class GitDirNotFoundError(GitError):
 
 class WorktreeNotFoundError(GitDirNotFoundError):
     '''
-    Thrown when a worktree is not found.
+    Thrown when a worktree is not found or is not a worktree.
 
     Implies `GitDirNotFoundError`.
     '''
@@ -177,7 +177,7 @@ class WorktreeNotFoundError(GitDirNotFoundError):
 
 class RepositoryNotFoundError(GitDirNotFoundError):
     '''
-    Thrown when a worktree is not found.
+    Thrown when a repository is not found or is not a valid repository.
 
     Implies `GitDirNotFoundError`.
     '''

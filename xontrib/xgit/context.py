@@ -119,7 +119,7 @@ class _GitContext(_GitCmd, GitContext):
             case _ if hasattr(repository, 'get_object'):
                 pass
             case _:
-                raise ValueError(f"Invalid repository: {repository}")
+                raise GitValueError(f"Invalid repository: {repository}")
         if commit is None:
             head = self.rev_parse('HEAD')
             commit = repository.get_object(head, 'commit')
@@ -156,7 +156,7 @@ class _GitContext(_GitCmd, GitContext):
     @property
     def worktree(self) -> GitWorktree:
         if self.__worktree is None:
-            raise ValueError("Worktree has not been set")
+            raise GitNoWorktreeException("Worktree has not been set")
         return self.__worktree
     @worktree.setter
     def worktree(self, value: GitWorktree):
@@ -241,7 +241,7 @@ class _GitContext(_GitCmd, GitContext):
             case rt.GitRef():
                 self.__commit = cast(ot.GitCommit, value.target)
             case _:
-                raise ValueError(f'Not a commit: {value}')
+                raise GitValueError(f'Not a commit: {value}')
 
     __objects: dict[ObjectId, 'ot.GitObject']
     @property
@@ -380,7 +380,7 @@ class _GitContext(_GitCmd, GitContext):
         if commit:
             commit = repository.get_object(commit, 'commit')
         else:
-            raise ValueError("No commit found")
+            raise GitValueError("No commit found")
         return branch, commit
 
     __unload_actions: list[CleanupAction]
