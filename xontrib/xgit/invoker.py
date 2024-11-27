@@ -23,6 +23,7 @@ from xontrib.xgit.types import (
     KeywordInputSpec, KeywordInputSpec, KeywordInputSpecs,
     list_of,
 )
+from xontrib.xgit.conversion_mgr import ArgTransform
 
 class ArgSplit(NamedTuple):
     """
@@ -461,112 +462,6 @@ class Command:
         __tracebackhide__ = True
         return self.invoker(*args, **kwargs)
 
-class ArgTransform:
-    __name: str
-    @property
-    def name(self) -> str:
-        '''
-        The argument name of this applies to.
-        '''
-        return self.__name
-
-    __declared: type
-    @property
-    def declared(self) -> type:
-        '''
-        The annotation which appears on the variable.
-        '''
-        return self.__declared
-
-    __target: type
-    @property
-    def target(self) -> type:
-        '''
-        The type to which the argument is transformed.
-        '''
-        return self.__target
-
-    __source: type
-    @property
-    def source(self) -> type:
-        '''
-        The type from which the argument is transformed.
-        '''
-        return self.__source
-
-    def __call__(self, arg: Any) -> Any:
-        '''
-        Transforms the argument into the target type.
-        '''
-        return arg
-
-    def __init__(self, name: str, /, *,
-                 declared: type,
-                 target: type,
-                 source: type=str) -> None:
-        '''
-        Initializes the transformation with the given types.
-        '''
-        self.__name = name
-        self.__declared = declared
-        self.__target = target
-        self.__source = source
-
-
-class TypeTransform(ArgTransform):
-    '''
-    A transformation that converts the argument into a different type.
-    '''
-
-    def __init__(self, name: str,
-                 declared: type,
-                 target: type,
-                 source: type = str,
-                 converter: Callable[[Any], Any] = lambda x: x,
-                 completer: Optional[Callable[[Any], Any]] = None,
-            ):
-        '''
-        Initializes the transformation with the given types.
-
-        PARAMETERS
-        ----------
-        name: str
-            The argument name of this applies to.
-        declared: type
-            The annotation which appears on the variable.
-        target: type
-            The type to which the argument is transformed.
-        source: type
-            The type from which the argument is transformed.
-        '''
-        super().__init__(name,
-                         declared=declared,
-                         target=target,
-                         source=source)
-        self.__converter = converter
-        self.__completer = completer
-
-    __converter: Callable[[Any], Any]
-    @property
-    def converter(self) -> Callable[[Any], Any]:
-        '''
-        The function that is used to convert the argument.
-        '''
-        return self.__converter
-
-    __completer: Optional[Callable[[Any], Any]]
-    @property
-    def completer(self) -> Optional[Callable[[Any], Any]]:
-        '''
-        The function that is used to complete the argument.
-        '''
-        return self.__completer
-
-    def __call__(self, arg: Any) -> Any:
-        '''
-        Transforms the argument into the target type.
-        '''
-        return self.target(arg)
 
 class SessionInvoker(SessionVariablesMixin, SimpleInvoker):
     '''
