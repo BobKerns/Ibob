@@ -1,13 +1,12 @@
 '''
 Test the XGit invoker, used for invoking commands based on their signatures.
 '''
-from operator import inv
-from signal import raise_signal
 from typing import IO
-from unittest import result
 from pytest import raises
 
 from inspect import Signature, signature
+
+from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.invoker import (
     SimpleInvoker, Invoker, ArgSplit, ArgumentError,
@@ -331,45 +330,58 @@ def test_invoker_cmdline_keyword_1():
     assert s.extra_kwargs == {}
     assert invoker(1, True, 3, 4, '--e', 5) == (1, True, 3, 5, (4,))
 
-def test_command_empty():
+def test_command_empty(xonsh_session):
     def f() -> int:
         return 1
-    command = Invoker(f).command
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([]) == 1
 
 
-def test_command_positional():
+def test_command_positional(xonsh_session):
     def f(a:int, b:bool, c:str) -> int:
         return 1
-    command = Invoker(f).command
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([1, True, '3']) == 1
 
     assert signature(command).parameters
 
-def test_command_positional_extra():
+def test_command_positional_extra(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args) -> int:
         return 1
-    command = Invoker(f).command
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([1, True, '3', 4]) == 1
 
-def test_command_positional_extra_kw():
+def test_command_positional_extra_kw(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args, **kwargs):
         return  a, b, c, args, kwargs
-    command = Invoker(f, flags={'d': (True, 'debug')}).command
+
+    invoker = CommandInvoker(f, flags={'d': (True, 'debug')})
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([1, True, '3', 4, '--d', 5]) == (1, True, '3', (4, 5), {'debug': True})
 
 
-def test_command_positional_decl_extra_kw():
+def test_command_positional_decl_extra_kw(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args, d: bool, **kwargs):
         return  a, b, c, args, d, kwargs
-    command = Invoker(f).command
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([1, True, '3', 4, '--d', 5]) == (1, True, '3', (4,5), True, {})
 
 
-def test_command_kw_equals():
+def test_command_kw_equals(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args, d: str, **kwargs):
         return  a, b, c, args, d, kwargs
-    command = Invoker(f).command
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
+    command = invoker.command
     assert command([1, True, '3', 4, '--d=30']) == (1, True, '3', (4,), '30', {})
 
 
@@ -412,36 +424,36 @@ def test_session_invoker_clear_session():
     with raises(GitNoSessionException):
         invoker(1, True, '3', 4)
 
-def test_command_invoker():
+def test_command_invoker(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args,
-          session: str,
+          XSH: str,
           stderr: IO[str],
           stdout: IO[str],
           stdin: IO[str],
           **kwargs):
-        return  a, b, c, args, session, kwargs
-    invoker = CommandInvoker(f, 'f')
-    invoker.inject(session='session-2')
+        return  a, b, c, args, XSH, kwargs
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
     command = invoker.command
     result = command([1, True, '3', 4])
     assert result == (
-        1, True, '3', (4,), 'session-2', {})
+        1, True, '3', (4,), xonsh_session, {})
 
-def test_command_invoker_extra_kw():
+def test_command_invoker_extra_kw(xonsh_session):
     def f(a:int, b:bool, c:str, /, *args,
-          session: str,
+          XSH: XonshSession,
           stderr: IO[str],
           stdout: IO[str],
           stdin: IO[str],
           **kwargs):
-        return  a, b, c, args, session, kwargs
-    invoker = CommandInvoker(f, 'f')
-    invoker.inject(session='session-3')
+        return  a, b, c, args, XSH, kwargs
+    invoker = CommandInvoker(f)
+    invoker.inject(XSH=xonsh_session)
     command = invoker.command
     result = command([1, True, '3', 4],
                             extra='fun')
     assert result == (
-        1, True, '3', (4,), 'session-3', {
+        1, True, '3', (4,), xonsh_session, {
             'extra': 'fun',
         })
 

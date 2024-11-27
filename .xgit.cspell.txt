@@ -90,6 +90,7 @@ sysdisplayhook
 Tagish
 tmpname
 tomlkit
+tracebackhide
 Treeish
 typecheck
 typeshed

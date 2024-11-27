@@ -179,29 +179,9 @@ def session_active(module, xonsh_session) -> Generator[XontribModule, None, None
 @pytest.fixture()
 def with_xgit(xonsh_session, modules, sysdisplayhook):
     with modules('xontrib.xgit') as ((module,), kwargs):
-        assert module is not None
-        _load_xontrib_ = module.__dict__['_load_xontrib_']
-        _unload_xontrib_ = module.__dict__['_unload_xontrib_']
-        assert callable(kwargs['_load_xontrib_'])
-        assert callable(kwargs['_unload_xontrib_'])
-        load = cast(Loader, _load_xontrib_)
-        unload = cast(Loader, _unload_xontrib_)
+        with session_active(module, xonsh_session) as xontrib_module:
+            yield xontrib_module
 
-        def _with_xgit(t: Callable, *more_modules):
-            if more_modules:
-                with modules(*more_modules) as (m, more_kwargs):
-                    with session_active(module, xonsh_session) as xontrib_module:
-                        params = {
-                            **xontrib_module._asdict(),
-                            **kwargs,
-                            **more_kwargs
-                        }
-                        yield from t(xontrib_module, **params)
-                        return
-            with session_active(module, xonsh_session) as xontrib_module:
-                yield from t(xontrib_module, **{**xontrib_module._asdict(), **kwargs})
-            return
-        yield _with_xgit
 
 CWD_LOCK = RLock()
 @pytest.fixture()
@@ -258,44 +238,10 @@ def test_branch(modules):
             run(['git', 'branch', '-D', name])
 
 
-@pytest.fixture()
-def cmd_args(modules, xonsh_session):
+_test_lock: Lock = Lock()
+@pytest.fixture(scope='session')
+def test_lock():
     '''
-    Fixture to test command line arguments.
+    Fixture to lock tests that cannot be run in parallel.
     '''
-    with modules('xontrib.xgit.decorators') as ((m_cmd,), vars):
-        with session_active(m_cmd, xonsh_session) as xontrib_module:
-            command = vars['command']
-            def _cmd_args(*args, **kwargs):
-                from xontrib.xgit.decorators import context
-                _aliases = {}
-                _exports = []
-                def _export(*args):
-                    _exports.append(args)
-                # Wrap our test command in the decorator
-                f = command(*args,
-                            _export=_export,
-                            _aliases=_aliases,
-                            **kwargs)
-                def wrap_and_apply(cmd: Callable):
-                    f(cmd)
-                    info = cmd.info # type: ignore
-                    def apply(*args, **kwargs):
-                        XSH = xonsh_session
-                        return info.alias_fn(args,
-                                             XSH=XSH,
-                                             XGIT=context(XSH),
-                                             _info=info,
-                                             **kwargs)
-                    return apply
-                return wrap_and_apply
-            return _cmd_args
-
-_autolock: Lock = Lock()
-@pytest.fixture(autouse=True)
-def autolock(xonsh_session):
-    '''
-    Fixture to create a lock that unlocks automatically.
-    '''
-    with _autolock:
-        yield True
+    yield _test_lock
