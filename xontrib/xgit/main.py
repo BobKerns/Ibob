@@ -84,6 +84,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     env =  xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
+    # Set the context on loading.
     env['XGIT'] = ct._GitContext(xsh)
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
     def set_unload(
@@ -109,7 +110,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     @events.on_chdir
     @session()
-    def update_git_context(olddir, newdir, *,
+    def update_git_context(olddir, newdir,
                            XSH: XonshSession,
                            XGIT,
                            stderr=sys.stderr,
@@ -145,8 +146,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     assert isinstance(ctx, MutableMapping),\
         f"XSH.ctx is not a MutableMapping: {ctx!r}"
 
-    # Set the context on loading.
-    env['XGIT'] = ct._GitContext(xsh)
     if "_XGIT_RETURN" in xsh.ctx:
         del env["_XGIT_RETURN"]
 

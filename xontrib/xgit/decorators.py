@@ -7,10 +7,9 @@ from contextlib import suppress
 from functools import wraps
 from typing import (
     Any, MutableMapping, NamedTuple, Optional, Callable, Union,
-    TypeAlias, cast, TypeVar, ParamSpec, Sequence
+    cast, TypeVar, ParamSpec, Sequence
 )
-from inspect import signature, Signature, Parameter, stack
-import sys
+from inspect import signature, Signature, Parameter
 from pathlib import Path
 from weakref import WeakKeyDictionary
 
@@ -23,7 +22,6 @@ from xonsh.completers.path import (
     complete_dir as _complete_dir,
     _complete_path_raw
 )
-from xonsh.parsers.completion_context import CompletionContext
 from xonsh.built_ins import XonshSession, XSH as GLOBAL_XSH
 from xonsh.events import events
 
@@ -331,7 +329,9 @@ def prefix_command(alias: str):
                 return set(prefix_cmd.subcommands.keys())
         return set()
     completer.__doc__ = f"Completer for {alias}"
-    add_one_completer(alias, completer, "start")
+    def init_prefix_command(xsh: XonshSession):
+        add_one_completer(alias, completer, "start")
+        prefix_cmd.inject(XSH=xsh, XGIT=context(xsh))
     return prefix_cmd
 
 xgit = prefix_command("xgit")

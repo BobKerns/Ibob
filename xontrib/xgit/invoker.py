@@ -5,15 +5,17 @@ Utilities for invoking commands based on their signatures.
 from collections.abc import Sequence
 from contextlib import suppress
 from itertools import chain
-from operator import add
 import sys
 from types import MappingProxyType
 from typing import (
-    IO, Any, Callable, Literal, MappingView, NamedTuple, Optional,
+    IO, Any, Callable, Literal, NamedTuple, Optional,
 )
-
 from inspect import Parameter, Signature
-from unittest.mock import Base
+
+from xonsh.completers.tools import (
+    contextual_completer, ContextualCompleter, CompletionContext,
+)
+from xonsh.completers.completer import add_one_completer
 
 from xontrib.xgit.types import (
     GitNoSessionException, GitValueError, KeywordSpec, KeywordSpecs,
@@ -70,6 +72,7 @@ class BaseInvoker:
         """
         Invokes a command with the given arguments and keyword arguments.
         """
+        __tracebackhide__ = True
         try:
             return self.__function(*args, **kwargs)
         except TypeError as e:
@@ -154,6 +157,7 @@ class SimpleInvoker(BaseInvoker):
         Invokes a command with the given arguments and keyword arguments.
 
         """
+        __tracebackhide__ = True
         split = self.extract_keywords(args)
         unified_kwargs = {**split.kwargs, **split.extra_kwargs, **kwargs}
         return super().__call__(*split.args, **unified_kwargs)
@@ -307,13 +311,6 @@ class Invoker(SignatureInvoker, SimpleInvoker):
         super().__init__(cmd, flags)
         self.__flags_with_signature = None
 
-    __command: 'Command|None' = None
-    @property
-    def command(self) -> 'Command':
-        if self.__command is None:
-            self.__command = Command(self)
-        return self.__command
-
 
 class SessionVariablesMixin(SignatureInvoker):
     '''
@@ -353,6 +350,7 @@ class SessionVariablesMixin(SignatureInvoker):
         '''
         Invokes the command with the given arguments and keyword arguments.
         '''
+        __tracebackhide__ = True
         params = self.signature.parameters
         for k, v in self.session_variables.items():
             if k in params:
@@ -371,9 +369,9 @@ class Command:
     We could use the bound method directly, but that won't allow setting the signature.
     '''
 
-    __invoker: SignatureInvoker
+    __invoker: 'CommandInvoker'
     @property
-    def invoker(self) -> SignatureInvoker:
+    def invoker(self) -> 'CommandInvoker':
         '''
         The invoker that is used to invoke the command.
         '''
@@ -429,7 +427,7 @@ class Command:
             return Signature([args, *session_keywords],
                                            return_annotation=sig.return_annotation)
 
-    def __init__(self, invoker : Invoker, /, *, exclude: set[str] = set()):
+    def __init__(self, invoker : 'CommandInvoker', /, *, exclude: set[str] = set()):
         '''
         Initializes the command with the given invoker.
 
@@ -449,7 +447,8 @@ class Command:
         Invokes the command with the given arguments and keyword arguments.
 
         '''
-        return self.__invoker(*args, **kwargs)
+        __tracebackhide__ = True
+        return self.invoker(*args, **kwargs)
 
 class ArgTransform:
     __name: str
@@ -599,12 +598,19 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
         return self.__arg_transforms
 
     def __init__(self, cmd: Callable,
-                 name: str,
+                 name: Optional[str] = None,
                  flags: Optional[KeywordInputSpecs] = None,
                  **kwargs):
         super().__init__(cmd, flags, **kwargs)
         self.__arg_transforms = {}
-        self.__name = name
+        self.__name = name or cmd.__name__
+
+    __command: 'Command|None' = None
+    @property
+    def command(self) -> 'Command':
+        if self.__command is None:
+            self.__command = Command(self)
+        return self.__command
 
     def __call__(self, *args: Any,
                  stderr: IO[str]=sys.stderr,
@@ -615,6 +621,7 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
         Invokes the command with the given arguments and keyword arguments.
 
         '''
+        __tracebackhide__ = True
 
         if "--help" in args:
             print(self.__doc__, file=stderr)
@@ -627,7 +634,12 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
             kwargs['stderr'] = stderr
         if 'stdin' in params:
             kwargs['stdin'] = stdin
-        return super().__call__(*args, **kwargs)
+
+        result = super().__call__(*args, **kwargs)
+
+        XSH = self.session_variables['XSH']
+        XSH.ctx['_XGIT_RETURN'] = result
+        return result
 
 class PrefixCommandInvoker(CommandInvoker):
     '''
@@ -662,10 +674,6 @@ class PrefixCommandInvoker(CommandInvoker):
         invoker: CommandInvoker
             The invoker that is used to invoke the subcommand.
         '''
-        # Injection of subcommands should be redundant, but
-        # consider potential for dynamic loading.
-        with suppress(GitNoSessionException):
-            invoker.inject(**self.session_variables)
         self.__subcommands[subcmd] = invoker
 
     def inject(self, **session_vars):
@@ -673,10 +681,32 @@ class PrefixCommandInvoker(CommandInvoker):
         Injects session variables into the invoker.
         '''
         super().inject(**session_vars)
-        # Injection of subcommands should be redundant, but
-        # consider potential for dynamic loading.
-        for invoker in self.subcommands.values():
-            invoker.inject(**session_vars)
+
+        @contextual_completer
+        def completer_subcommands(ctx: CompletionContext):
+            return self._complete_subcommands(ctx)
+        add_one_completer(self.name, completer_subcommands, 'start')
+
+    def _complete_subcommands(self, ctx: CompletionContext) -> set[str]:
+        '''
+        Completes the subcommands that match the given prefix.
+
+        PARAMETERS
+        ----------
+        prefix: str
+            The prefix to be matched.
+
+        RETURNS
+        -------
+        list[str]
+            The subcommands that match the prefix.
+        '''
+        if (cmd_ctx := ctx.command) is None:
+            return set()
+        prefix = cmd_ctx.prefix
+        if self.prefix.startswith(prefix):
+            return {self.prefix}
+        return {f'{self.prefix} {k}' for k in self.subcommands.keys()}
 
     def __init__(self,
                  cmd: Callable,
@@ -692,6 +722,7 @@ class PrefixCommandInvoker(CommandInvoker):
         Invokes the command with the given arguments and keyword arguments.
 
         '''
+        __tracebackhide__ = True
         if len(args) == 0:
             for subcmd in self.subcommands:
                 print(f'  {subcmd}', file=sys.stderr)
