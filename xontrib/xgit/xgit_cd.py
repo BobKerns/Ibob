@@ -17,10 +17,6 @@ def git_cd(path: str = "", *, XSH, XGIT, stderr=sys.stderr) -> None:
     to the git repository root.
     """
     execer = XSH.execer
-    assert execer is not None, "No execer"
-    if not XGIT or XGIT.worktree is None:
-        execer.exec(f"cd {path}")
-        return
 
     fpath = Path() / path
     if path == "":
@@ -31,8 +27,8 @@ def git_cd(path: str = "", *, XSH, XGIT, stderr=sys.stderr) -> None:
         pass
     else:
         try:
-            git_path = (XGIT.worktree.path / XGIT.path / path).resolve()
-            git_path = PurePosixPath(git_path.relative_to(XGIT.worktree.path))
+            loc = (XGIT.worktree.location / XGIT.path / path).resolve()
+            git_path = PurePosixPath(loc.relative_to(XGIT.worktree.location))
             XGIT.path = git_path
             fpath = XGIT.worktree.path / XGIT.path
         except ValueError:
