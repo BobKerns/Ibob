@@ -32,7 +32,7 @@ from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person
 from xontrib.xgit.types import (
-    ObjectId, CommitId, GitObjectReference, CleanupAction,
+    ObjectId, CommitId, GitObjectReference,
     GitNoRepositoryException, GitNoWorktreeException, GitException, GitError,
     GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
     GitNoBranchException, GitValueError,
@@ -270,7 +270,12 @@ class _GitContext(_GitCmd, GitContext):
     def object_references(self) -> Mapping[ObjectId, set[GitObjectReference]]:
         return MappingProxyType(self.__object_references)
 
-    def add_reference(self, target: ObjectId, repo: GitRepositoryId, ref: ObjectId|PurePosixPath, t: GitReferenceType, /) -> None:
+    def add_reference(self,
+                      target: ObjectId,
+                      repo: GitRepositoryId,
+                      ref: ObjectId|PurePosixPath,
+                      t: GitReferenceType,
+                      /) -> None:
         obj_ref = cast(GitObjectReference, (repo, ref, t))
         self.__object_references[target].add(obj_ref)
 
@@ -382,22 +387,6 @@ class _GitContext(_GitCmd, GitContext):
         else:
             raise GitValueError("No commit found")
         return branch, commit
-
-    __unload_actions: list[CleanupAction]
-    def add_unload_action(self, action: CleanupAction):
-        self.__unload_actions.append(action)
-
-    def _do_unload_actions(self):
-        """
-        Unload a value supplied by the xontrib.
-        """
-        while len(self.__unload_actions) > 0:
-            try:
-                action = self.__unload_actions.pop()
-                action()
-            except Exception:
-                from traceback import print_exc
-                print_exc()
 
 def _relative_to_home(path: Path) -> Path:
     """

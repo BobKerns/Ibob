@@ -26,10 +26,6 @@ from xonsh.execer import Execer
 from xontrib.xgit.decorators import (
     _exports,
     _export,
-    _unload_actions,
-    _do_unload_actions,
-    _do_load_actions,
-    _add_unload_action,
     _aliases,
     session,
 )
@@ -43,7 +39,7 @@ from xontrib.xgit.display import (
     _xgit_displayhook,
 )
 import xontrib.xgit.context as ct
-from xontrib.xgit.types import GitException
+from xontrib.xgit.types import GitDirNotFoundError, GitException
 
 # Export the functions and values we want to make available.
 
@@ -67,6 +63,9 @@ def xgit_version():
     _xgit_version = version("xontrib-xgit")
     return _xgit_version
 
+events.doc('on_xgit_load', 'Runs when the xgit xontrib is loaded.')
+events.doc('on_xgit_unload', 'Runs when the xgit xontrib is unloaded.')
+
 def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
     this function will be called when loading/reloading the xontrib.
@@ -80,34 +79,12 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     Returns:
         dict: this will get loaded into the current execution context
     """
-    from xontrib.xgit.context import _GitContext
+
     env =  xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
     # Set the context on loading.
-    env['XGIT'] = ct._GitContext(xsh)
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
-    def set_unload(
-        ns: MutableMapping[str, Any],
-        name: str,
-        value=None,
-    ):
-        old_value = None
-        if name in ns:
-            old_value = ns[name]
-
-            def restore_item():
-                ns[name] = old_value
-
-            _unload_actions[xsh].append(restore_item)
-        else:
-
-            def del_item():
-                with suppress(KeyError):
-                    del ns[name]
-
-            _unload_actions[xsh].append(del_item)
-
     @events.on_chdir
     @session()
     def update_git_context(olddir, newdir,
@@ -120,22 +97,17 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         """
 
         newpath = Path(newdir)
+        path = newpath
         try:
-            XGIT.open_worktree(newpath)
+            while path != path.parent:
+                if path.suffix == ".git" or path.name == ".git":
+                    XGIT.open_repository(path)
+                    return
+                if (path / ".git").exists():
+                    XGIT.open_worktree(path)
+                    return
         except Exception as ex:
             raise GitException(F"Failed to open worktree at {newpath}") from ex
-
-
-
-    _do_load_actions(xsh)
-
-    for name, value in _exports.items():
-        set_unload(xsh.ctx, name, value)
-    for name, value in _aliases.items():
-        aliases = xsh.aliases
-        assert aliases is not None, "XSH.aliases is None"
-        set_unload(aliases, name, value)
-        aliases[name] = value
 
     # Assertions are to flag bad test
     env = xsh.env
@@ -154,12 +126,13 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     hook = _xonsh_displayhook
 
     ctx['-']  = None
-    def unhook_display():
+    def unhook_display(**_):
         sys.displayhook = hook
 
     _xonsh_displayhook = hook
-    _add_unload_action(xsh, unhook_display)
+    events.on_xgit_unload(unhook_display)
     sys.displayhook = _xgit_displayhook
+
 
     prompt_fields = env['PROMPT_FIELDS']
     assert isinstance(prompt_fields, MutableMapping), \
@@ -169,8 +142,17 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     if "XGIT_ENABLE_NOTEBOOK_HISTORY" not in env:
         env["XGIT_ENABLE_NOTEBOOK_HISTORY"] = True
 
+    XGIT = ct._GitContext(xsh)
+    env['XGIT'] = XGIT
+    events.on_xgit_load.fire(
+        XSH=xsh,
+        XGIT=XGIT,
+    )
+    with suppress(GitDirNotFoundError):
+        XGIT.open_repository(Path.cwd())
+
     if env.get("XGIT_TRACE_LOAD"):
-        print("Loaded xontrib-xgit", file=sys.stderr)
+        print("Load ed xontrib-xgit", file=sys.stderr)
     return _exports
 
 
@@ -182,7 +164,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloading xontrib-xgit", file=sys.stderr)
-    _do_unload_actions(xsh)
 
     if "_XGIT_RETURN" in xsh.ctx:
         del xsh.ctx["_XGIT_RETURN"]

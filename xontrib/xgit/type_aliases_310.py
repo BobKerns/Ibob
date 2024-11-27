@@ -26,8 +26,6 @@ GitEntryMode = Literal[
 GitObjectType = Literal["blob", "tree", "commit", "tag"]
 GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
 GitObjectReference = tuple[GitRepositoryId, ObjectId|PurePosixPath, GitReferenceType]
-CleanupAction = Callable[[], None]
-LoadAction = Callable[[XonshSession], None|CleanupAction]
 JsonAtomic = Any
 JsonArray = list
 JsonObject = dict
@@ -46,3 +44,4 @@ KeywordInputSpecs = dict[str, KeywordInputSpec]
 HeadingStrategy = Literal['none', 'name', 'heading', 'heading-or-name']
 ColumnKeys = list[str|int]|list[str]|list[int]
 
+DirectoryKind = Literal['repository', 'worktree', 'directory']

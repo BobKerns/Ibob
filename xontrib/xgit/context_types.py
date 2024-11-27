@@ -24,7 +24,7 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.types import (
     GitObjectReference, GitObjectType, GitException,
-    ObjectId, GitRepositoryId, GitReferenceType, CleanupAction,
+    ObjectId, GitRepositoryId, GitReferenceType,
 )
 from xontrib.xgit.json_types import Jsonable
 import xontrib.xgit.person as people
@@ -367,24 +367,26 @@ class GitContext(Jsonable, Protocol):
         '''
         ...
 
-    @abstractmethod
-    def add_reference(self, target: ObjectId, repo: GitRepositoryId, ref: ObjectId|PurePosixPath, type: GitReferenceType, /) -> None:
-        '''
-        Add a reference to an object.
-        '''
-        ...
 
-    @abstractmethod
-    def add_unload_action(self, action: CleanupAction) -> None:
+    def add_reference(self,
+                      target: ObjectId,
+                      repo: GitRepositoryId,
+                      ref: ObjectId|PurePosixPath,
+                      t: GitReferenceType,
+                      /) -> None:
         '''
-        Add an action to be performed when the context is unloaded.
-        '''
-        ...
+        Add a reference to an object, so we can find where it is used.
 
-
-    def _do_unload_actions(self):
-        '''
-        Perform the unload actions.
+        PARAMETERS
+        ----------
+        target : ObjectId
+            The object being referenced.
+        repo : GitRepositoryId
+            The repository where the reference is.
+        ref : ObjectId | PurePosixPath
+            The reference to the object.
+        t : GitReferenceType
+            The type of reference.
         '''
         ...
 

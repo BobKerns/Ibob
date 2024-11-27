@@ -11,7 +11,6 @@ from typing import (
 )
 from inspect import signature, Signature, Parameter
 from pathlib import Path
-from weakref import WeakKeyDictionary
 
 from xonsh.completers.tools import (
     contextual_completer, ContextualCompleter, CompletionContext,
@@ -26,7 +25,7 @@ from xonsh.built_ins import XonshSession, XSH as GLOBAL_XSH
 from xonsh.events import events
 
 from xontrib.xgit.types import (
-    LoadAction, CleanupAction, GitError, ObjectId,
+    GitError, ObjectId, _NO_VALUE,
     Directory, File, PythonFile,
 )
 from xontrib.xgit.ref_types import (
@@ -36,58 +35,6 @@ from xontrib.xgit.context import GitContext, _GitContext
 from xontrib.xgit.invoker import CommandInvoker, PrefixCommandInvoker, SessionInvoker
 
 
-_load_actions: list[LoadAction] = []
-
-_unload_actions: WeakKeyDictionary[XonshSession, list[CleanupAction]] = WeakKeyDictionary()
-"""
-Actions to take when unloading the module.
-"""
-
-def _do_load_actions(xsh: XonshSession):
-    """
-    Load values supplied by the xontrib.
-    """
-    global _load_actions
-    if not isinstance(_load_actions, list):
-        return
-    while _load_actions:
-        _do_load_action(_load_actions.pop(), xsh)
-
-def _do_load_action(action: LoadAction, xsh: XonshSession):
-        try:
-            unloader = action(xsh)
-            if unloader is not None:
-                _add_unload_action(xsh, unloader)
-        except Exception:
-            from traceback import print_exc
-            print_exc()
-
-def _add_load_action(action: LoadAction):
-    """
-    Add an action to take when loading the xontrib.
-    """
-    _load_actions.append(action)
-
-def _add_unload_action(xsh: XonshSession, action: CleanupAction):
-    """
-    Add an action to take when unloading the xontrib.
-    """
-    default: list[CleanupAction] = []
-    unloaders = _unload_actions.get(xsh, default)
-    if unloaders is default:
-        _unload_actions[xsh] = unloaders
-    unloaders.append(action)
-
-def _do_unload_actions(xsh: XonshSession):
-    """
-    Unload a value supplied by the xontrib.
-    """
-    for action in _unload_actions[xsh]:
-        try:
-            action()
-        except Exception:
-            from traceback import print_exc
-            print_exc()
 
 _exports: dict[str, Any] = {}
 """
@@ -109,6 +56,7 @@ def _export(cmd: Any | str, name: Optional[str] = None):
         name = getattr(cmd, "__name__", None)
     if name is None:
         raise ValueError("No name supplied and no name found in value")
+    old = _exports.get(name, _NO_VALUE)
     _exports[name] = cmd
     return cmd
 
@@ -125,12 +73,9 @@ def context(xsh: Optional[XonshSession] = GLOBAL_XSH) -> GitContext:
         raise GitError('xonsh session has no env attribute.')
     XGIT = env.get('XGIT')
     if XGIT is None:
-        XGIT = _GitContext(xsh)
-        env['XGIT'] = XGIT
-        def unload_context():
-            del env['XGIT']
-        _add_unload_action(xsh, unload_context)
+        raise GitError('No XGIT context in xonsh session.')
     return cast(GitContext, XGIT)
+
 
 F = TypeVar('F', bound=Callable)
 T =  TypeVar('T')
@@ -148,19 +93,6 @@ def session(
     '''
     def decorator(func: Callable[P,T]) -> Callable[...,T]:
         wrapper = SessionInvoker(func)
-        def loader(xsh: XonshSession):
-            wrapper.inject(XSH=xsh, XGIT=context(xsh))
-            if event_name is not None:
-                ev = getattr(events, event_name)
-                ev(wrapper)
-            else:
-                ev = None
-            def unload():
-                if ev is not None:
-                    ev.remove(wrapper)
-                wrapper.uninject()
-            return unload
-        _add_load_action(loader)
         return cast(Callable[...,T], wrapper)
     return decorator
 
@@ -303,10 +235,6 @@ def command(
         alias = cmd.__name__.replace("_", "-")
 
     invoker: CommandInvoker = CommandInvoker(cmd, alias)
-    def loader(xsh: XonshSession):
-        invoker.inject(XSH=xsh, XGIT=context(xsh))
-        return invoker.uninject
-    _add_load_action(loader)
 
     _aliases[alias] = invoker.command
     if export:

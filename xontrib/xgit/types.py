@@ -14,8 +14,6 @@ from xontrib.xgit.ids import ObjectId
 
 try:
     from xontrib.xgit.type_aliases import (
-        LoadAction,
-        CleanupAction,
         GitLoader,
         GitEntryMode,
         GitObjectType,
@@ -32,11 +30,10 @@ try:
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
         list_of,
+        DirectoryKind,
     )
 except SyntaxError:
     from xontrib.xgit.type_aliases_310 import (
-        LoadAction,
-        CleanupAction,
         GitLoader,
         GitEntryMode,
         GitObjectType,
@@ -52,6 +49,7 @@ except SyntaxError:
         KeywordArity, KeywordSpec, KeywordSpecs,
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
+        DirectoryKind,
     )
 
 if 'list_of' not in globals():
@@ -152,15 +150,13 @@ class GitValueError(GitError, ValueError):
     '''
     def __init__(self, message: str, /):
         super().__init__(message)
-
-DirectoryKind = Literal['repository', 'worktree', 'directory']
 class GitDirNotFoundError(GitError):
     '''
     Thrown when a git directory is not found.
     '''
     path: Path
-    kind: DirectoryKind
-    def __init__(self, path: Path, kind: DirectoryKind='directory'):
+    kind: 'DirectoryKind'
+    def __init__(self, path: Path, kind: 'DirectoryKind'='directory'):
         super().__init__(f'Git {kind} not found: {path}')
         self.path = path
         self.kind = kind

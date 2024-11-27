@@ -12,6 +12,7 @@ from typing import (
 )
 from inspect import Parameter, Signature
 
+from xonsh.events import events
 from xonsh.completers.tools import (
     contextual_completer, ContextualCompleter, CompletionContext,
 )
@@ -336,7 +337,7 @@ class SessionVariablesMixin(SignatureInvoker):
             self.__session_variables = {}
         self.__session_variables.update(kwargs)
 
-    def uninject(self):
+    def uninject(self, **kwargs):
         '''
         Removes all session variables from the invoker.
         '''
@@ -345,6 +346,16 @@ class SessionVariablesMixin(SignatureInvoker):
     def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
         super().__init__(cmd, flags, **kwargs)
         self.__session_variables = None
+        # Pytest doesn't seem to like bound methods here, so we'll wrap them.
+        # (It looks for a validator attribute on the bound method, which is not there.
+        # I don't know how or why it can even notice, but it does.)
+        def on_load(*args, **kwargs):
+            self.inject(**kwargs)
+        def on_unload(*args, **kwargs):
+            self.uninject(**kwargs)
+        events.on_xgit_load(on_load)
+        events.on_xgit_unload(on_unload)
+
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''

@@ -18,7 +18,7 @@ from typing import (
 from abc import abstractmethod
 
 from xontrib.xgit.types import (
-    CleanupAction, ObjectId, GitObjectType, GitEntryMode,
+    ObjectId, GitObjectType, GitEntryMode,
     CommitId, TreeId, TagId, BlobId,
 )
 from xontrib.xgit.identity_set import IdentitySet
@@ -62,8 +62,7 @@ class GitId(Protocol):
     Anything that has a hash in a git repository.
     """
     @abstractmethod
-    def __init__(self, hash: ObjectId,
-                 cleanup: Optional[CleanupAction] = None):
+    def __init__(self, hash: ObjectId):
         ...
     @property
     @abstractmethod

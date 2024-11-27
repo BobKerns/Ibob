@@ -26,6 +26,7 @@ from xontrib.xgit.types import (
     GitException,
     GitNoWorktreeException,
     GitNoRepositoryException,
+    DirectoryKind,
 )
 from xontrib.xgit.object_types import (
     GitId, GitObject,
@@ -100,4 +101,5 @@ __all__ = (
     "Branch",
     "Tag",
     "RemoteBranch",
+    'DirectoryKind',
 )

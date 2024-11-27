@@ -11,12 +11,6 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.ids import ObjectId, GitRepositoryId
 
-type CleanupAction = Callable[[], None]
-'''
-An action to be taken when the xontrib is unloaded.
-'''
-type LoadAction = Callable[[XonshSession], None|CleanupAction]
-
 type GitLoader = Callable[[], None]
 """
 A function that loads the contents of a git object.
@@ -160,3 +154,6 @@ type ColumnKeys = list[str|int]|list[str]|list[int]
 
 def list_of[E](e: E) -> type[list[E]]:
     return list[*e]
+
+
+type DirectoryKind = Literal['repository', 'worktree', 'directory']
