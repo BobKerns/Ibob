@@ -449,5 +449,4 @@ def test_invoker_repr():
     def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
         return  a, b, c, args, session, kwargs
     invoker = CommandInvoker(f, 'f')
-    assert repr(invoker) == 'CommandInvoker(f)(...)'
-    
+    assert repr(invoker) == '<CommandInvoker(f)(...)>'

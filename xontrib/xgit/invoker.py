@@ -503,7 +503,6 @@ class ArgTransform:
         self.__source = source
 
 
-
 class TypeTransform(ArgTransform):
     '''
     A transformation that converts the argument into a different type.
