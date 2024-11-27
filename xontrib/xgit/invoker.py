@@ -3,16 +3,20 @@ Utilities for invoking commands based on their signatures.
 '''
 
 from collections.abc import Sequence
+from contextlib import suppress
 from itertools import chain
+from operator import add
+import sys
+from types import MappingProxyType
 from typing import (
-    Any, Callable, Literal, NamedTuple, Optional,
+    IO, Any, Callable, Literal, MappingView, NamedTuple, Optional,
 )
 
 from inspect import Parameter, Signature
 from unittest.mock import Base
 
 from xontrib.xgit.types import (
-    KeywordSpec, KeywordSpecs,
+    GitNoSessionException, GitValueError, KeywordSpec, KeywordSpecs,
     KeywordInputSpec, KeywordInputSpec, KeywordInputSpecs,
     list_of,
 )
@@ -45,6 +49,7 @@ def _h(s: str) -> str:
     return s.replace('_', '-')
 
 class BaseInvoker:
+    __name__: str
     __function: Callable
     @property
     def function(self) -> Callable:
@@ -54,7 +59,12 @@ class BaseInvoker:
         if not callable(cmd):
             raise ValueError(f"Command must be callable: {cmd!r}")
         self.__function = cmd
-
+        # Be a proper wrapper
+        self.__name__ = cmd.__name__
+        self.__qualname__ = cmd.__qualname__
+        self.__doc__ = cmd.__doc__ or self.__doc__ or ''
+        self.__module__ = cmd.__module__
+        self.__annotations__ = cmd.__annotations__
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -67,6 +77,8 @@ class BaseInvoker:
                 raise ArgumentError(str(e)) from None
             raise
 
+    def __repr__(self) -> str:
+        return f'<{type(self).__name__}({self.__name__})(...)>'
 
 class SimpleInvoker(BaseInvoker):
     """
@@ -271,7 +283,7 @@ class Invoker(SignatureInvoker, SimpleInvoker):
             if p.name in flags:
                 continue
             match p.kind, p.annotation:
-                case _, cls if issubclass(cls, bool):
+                case _, cls if isinstance(cls, type) and issubclass(cls, bool):
                     flags[_h(p.name)] = (True, p.name)
                 case p.POSITIONAL_ONLY, _:
                     continue
@@ -308,12 +320,14 @@ class SessionVariablesMixin(SignatureInvoker):
     A mixin that provides injected session variables to an invoker.
     '''
 
-    __session_variables: dict[str, Any]
+    __session_variables: dict[str, Any]|None
     @property
     def session_variables(self) -> dict[str, Any]:
         '''
         The session variables that are injected into the command.
         '''
+        if self.__session_variables is None:
+            raise GitNoSessionException(self.__name__)
         return self.__session_variables
 
     def inject(self, **kwargs):
@@ -321,18 +335,30 @@ class SessionVariablesMixin(SignatureInvoker):
         Injects session variables into the invoker.
         '''
         sig = self.signature
+        if self.__session_variables is None:
+            self.__session_variables = {}
         self.__session_variables.update(kwargs)
+
+    def uninject(self):
+        '''
+        Removes all session variables from the invoker.
+        '''
+        self.__session_variables = None
 
     def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
         super().__init__(cmd, flags, **kwargs)
-        self.__session_variables = {}
+        self.__session_variables = None
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''
         Invokes the command with the given arguments and keyword arguments.
-
         '''
-        return super().__call__(*args, **{**kwargs, **self.session_variables})
+        params = self.signature.parameters
+        for k, v in self.session_variables.items():
+            if k in params:
+                kwargs[k] = v
+
+        return super().__call__(*args, **kwargs)
 
 class Command:
     '''
@@ -537,24 +563,33 @@ class SessionInvoker(SessionVariablesMixin, SimpleInvoker):
     '''
     An invoker that just does session variable injection.
     '''
-
-    __arg_transforms: dict[str, ArgTransform]
-    @property
-    def arg_transforms(self) -> dict[str, ArgTransform]:
+    def __init__(self, cmd: Callable,
+                 flags: Optional[KeywordInputSpecs] = None,
+                 **kwargs):
         '''
-        The transformations that are applied to the arguments.
-        '''
-        return self.__arg_transforms
+        Initializes the invoker with the given command and flags.
 
-    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
+        PARAMETERS
+        ----------
+        cmd: Callable
+            The command to be invoked.
+        flags: Optional[KeywordInputSpecs]
+            The flags that are recognized by the invoker.
+        '''
         super().__init__(cmd, flags, **kwargs)
-        self.__arg_transforms = {}
 
 class CommandInvoker(SessionVariablesMixin, Invoker):
     '''
     An invoker that can handle more complex argument parsing that
     involves type checking, name-matching, and conversion.
     '''
+    __name: str
+    @property
+    def name(self) -> str:
+        '''
+        The name of the command.
+        '''
+        return self.__name
 
     __arg_transforms: dict[str, ArgTransform]
     @property
@@ -564,13 +599,107 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
         '''
         return self.__arg_transforms
 
-    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
+    def __init__(self, cmd: Callable,
+                 name: str,
+                 flags: Optional[KeywordInputSpecs] = None,
+                 **kwargs):
         super().__init__(cmd, flags, **kwargs)
         self.__arg_transforms = {}
+        self.__name = name
+
+    def __call__(self, *args: Any,
+                 stderr: IO[str]=sys.stderr,
+                 stdout: IO[str]=sys.stdout,
+                 stdin: IO[str]=sys.stdin,
+                 **kwargs: Any) -> Any:
+        '''
+        Invokes the command with the given arguments and keyword arguments.
+
+        '''
+
+        if "--help" in args:
+            print(self.__doc__, file=stderr)
+            return
+
+        params = self.signature.parameters
+        if 'stdout' in params:
+            kwargs['stdout'] = stdout
+        if 'stderr' in params:
+            kwargs['stderr'] = stderr
+        if 'stdin' in params:
+            kwargs['stdin'] = stdin
+        return super().__call__(*args, **kwargs)
+
+class PrefixCommandInvoker(CommandInvoker):
+    '''
+    An invoker that can handle more complex argument parsing that
+    involves type checking, name-matching, and conversion.
+    '''
+
+    __prefix: str
+    @property
+    def prefix(self) -> str:
+        '''
+        The prefix that is used to invoke the command.
+        '''
+        return self.__prefix
+
+    __subcommands: dict[str, CommandInvoker]
+    @property
+    def subcommands(self) -> MappingProxyType[str, CommandInvoker]:
+        '''
+        The subcommands that are recognized by the invoker.
+        '''
+        return MappingProxyType(self.__subcommands)
+
+    def add_subcommand(self, subcmd: str, invoker: CommandInvoker):
+        '''
+        Adds a subcommand to the invoker.
+
+        PARAMETERS
+        ----------
+        subcmd: str
+            The name of the subcommand.
+        invoker: CommandInvoker
+            The invoker that is used to invoke the subcommand.
+        '''
+        # Injection of subcommands should be redundant, but
+        # consider potential for dynamic loading.
+        with suppress(GitNoSessionException):
+            invoker.inject(**self.session_variables)
+        self.__subcommands[subcmd] = invoker
+
+    def inject(self, **session_vars):
+        '''
+        Injects session variables into the invoker.
+        '''
+        super().inject(**session_vars)
+        # Injection of subcommands should be redundant, but
+        # consider potential for dynamic loading.
+        for invoker in self.subcommands.values():
+            invoker.inject(**session_vars)
+
+    def __init__(self,
+                 cmd: Callable,
+                 prefix: str,
+                 flags: Optional[KeywordInputSpecs] = None,
+                 **kwargs):
+        super().__init__(cmd, prefix, flags, **kwargs)
+        self.__prefix = prefix
+        self.__subcommands = {}
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''
         Invokes the command with the given arguments and keyword arguments.
 
         '''
-        return super().__call__(*args, **kwargs)
+        if len(args) == 0:
+            for subcmd in self.subcommands:
+                print(f'  {subcmd}', file=sys.stderr)
+                return
+        else:
+            subcmd_name = args[0]
+            if subcmd_name not in self.subcommands:
+                raise GitValueError(f"Invalid subcommand: {subcmd_name}")
+            subcmd = self.subcommands[subcmd_name]
+            return subcmd.command(*args[1:], **kwargs)

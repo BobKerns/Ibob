@@ -300,6 +300,8 @@ class _GitContext(_GitCmd, GitContext):
                     commit = t.as_('commit')
         if commit is not None:
             self.commit = self.repository.get_object(commit, 'commit')
+        else:
+            self.__commit = None
         self.branch = branch
         self.__people = dict()
         self.__object_references = defaultdict(set)

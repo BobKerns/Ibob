@@ -232,6 +232,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 for x in self.git_lines('log', '--format=%H', '--max-parents=0')),
                 0)))
         self.__id = init_id
+        self.__preferred_worktree = None
         def init_worktrees(self: '_GitRepository') -> 'ct.WorktreeMap':
             bare: bool = False
             result: dict[Path, 'ct.GitWorktree'] = {}

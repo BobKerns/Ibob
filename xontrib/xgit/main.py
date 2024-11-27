@@ -43,6 +43,8 @@ from xontrib.xgit.display import (
     _xgit_displayhook,
 )
 import xontrib.xgit.context as ct
+from xontrib.xgit.types import GitException
+
 # Export the functions and values we want to make available.
 
 _export(None, "+")
@@ -105,35 +107,27 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
             _unload_actions[xsh].append(del_item)
 
-
     @events.on_chdir
     @session()
-    def update_git_context(olddir, newdir):
+    def update_git_context(olddir, newdir, *,
+                           XSH: XonshSession,
+                           XGIT,
+                           stderr=sys.stderr,
+                           **_):
         """
         Update the git context when changing directories.
         """
-        assert xsh.env is not None, "XSH.env is None"
-        XGIT = xsh.env.get("XGIT")
-        XGIT = cast(_GitContext, XGIT)
-        if not XGIT:
-            # Not set at all so start from scratch
-            xsh.env['XGIT'] = ct._GitContext(xsh)
-            return
-        newpath = Path(newdir)
 
-        if XGIT.worktree.path == newpath:
-            # Going back to the worktree root
-            XGIT.path = PurePosixPath(".")
-        if XGIT.worktree.path not in newpath.parents:
-            # Not in the current worktree, so recompute the context.
+        newpath = Path(newdir)
+        try:
             XGIT.open_worktree(newpath)
-        else:
-            # Fast move within the same worktree.
-            XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
+        except Exception as ex:
+            raise GitException(F"Failed to open worktree at {newpath}") from ex
+
 
 
     _do_load_actions(xsh)
-    
+
     for name, value in _exports.items():
         set_unload(xsh.ctx, name, value)
     for name, value in _aliases.items():

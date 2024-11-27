@@ -93,6 +93,7 @@ tomlkit
 Treeish
 typecheck
 typeshed
+uninject
 unloadable
 unrooted
 worktree

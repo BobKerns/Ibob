@@ -3,6 +3,7 @@ Test the XGit invoker, used for invoking commands based on their signatures.
 '''
 from operator import inv
 from signal import raise_signal
+from typing import IO
 from unittest import result
 from pytest import raises
 
@@ -12,6 +13,7 @@ from xontrib.xgit.invoker import (
     SimpleInvoker, Invoker, ArgSplit, ArgumentError,
     SessionInvoker, CommandInvoker,
 )
+from xontrib.xgit.types import GitNoSessionException
 
 def test_simple_invoker_bad_flags():
     with raises(ValueError) as exc:
@@ -390,10 +392,35 @@ def test_session_invoker_more_kw():
             'extra': 'fun'
         })
 
-def test_command_invoker():
+def test_session_invoker_no_session():
     def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
         return  a, b, c, args, session, kwargs
-    invoker = CommandInvoker(f)
+    invoker = SessionInvoker(f)
+    with raises(GitNoSessionException):
+        invoker(1, True, '3', 4)
+
+
+def test_session_invoker_clear_session():
+    def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
+        return  a, b, c, args, session, kwargs
+    invoker = SessionInvoker(f)
+    invoker.inject(session='session-5')
+    invoker(1, True, 3, 4)
+    # Mimic common usage of extracting bound method
+    cleanup = invoker.uninject
+    cleanup()
+    with raises(GitNoSessionException):
+        invoker(1, True, '3', 4)
+
+def test_command_invoker():
+    def f(a:int, b:bool, c:str, /, *args,
+          session: str,
+          stderr: IO[str],
+          stdout: IO[str],
+          stdin: IO[str],
+          **kwargs):
+        return  a, b, c, args, session, kwargs
+    invoker = CommandInvoker(f, 'f')
     invoker.inject(session='session-2')
     command = invoker.command
     result = command([1, True, '3', 4])
@@ -401,9 +428,14 @@ def test_command_invoker():
         1, True, '3', (4,), 'session-2', {})
 
 def test_command_invoker_extra_kw():
-    def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
+    def f(a:int, b:bool, c:str, /, *args,
+          session: str,
+          stderr: IO[str],
+          stdout: IO[str],
+          stdin: IO[str],
+          **kwargs):
         return  a, b, c, args, session, kwargs
-    invoker = CommandInvoker(f)
+    invoker = CommandInvoker(f, 'f')
     invoker.inject(session='session-3')
     command = invoker.command
     result = command([1, True, '3', 4],
@@ -412,3 +444,10 @@ def test_command_invoker_extra_kw():
         1, True, '3', (4,), 'session-3', {
             'extra': 'fun',
         })
+
+def test_invoker_repr():
+    def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
+        return  a, b, c, args, session, kwargs
+    invoker = CommandInvoker(f, 'f')
+    assert repr(invoker) == 'CommandInvoker(f)(...)'
+    

@@ -35,7 +35,7 @@ from xontrib.xgit.ref_types import (
     Branch, Tag, RemoteBranch, GitRef,
 )
 from xontrib.xgit.context import GitContext, _GitContext
-from xontrib.xgit.invoker import CommandInvoker
+from xontrib.xgit.invoker import CommandInvoker, PrefixCommandInvoker, SessionInvoker
 
 
 _load_actions: list[LoadAction] = []
@@ -149,39 +149,20 @@ def session(
     When the plugin is unloaded, the functions are turned into no-ops.
     '''
     def decorator(func: Callable[P,T]) -> Callable[...,T]:
-        active = True
-        last_return = None
-        _XSH: XonshSession|None = None
-        _XGIT: GitContext|None = None
+        wrapper = SessionInvoker(func)
         def loader(xsh: XonshSession):
-            nonlocal _XSH, _XGIT
-            _XSH = xsh
-            _XGIT = context(xsh)
+            wrapper.inject(XSH=xsh, XGIT=context(xsh))
             if event_name is not None:
                 ev = getattr(events, event_name)
                 ev(wrapper)
-                _add_unload_action(_XSH, lambda: ev.remove(wrapper))
-
-        #@wraps(func)
-        def wrapper(*args,
-                    XSH: XonshSession=_XSH or GLOBAL_XSH,
-                    XGIT: GitContext=_XGIT or context(GLOBAL_XSH),
-                    **kwargs):
-            t_func = cast(Callable, func)
-            nonlocal last_return
-            if active:
-                last_return = t_func(*args,
-                                   XSH=XSH,
-                                   XGIT=context(XSH),
-                                   **kwargs)
-            return last_return
-
+            else:
+                ev = None
+            def unload():
+                if ev is not None:
+                    ev.remove(wrapper)
+                wrapper.uninject()
+            return unload
         _add_load_action(loader)
-        wrapper.__doc__ = func.__doc__
-        wrapper.__name__ = func.__name__
-        wrapper.__qualname__ = func.__qualname__ + '_session'
-        wrapper.__module__ = func.__module__
-
         return cast(Callable[...,T], wrapper)
     return decorator
 
@@ -223,7 +204,6 @@ class CommandInfo(NamedTuple):
     """
     cmd: Callable
     alias_fn: Callable
-    caller_fn: Callable
     alias: str
     signature: Signature
     # Below only in test hardness
@@ -276,7 +256,7 @@ def command(
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
-    prefix: Optional[tuple[Callable[..., Any], str]]=None,
+    prefix: Optional[tuple[PrefixCommandInvoker, str]]=None,
     _export=_export,
     _aliases=_aliases,
 ) -> Callable:
@@ -324,228 +304,34 @@ def command(
     if alias is None:
         alias = cmd.__name__.replace("_", "-")
 
-    sig: Signature = signature(cmd)
-    @session()
-    def alias_fn(
-        xargs,
-        /, *,
-        XSH: XonshSession,
-        stdin=sys.stdin,
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-        **kwargs,
-    ):
-        if "--help" in xargs:
-            print(getattr(cmd, "__doc__", ""), file=stderr)
-            return
-        args: list[str] = [*xargs]
-        p_args: list[str] = []
-        while len(args) > 0:
-            if args[0] == "--":
-                args.pop(0)
-                continue
-            if args[0].startswith("--"):
-                if "=" in args[0]:
-                    k, v = args.pop(0).split("=", 1)
-                    kwargs[k[2:]] = v
-                else:
-                    if args[0] in flags or args[0][2:] in flags:
-                        kwargs[args.pop(0)[2:]] = True
-                    else:
-                        kwargs[args.pop(0)[2:]] = args.pop(0)
-            else:
-                p_args.append(args.pop(0))
+    invoker: CommandInvoker = CommandInvoker(cmd, alias)
+    def loader(xsh: XonshSession):
+        invoker.inject(XSH=xsh, XGIT=context(xsh))
+        return invoker.uninject
+    _add_load_action(loader)
 
-        n_args = []
-        n_kwargs = {}
-        env = XSH.env
-        assert isinstance(env, MutableMapping),\
-            f"XSH.env not a MutableMapping: {env!r}"
-
-        info = InvocationInfo(
-            cmd=cmd.info, # type: ignore
-            args=args,
-            kwargs=kwargs,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            env=env,
-        )
-
-        kwargs = {
-            "_info": info,
-            **kwargs
-        }
-
-        def type_completer(p: Parameter):
-            match p.annotation:
-                case t if t == Path or t == Union[Path, str]:
-                    return complete_path
-                case t if t == Directory:
-                    return complete_dir
-                case t if t == PythonFile:
-                    # For now. We will filter later.
-                    return complete_path
-                case t if t == Branch:
-                    return complete_ref("refs/heads")
-                case t if t == Tag:
-                    return complete_ref("refs/tags//")
-                case t if t == RemoteBranch:
-                    return complete_ref("refs/remotes/")
-                case t if t == GitRef:
-                    return complete_ref()
-                case t if t == ObjectId:
-                    return complete_hash
-                case t if isinstance(t, TypeAlias) and getattr(t, '__base__') == File:
-                    return complete_path
-
-        for p in sig.parameters.values():
-            def add_arg(value: Any):
-                match p.kind:
-                    case p.POSITIONAL_ONLY:
-                        value = convert(p, value)
-                        n_args.append(value)
-
-                    case p.POSITIONAL_OR_KEYWORD:
-                        positional = len(p_args) > 0
-                        if value == p.empty:
-                            if positional:
-                                value = p_args.pop(0)
-                            elif p.name in kwargs:
-                                value = kwargs.pop(p.name)
-                            else:
-                                value = p.default
-                        if value == p.empty:
-                            raise ValueError(f"Missing value for {p.name}")  # noqa
-
-                        value = convert(p, value)
-                        if positional:
-                            n_args.append(value)
-                        else:
-                            n_kwargs[p.name] = value
-                    case p.KEYWORD_ONLY:
-                        if value == p.empty:
-                            if p.name in kwargs:
-                                value = kwargs.pop(p.name)
-                            else:
-                                value = p.default
-                        if value == p.empty:
-                            raise CmdError(f"Missing value for {p.name}")
-                        value = convert(p, value)
-                        n_kwargs[p.name] = value
-                    case p.VAR_POSITIONAL:
-                        if len(p_args) > 0:
-                            n_args.extend(p_args)
-                            p_args.clear()
-                    case p.VAR_KEYWORD:
-                        n_kwargs.update(
-                            {"stdin": stdin, "stdout": stdout, "stderr": stderr}
-                        )
-
-            match p.name:
-                case "stdin":
-                    add_arg(stdin)
-                case "stdout":
-                    add_arg(stdout)
-                case "stderr":
-                    add_arg(stderr)
-                case "args":
-                    add_arg(args)
-                case _:
-                    add_arg(kwargs.get(p.name, p.empty))
-        try:
-            val = cmd(*n_args, **n_kwargs)
-            if for_value:
-                if env.get("XGIT_TRACE_DISPLAY"):
-                    print(f"Returning {val}", file=stderr)
-                XSH.ctx["_XGIT_RETURN"] = val
-        except CmdError as ex:
-            try:
-                if env.get("XGIT_TRACE_ERRORS"):
-                    import traceback
-                    traceback.print_exc()
-            except Exception:
-                pass
-            print(f"{ex!s}", file=stderr)
-        return ()
-
-    @wraps(cmd)
-    def caller(*args,
-            stdin=sys.stdin,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            **kwargs):
-        f = stack()[1]
-        XSH = f.frame.f_globals['XSH']
-        XGIT = context(XSH)
-        info = InvocationInfo(
-            cmd=cmd.info, # type: ignore
-            args=args,
-            kwargs=kwargs,
-            stdin=stdin,
-            stdout=stdout,
-            stderr=stderr,
-            env=XSH.env,
-        )
-        return alias_fn(args,
-                        XSH=XSH,
-                        XGIT=XGIT,
-                        _info=info,
-                        stdin=stdin,
-                        stdout=stdout,
-                        stderr=stderr,
-                        **kwargs)
-
-    caller.__name__ = cmd.__name__ + '_caller'
-    caller.__qualname__ = cmd.__qualname__ + '_caller'
-
-    # @wraps(cmd) copies the signature, which we don't want.
-
-    alias_fn.__name__ = cmd.__name__ + '_alias'
-    alias_fn.__qualname__ = cmd.__qualname__ + '_alias'
-    alias_fn.__doc__ = cmd.__doc__
-    alias_fn.__module__ = cmd.__module__
-    _aliases[alias] = alias_fn
+    _aliases[alias] = invoker.command
     if export:
         _export(cmd)
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
-        prefix_cmd._subcmds[prefix_alias] = alias_fn # type: ignore
-    cmd.info =  CommandInfo(cmd, alias_fn, caller, alias, sig)   # type: ignore
-    return caller
+        prefix_cmd.add_subcommand(prefix_alias, invoker) # type: ignore
+    return invoker
 
 def prefix_command(alias: str):
     """
     Create a command that invokes other commands selected by prefix.
     """
-    subcmds: dict[str, Callable[..., Any|None]] = {}
-    @command(alias=alias)
-    def prefix_cmd(args, **kwargs):
-        if len(args) == 0 or args[0] not in subcmds:
-            print(f"Usage: {alias} <subcommand> ...", file=sys.stderr)
-            for subcmd in subcmds:
-                print(f"  {subcmd}", file=sys.stderr)
-            return
-        subcmd = args[0]
-        args = args[1:]
-        return subcmds[subcmd](args, **kwargs)
-    prefix_name = alias.replace("-", "_")
-    module = stack()[1].__module__
-    qual_name = f'{module}.{prefix_name}'
-    setattr(prefix_cmd, "__name__", prefix_name)
-    setattr(prefix_cmd, "__qualname__", qual_name)
-    setattr(prefix_cmd, "__module__", module)
-    setattr(prefix_cmd, "__doc__", f"Invoke a subcommand of {alias}")
-    setattr(prefix_cmd, '_subcmds', subcmds)
+    prefix_cmd = PrefixCommandInvoker(lambda: None, alias)
     _aliases[alias] = prefix_cmd
     @contextual_completer
     def completer(ctx: CompletionContext):
         if ctx.command:
             if ctx.command.prefix.strip() == alias:
-                return set(subcmds.keys())
+                return set(prefix_cmd.subcommands.keys())
         return set()
     completer.__doc__ = f"Completer for {alias}"
-    add_one_completer(prefix_name, completer, "start")
+    add_one_completer(alias, completer, "start")
     return prefix_cmd
 
 xgit = prefix_command("xgit")

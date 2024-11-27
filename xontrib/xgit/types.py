@@ -108,6 +108,15 @@ class GitException(Exception):
         super().__init__(message)
         self.message = message
 
+class GitNoSessionException(GitException):
+    '''
+    Thrown when attempting an operation that requires a session.
+    '''
+    name: str
+    def __init__(self, name: str):
+        super().__init__(f'No session is current for {name}.')
+        self.name = name
+
 class GitNoWorktreeException(GitException):
     '''
     Thrown when attempting an operation that requires a worktree.
