@@ -317,7 +317,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                         rw = "X"
                     else:
                         rw = "-"
-                    size = str(e.size) if e.size >= 0 else '-'
+                    size = int(e.size)
                     suffix = '/' if e.type == 'tree' else ''
                     l = f'{rw} {e.hash} {size:>8s} {e.name}{suffix}'
                     p.text(l)
@@ -335,8 +335,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         mode = cast(GitEntryMode, mode)
         type = cast(GitObjectType, type)
         parent = repository.get_object(parent_hash) if parent_hash is not None else None
-        size = int(size)
-        return self._git_entry(ObjectId(hash), name, mode, type, size, repository, parent)
+        size_ = -1 if size == '-' else int(size)
+        return self._git_entry(ObjectId(hash), name, mode, type, size_, repository, parent)
 
 
     @overload
