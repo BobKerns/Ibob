@@ -84,7 +84,7 @@ setattr(_xgit_displayhook, "original", _xonsh_displayhook)
 
 @events.on_xgit_predisplay
 @session()
-def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
+def _on_xgit_predisplay(value: Any, XSH: XonshSession, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
@@ -107,12 +107,12 @@ def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
 
 @events.on_xgit_postdisplay
 @session()
-def _xgit_on_postdisplay(value: Any, XSH: XonshSession, **_):
+def _on_xgit_postdisplay(value: Any, XSH: XonshSession, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
-        setattr(builtins, ",", value)
+        setattr(builtins, "_", value)
         XSH.ctx["__"] = XSH.ctx.get("+")
         XSH.ctx["___"] = XSH.ctx.get("++")
 

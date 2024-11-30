@@ -51,6 +51,7 @@ newdir
 newpath
 noendl
 nparent
+nsig
 Objectish
 objtype
 olddir

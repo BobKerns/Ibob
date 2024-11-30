@@ -3,12 +3,11 @@ Test the XGit commands.
 '''
 
 from pathlib import Path
-from typing import Any, MutableMapping, cast
+from typing import Any, cast
 
 from pytest import raises
-from xonsh.built_ins import XonshSession
-
-def test_pwd_no_repo(git_context, worktree, capsys, chdir, sysdisplayhook):
+import xonsh
+def test_pwd_no_repo(git_context, worktree, capsys, chdir):
     '''
     Test the xsh proxy.
     '''
@@ -25,19 +24,27 @@ def test_pwd_no_repo(git_context, worktree, capsys, chdir, sysdisplayhook):
         assert lines[1] == 'Not in a git repository'
     assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}: {lines}"
 
-def test_ls(clean_modules, git_context, repository):
+def test_ls(clean_modules, git_context, repository, chdir):
     '''
     Test the xgit ls command.
     '''
     from xontrib.xgit.xgit_ls import git_ls
     from xontrib.xgit.types import GitNoWorktreeException
+    chdir(repository.path.parent)
+
     with raises(GitNoWorktreeException):
         git_ls(XGIT=git_context)
 
-def test_ls_cmd(git_context, worktree):
+def test_ls_cmd(git_context, xonsh_session, worktree):
     '''
     Test the xgit ls command.
 '''
     from xontrib.xgit.xgit_ls import git_ls
     git_context.worktree = worktree
-    cast(Any, git_ls).command([])
+    runner = cast(Any, git_ls).create_runner(
+        _aliases={},
+        _export=lambda func, name: None,
+        _exports={},
+    )
+    runner.inject({'XGIT': git_context, 'XSH': xonsh_session})
+    runner([])

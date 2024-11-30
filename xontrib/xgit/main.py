@@ -26,15 +26,12 @@ from xonsh.execer import Execer
 from xontrib.xgit.decorators import (
     _exports,
     _export,
-    _aliases,
     session,
 )
 from xontrib.xgit.display import (
-    _xgit_on_predisplay,
-    _xgit_on_postdisplay,
+    _on_xgit_predisplay,
+    _on_xgit_postdisplay,
     _on_precommand,
-)
-from xontrib.xgit.display import (
     _xonsh_displayhook,
     _xgit_displayhook,
 )
@@ -179,8 +176,8 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
             pass
 
     remove("on_precommand", _on_precommand)
-    remove("xgit_on_predisplay", _xgit_on_predisplay)
-    remove("xgit_on_postdisplay", _xgit_on_postdisplay)
+    remove("on_xgit_predisplay", _on_xgit_predisplay)
+    remove("on_xgit_postdisplay", _on_xgit_postdisplay)
     env = xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"

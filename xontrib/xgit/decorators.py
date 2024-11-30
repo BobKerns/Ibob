@@ -4,7 +4,6 @@ Various decorators for xgit commands and functions.
 """
 
 from contextlib import suppress
-from functools import wraps
 from typing import (
     Any, MutableMapping, NamedTuple, Optional, Callable, Union,
     cast, TypeVar, ParamSpec, Sequence
@@ -98,7 +97,7 @@ def session(
 
 @contextual_completer
 @session()
-def complete_hash(context: CompletionContext, *, XGIT: GitContext) -> set:
+def complete_hash(context: CompletionContext, *, XGIT: GitContext) -> set[str]:
     return set(XGIT.objects.keys())
 
 @session()
@@ -236,9 +235,6 @@ def command(
 
     invoker: CommandInvoker = CommandInvoker(cmd, alias)
 
-    _aliases[alias] = invoker.command
-    if export:
-        _export(cmd)
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
         prefix_cmd.add_subcommand(prefix_alias, invoker) # type: ignore

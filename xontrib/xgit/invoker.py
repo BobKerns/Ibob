@@ -3,7 +3,6 @@ Utilities for invoking commands based on their signatures.
 '''
 
 from collections.abc import Sequence
-from contextlib import suppress
 from itertools import chain
 import sys
 from types import MappingProxyType
@@ -24,6 +23,7 @@ from xontrib.xgit.types import (
     list_of,
 )
 from xontrib.xgit.conversion_mgr import ArgTransform
+import xontrib.xgit.runners as run
 
 class ArgSplit(NamedTuple):
     """
@@ -38,7 +38,7 @@ class ArgSplit(NamedTuple):
     kwargs: dict[str, Any]
     extra_kwargs: dict[str, Any]
 
-class ArgumentError(ValueError):
+class ArgumentError(GitValueError):
     '''
     An error that occurs when an argument is invalid.
     '''
@@ -169,7 +169,7 @@ class SimpleInvoker(BaseInvoker):
         The first phase of invocation involves parsing the command-line arguments
         into positional and keyword arguments according to normal conventions.
 
-        To do thi, we need to know the flags that are recognized by the commands,
+        To do this, we need to know the flags that are recognized by the commands,
         and how they are to be interpreted.  We can make good guesses based on
         our knowledge of the command's signature, but we allow explicit specification
         of flags to override and augment our guesses.
@@ -255,18 +255,20 @@ class SimpleInvoker(BaseInvoker):
                 s.args.append(arg)
         return s
 
-class SignatureInvoker(SimpleInvoker):
+class SignatureInvoker(BaseInvoker):
 
-    __signature: Signature|None = None
+    _signature: Signature|None = None
+    __signature__: Signature
     @property
     def signature(self) -> Signature:
         """
         The signature of the command to be invoked.
 
         """
-        if self.__signature is None:
-            self.__signature = Signature.from_callable(self.function)
-        return self.__signature
+        if self._signature is None:
+            self._signature = Signature.from_callable(self.function)
+            self.__signature__ = self._signature
+        return self._signature
 
 class Invoker(SignatureInvoker, SimpleInvoker):
     '''
@@ -313,176 +315,61 @@ class Invoker(SignatureInvoker, SimpleInvoker):
         super().__init__(cmd, flags)
         self.__flags_with_signature = None
 
-
-class SessionVariablesMixin(SignatureInvoker):
+class SessionInvoker(Invoker):
     '''
-    A mixin that provides injected session variables to an invoker.
+    An invoker that handles creating runners with session variables.
     '''
+    def create_runner(self, /,
+               **kwargs) -> run.SessionRunner:
+        '''
+        Creates a runner with the given session variables.
 
-    __session_variables: dict[str, Any]|None
+        PARAMETERS
+        ----------
+        _aliases: dict[str,Callable[[XonshSession]]
+            The registry of aliases to which the new runner should be added..
+        _export: Callable[[Any,str|None],None]
+            The function that is used to export the invoker.
+        '''
+        return run.SessionRunner(self, **kwargs)
+
+
+    __runner_signature: Signature|None = None
     @property
-    def session_variables(self) -> dict[str, Any]:
+    def runner_signature(self) -> Signature:
         '''
-        The session variables that are injected into the command.
+        The signature of the runner that is created by the invoker.
         '''
-        if self.__session_variables is None:
-            raise GitNoSessionException(self.__name__)
-        return self.__session_variables
+        if self.__runner_signature is None:
+            self.__runner_signature = self._runner_signature()
+        return self.__runner_signature
 
-    def inject(self, **kwargs):
-        '''
-        Injects session variables into the invoker.
-        '''
-        sig = self.signature
-        if self.__session_variables is None:
-            self.__session_variables = {}
-        self.__session_variables.update(kwargs)
+    def _runner_signature(self) -> Signature:
+        return self.signature
 
-    def uninject(self, **kwargs):
-        '''
-        Removes all session variables from the invoker.
-        '''
-        self.__session_variables = None
-
-    def __init__(self, cmd: Callable, flags: Optional[KeywordInputSpecs] = None, **kwargs):
-        super().__init__(cmd, flags, **kwargs)
-        self.__session_variables = None
-        # Pytest doesn't seem to like bound methods here, so we'll wrap them.
-        # (It looks for a validator attribute on the bound method, which is not there.
-        # I don't know how or why it can even notice, but it does.)
-        def on_load(*args, **kwargs):
-            self.inject(**kwargs)
-        def on_unload(*args, **kwargs):
-            self.uninject(**kwargs)
-        events.on_xgit_load(on_load)
-        events.on_xgit_unload(on_unload)
-
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, *args: Any,
+                stdout: IO[str]=sys.stdout,
+                stderr: IO[str]=sys.stderr,
+                stdin: IO[str]=sys.stdin,
+                **kwargs: Any) -> Any:
         '''
         Invokes the command with the given arguments and keyword arguments.
+
         '''
         __tracebackhide__ = True
+
         params = self.signature.parameters
-        for k, v in self.session_variables.items():
-            if k in params:
-                kwargs[k] = v
+        if 'stdout' in params:
+            kwargs['stdout'] = stdout
+        if 'stderr' in params:
+            kwargs['stderr'] = stderr
+        if 'stdin' in params:
+            kwargs['stdin'] = stdin
 
-        return super().__call__(*args, **kwargs)
+        result = super().__call__(*args, **kwargs)
+        return result
 
-class Command:
-    '''
-    A command that can be invoked with the command-line calling sequence rather than
-    the python one. This translates the command-line arguments (strings) into the
-    appropriate types and injects session variables into the command.
-
-    A proxy to an `Invoker` that can be called directly with command-line arguments.
-
-    We could use the bound method directly, but that won't allow setting the signature.
-    '''
-
-    __invoker: 'CommandInvoker'
-    @property
-    def invoker(self) -> 'CommandInvoker':
-        '''
-        The invoker that is used to invoke the command.
-        '''
-        return self.__invoker
-
-    __exclude: set[str]
-    @property
-    def exclude(self) -> set[str]:
-        '''
-        The names of the session variables that are excluded from the signature.
-        '''
-        return self.__exclude
-
-    __signature__: Signature
-
-    @property
-    def signature(self) -> Signature:
-        '''
-        The signature of the command.
-
-        '''
-        if self.__signature__ is not None:
-            return self.__signature__
-        else:
-            self.__signature__ = self._signature()
-            return self.__signature__
-
-    def _signature(self) -> Signature:
-            sig = self.invoker.signature
-            params = [
-                p.annotation|str for p in sig.parameters.values()
-                if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY, p.VAR_KEYWORD)
-            ]
-            keywords = [
-                t for ts in (
-                    (Literal[f'--{p.name}'], p.annotation)
-                    for p in sig.parameters.values()
-                    if p.kind is p.KEYWORD_ONLY
-                    if p.name not in self.__exclude
-                )
-                for t in ts
-            ]
-            session_keywords = [
-                p for p in sig.parameters.values()
-                if (p.kind in (p.KEYWORD_ONLY, p.VAR_KEYWORD)
-                    or p.name in self.__exclude)
-            ]
-
-            params = tuple(chain(keywords, params))
-            # list_of is a workaround python 3.10.
-            args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list_of(params))
-
-            return Signature([args, *session_keywords],
-                                           return_annotation=sig.return_annotation)
-
-    def __init__(self, invoker : 'CommandInvoker', /, *, exclude: set[str] = set()):
-        '''
-        Initializes the command with the given invoker.
-
-        PARAMETERS
-        ----------
-        invoker: Invoker
-            The invoker that is used to invoke the command.
-        exclude: set[str]
-            The names of the session variables that are excluded from the signature.
-        '''
-        self.__invoker = invoker
-        self.__exclude = exclude
-        self.__signature__ = self._signature()
-
-    def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
-        '''
-        Invokes the command with the given arguments and keyword arguments.
-
-        '''
-        __tracebackhide__ = True
-        return self.invoker(*args, **kwargs)
-
-
-class SessionInvoker(SessionVariablesMixin, SimpleInvoker):
-    '''
-    An invoker that just does session variable injection.
-    '''
-    def __init__(self, cmd: Callable,
-                 flags: Optional[KeywordInputSpecs] = None,
-                 **kwargs):
-        '''
-        Initializes the invoker with the given command and flags.
-
-        PARAMETERS
-        ----------
-        cmd: Callable
-            The command to be invoked.
-        flags: Optional[KeywordInputSpecs]
-            The flags that are recognized by the invoker.
-        '''
-        super().__init__(cmd, flags, **kwargs)
-
-class CommandInvoker(SessionVariablesMixin, Invoker):
+class CommandInvoker(SessionInvoker):
     '''
     An invoker that can handle more complex argument parsing that
     involves type checking, name-matching, and conversion.
@@ -503,20 +390,71 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
         '''
         return self.__arg_transforms
 
+
     def __init__(self, cmd: Callable,
                  name: Optional[str] = None,
                  flags: Optional[KeywordInputSpecs] = None,
+                 exclude: set[str] = set(),
                  **kwargs):
         super().__init__(cmd, flags, **kwargs)
         self.__arg_transforms = {}
         self.__name = name or cmd.__name__
+        self.__exclude = exclude
 
-    __command: 'Command|None' = None
+    def _runner_signature(self) -> Signature:
+        sig: Signature = self.signature
+        params = [
+            p.annotation|str for p in sig.parameters.values()
+            if p.kind in (p.POSITIONAL_OR_KEYWORD, p.POSITIONAL_ONLY, p.VAR_KEYWORD)
+        ]
+        keywords = [
+            t for ts in (
+                (Literal[f'--{p.name}'], p.annotation)
+                for p in sig.parameters.values()
+                if p.kind is p.KEYWORD_ONLY
+                if p.name not in self.__exclude
+            )
+            for t in ts
+        ]
+        session_keywords = [
+            p for p in sig.parameters.values()
+            if (p.kind in (p.KEYWORD_ONLY, p.VAR_KEYWORD)
+                or p.name in self.__exclude)
+            ]
+
+        params = tuple(chain(keywords, params))
+        # list_of is a workaround python 3.10.
+        args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list_of(params))
+
+        return Signature([args, *session_keywords],
+                        return_annotation=sig.return_annotation)
+
+    def create_runner(self, /,  *,
+               _aliases: dict[str,Callable],
+               _export: Callable[[Any,str|None],None],
+               **kwargs) -> run.Command:
+        '''
+        Creates a runner with the given session variables.
+
+        PARAMETERS
+        ----------
+        _aliases: dict[str,Callable[[XonshSession]]
+            The registry of aliases to which the new runner should be added..
+        _export: Callable[[Any,str|None],None]
+            The function that is used to export the invoker.
+        '''
+        return run.Command(self ,
+                           _aliases=_aliases,
+                            _export=_export,
+                           **kwargs)
+
+    __exclude: set[str]
     @property
-    def command(self) -> 'Command':
-        if self.__command is None:
-            self.__command = Command(self)
-        return self.__command
+    def exclude(self) -> set[str]:
+        '''
+        The names of the session variables that are excluded from the signature.
+        '''
+        return self.__exclude
 
     def __call__(self, *args: Any,
                  stderr: IO[str]=sys.stderr,
@@ -542,9 +480,6 @@ class CommandInvoker(SessionVariablesMixin, Invoker):
             kwargs['stdin'] = stdin
 
         result = super().__call__(*args, **kwargs)
-
-        XSH = self.session_variables['XSH']
-        XSH.ctx['_XGIT_RETURN'] = result
         return result
 
 class PrefixCommandInvoker(CommandInvoker):
@@ -581,12 +516,35 @@ class PrefixCommandInvoker(CommandInvoker):
             The invoker that is used to invoke the subcommand.
         '''
         self.__subcommands[subcmd] = invoker
+        @property
+        def subcommands(self) -> MappingProxyType[str, CommandInvoker]:
+            return MappingProxyType(self.__subcommands)
 
-    def inject(self, **session_vars):
+    def create_runner(self, /, *,
+               _aliases: dict[str,Callable],
+               _export: Callable[[Any,str|None],None],
+               **kwargs) -> run.PrefixCommand:
+        subcommands = {
+            k: invoker.create_runner(**kwargs)
+            for k, invoker in self.subcommands.items()
+        }
+        command = run.PrefixCommand(self,
+                                 subcommands=subcommands,
+                                 exclude=self.exclude,
+                                 **kwargs)
+
+        _aliases[self.name] = command
+        if _export is not None:
+            _export(self, self.function.__name__)
+
+        return command
+
+    def inject(self ,/,
+               **session_vars):
         '''
         Injects session variables into the invoker.
         '''
-        super().inject(**session_vars)
+        # This is the wrong place to inject this; it needs to be per-registered-completer.
 
         @contextual_completer
         def completer_subcommands(ctx: CompletionContext):
@@ -638,4 +596,4 @@ class PrefixCommandInvoker(CommandInvoker):
             if subcmd_name not in self.subcommands:
                 raise GitValueError(f"Invalid subcommand: {subcmd_name}")
             subcmd = self.subcommands[subcmd_name]
-            return subcmd.command(*args[1:], **kwargs)
+            return subcmd(*args[1:], **kwargs)
