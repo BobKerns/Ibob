@@ -44,8 +44,6 @@ Xonsh's original displayhook.
 @session()
 def _xgit_displayhook(value: Any, /, *,
                       XSH: XonshSession,
-                      stdout: IO[str] = sys.stdout,
-                      stderr: IO[str] = sys.stderr,
                       **_):
     """
     Add handling for value-returning commands, pre- and post-display events,
@@ -59,7 +57,7 @@ def _xgit_displayhook(value: Any, /, *,
         value = XSH.ctx.get("_XGIT_RETURN", value)
         if "_XGIT_RETURN" in XSH.ctx:
             if env.get("XGIT_TRACE_DISPLAY"):
-                print("clearing _XGIT_RETURN in XSH.ctx", file=stderr)
+                print("clearing _XGIT_RETURN in XSH.ctx", file=sys.stderr)
             del XSH.ctx["_XGIT_RETURN"]
         else:
             if env.get("XGIT_TRACE_DISPLAY"):
@@ -73,17 +71,17 @@ def _xgit_displayhook(value: Any, /, *,
         sys.stdout.flush()
         print(
             f"DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}",
-            file=stderr
+            file=sys.stderr
         )
-        stderr.flush()
+        sys.stderr.flush()
     try:
         events.on_xgit_predisplay.fire(value=value)
-        stdout.flush()
+        sys.stdout.flush()
         _xonsh_displayhook(value)
         events.on_xgit_postdisplay.fire(value=value)
     except Exception as ex:
-        print(ex, file=stderr)
-        stderr.flush()
+        print(ex, file=sys.stderr)
+        sys.stderr.flush()
 
 setattr(_xgit_displayhook, "original", _xonsh_displayhook)
 
