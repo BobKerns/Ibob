@@ -60,11 +60,6 @@ def _export(cmd: Any | str, name: Optional[str] = None):
     _exports[name] = cmd
     return cmd
 
-_aliases: dict[str, Callable] = {}
-"""
-Dictionary of aliases defined on loading this xontrib.
-"""
-
 def context(xsh: Optional[XonshSession] = GLOBAL_XSH) -> GitContext:
     if xsh is None:
         raise GitError('No xonsh session supplied.')
@@ -188,7 +183,6 @@ def command(
     export: bool = False,
     prefix: Optional[tuple[PrefixCommandInvoker, str]]=None,
     _export=_export,
-    _aliases=_aliases,
 ) -> Callable:
     """
     Decorator/decorator factory to make a function a command. Command-line
@@ -226,7 +220,6 @@ def command(
                 cmd,
                 flags=flags,
                 for_value=for_value,
-                alias=alias,
                 export=export,
                 prefix=prefix,
             )
@@ -235,8 +228,10 @@ def command(
         alias = cmd.__name__.replace("_", "-")
 
     invoker: CommandInvoker = CommandInvoker(cmd, alias,
-                                             aliases=_aliases,
-                                             export=_export,)
+                                            for_value=for_value,
+                                            flags=flags,
+                                            export=_export,
+                                            )
 
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
@@ -248,9 +243,8 @@ def prefix_command(alias: str):
     Create a command that invokes other commands selected by prefix.
     """
     prefix_cmd = PrefixCommandInvoker(lambda: None, alias,
-                                      aliases=_aliases,
                                       export=_export)
-    _aliases[alias] = prefix_cmd
+
     @contextual_completer
     def completer(ctx: CompletionContext):
         if ctx.command:

@@ -58,7 +58,7 @@ class BaseInvoker:
     @property
     def name(self) -> str:
         return self.__name__
-    
+
     __function: Callable
     @property
     def function(self) -> Callable:
@@ -335,14 +335,12 @@ class SessionInvoker(Invoker):
 
         PARAMETERS
         ----------
-        _aliases: dict[str,Callable[[XonshSession]]
-            The registry of aliases to which the new runner should be added..
         _export: Callable[[Any,str|None],None]
             The function that is used to export the invoker.
         '''
         return run.SessionRunner(self, **kwargs)
-    
-    
+
+
     def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
         pass
 
@@ -387,9 +385,6 @@ class CommandInvoker(SessionInvoker):
     An invoker that can handle more complex argument parsing that
     involves type checking, name-matching, and conversion.
     '''
-    
-    __aliases: dict[str,Callable]
-
     __arg_transforms: dict[str, ArgTransform]
     @property
     def arg_transforms(self) -> dict[str, ArgTransform]:
@@ -408,7 +403,6 @@ class CommandInvoker(SessionInvoker):
 
     def __init__(self, cmd: Callable,
                  name: Optional[str] = None, /, *,
-                 aliases: dict[str,Callable],
                  export: Optional[Callable[[Any,str|None],None]] = None,
                  flags: Optional[KeywordInputSpecs] = None,
                  exclude: set[str] = set(),
@@ -422,17 +416,21 @@ class CommandInvoker(SessionInvoker):
             self.inject(session_args)
         events.on_xgit_load(on_load)
         self.__export = export
-        self.__aliases = aliases
-        
+
     def inject(self, /, session_vars: dict[str, Any]):
         '''
         Injects session variables into the invoker.
         '''
         runner = self.create_runner(invoker=self, name=self.name)
         self._perform_injections(runner, session_vars)
-        
+
     def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
-        
+        '''
+        Injects session variables into the runner.
+        '''
+        XSH = session_vars['XSH']
+        aliases = XSH.aliases
+
         sig = self.signature
         s_args = dict(session_vars)
         for key in self.__exclude:
@@ -441,12 +439,11 @@ class CommandInvoker(SessionInvoker):
             if key not in sig.parameters:
                 s_args.pop(key, None)
         runner.inject(s_args)
-        self.__aliases[self.name] = runner
+        aliases[self.name] = runner
         unexport: Callable|None = None
         export = self.__export
         if export is not None:
             export(self, self.function.__name__)
-        aliases = self.__aliases
         def on_unload():
             aliases.pop(self.name, None)
             if unexport is not None:
@@ -489,13 +486,10 @@ class CommandInvoker(SessionInvoker):
 
         PARAMETERS
         ----------
-        _aliases: dict[str,Callable[[XonshSession]]
-            The registry of aliases to which the new runner should be added..
         _export: Callable[[Any,str|None],None]
             The function that is used to export the invoker.
         '''
-        return run.Command(self ,
-                           aliases=self.__aliases,
+        return run.Command(self,
                             export=self.export,
                            **kwargs)
 
@@ -569,7 +563,6 @@ class PrefixCommandInvoker(CommandInvoker):
             return MappingProxyType(self.__subcommands)
 
     def create_runner(self, /, *,
-               _aliases: dict[str,Callable],
                _export: Callable[[Any,str|None],None],
                **kwargs) -> run.PrefixCommand:
         subcommands = {
@@ -581,7 +574,6 @@ class PrefixCommandInvoker(CommandInvoker):
                                  exclude=self.exclude,
                                  **kwargs)
 
-        _aliases[self.name] = command
         if _export is not None:
             _export(self, self.function.__name__)
 

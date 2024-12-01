@@ -42,7 +42,7 @@ class Runner(Generic[C]):
     A callable that runs the invoker.
     '''
     __name__: str
-    def __init__(self, invoker: 'C',
+    def __init__(self, invoker: 'C', /,
                  **kwargs: Any):
         '''
         Initializes the runner with the given invoker.
@@ -178,7 +178,6 @@ class Command(SessionRunner):
 
     def __init__(self, invoker : 'CommandInvoker', /, *,
                 export: Callable|None = None,
-                 aliases: dict[str, Callable] = {},
                  **kwargs: Any):
         '''
         Initializes the command with the given invoker.
@@ -191,19 +190,6 @@ class Command(SessionRunner):
         '''
         super().__init__(invoker,
                         **kwargs)
-        self.__aliases = aliases
-        alias_name = _h(self.__name__)
-        old = aliases.get(alias_name, _NO_VALUE)
-        aliases[alias_name] = self
-        def unload():
-            if old is _NO_VALUE:
-                del aliases[alias_name]
-            else:
-                aliases[alias_name] = self
-        if export:
-            export(self, self.__name__)
-
-        self.__unload = unload
         self.__session_args = None
 
 
@@ -229,7 +215,6 @@ class Command(SessionRunner):
         Removes the session variables from the command.
         '''
         self.__session_args = None
-        self.__unload()
 
     def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
         '''
