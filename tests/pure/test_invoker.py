@@ -423,7 +423,7 @@ def test_session_invoker_clear_session(xonsh_session):
     from xontrib.xgit.runners import Command
     def f(a:int, b:bool, c:str, /, *args, XSH: XonshSession, **kwargs):
         return  a, b, c, args, XSH, kwargs
-    invoker = CommandInvoker(f)
+    invoker = CommandInvoker(f, aliases={})
     _aliases = {}
     _export = lambda x, y: None
     command: Command = invoker.create_runner(_aliases=_aliases, _export=_export)
@@ -462,5 +462,5 @@ def test_command_invoker_extra_kw(run_command, xonsh_session):
 def test_invoker_repr():
     def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
         return  a, b, c, args, session, kwargs
-    invoker = CommandInvoker(f, 'f')
+    invoker = CommandInvoker(f, 'f', aliases={})
     assert repr(invoker) == '<CommandInvoker(f)(...)>'

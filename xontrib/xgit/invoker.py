@@ -4,6 +4,7 @@ Utilities for invoking commands based on their signatures.
 
 from collections.abc import Sequence
 from itertools import chain
+from os import name
 import sys
 from types import MappingProxyType
 from typing import (
@@ -54,17 +55,21 @@ def _h(s: str) -> str:
 
 class BaseInvoker:
     __name__: str
+    @property
+    def name(self) -> str:
+        return self.__name__
+    
     __function: Callable
     @property
     def function(self) -> Callable:
         return self.__function
 
-    def __init__(self, cmd: Callable):
+    def __init__(self, cmd: Callable, name: Optional[str] = None):
         if not callable(cmd):
             raise ValueError(f"Command must be callable: {cmd!r}")
         self.__function = cmd
         # Be a proper wrapper
-        self.__name__ = cmd.__name__
+        self.__name__ = name or _h(cmd.__name__)
         self.__qualname__ = cmd.__qualname__
         self.__doc__ = cmd.__doc__ or self.__doc__ or ''
         self.__module__ = cmd.__module__
@@ -83,7 +88,7 @@ class BaseInvoker:
             raise
 
     def __repr__(self) -> str:
-        return f'<{type(self).__name__}({self.__name__})(...)>'
+        return f'<{type(self).__name__}({self.name})(...)>'
 
 class SimpleInvoker(BaseInvoker):
     """
@@ -125,7 +130,7 @@ class SimpleInvoker(BaseInvoker):
     '''
 
     def __init__(self,
-                 cmd: Callable,
+                 cmd: Callable, name: Optional[str] = None, /, *,
                  flags: Optional[KeywordInputSpecs] = None,
                  ):
         '''
@@ -310,9 +315,13 @@ class Invoker(SignatureInvoker, SimpleInvoker):
 
     def __init__(self,
                  cmd: Callable,
+                 name: Optional[str] = None, /, *,
                  flags: Optional[KeywordInputSpecs] = None,
+                 **kwargs
                  ):
-        super().__init__(cmd, flags)
+        super().__init__(cmd, name,
+                         flags=flags,
+                         **kwargs)
         self.__flags_with_signature = None
 
 class SessionInvoker(Invoker):
@@ -332,6 +341,10 @@ class SessionInvoker(Invoker):
             The function that is used to export the invoker.
         '''
         return run.SessionRunner(self, **kwargs)
+    
+    
+    def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
+        pass
 
 
     __runner_signature: Signature|None = None
@@ -347,7 +360,7 @@ class SessionInvoker(Invoker):
     def _runner_signature(self) -> Signature:
         return self.signature
 
-    def __call__(self, *args: Any,
+    def __call__(self, /, *args: Any,
                 stdout: IO[str]=sys.stdout,
                 stderr: IO[str]=sys.stderr,
                 stdin: IO[str]=sys.stdin,
@@ -374,13 +387,8 @@ class CommandInvoker(SessionInvoker):
     An invoker that can handle more complex argument parsing that
     involves type checking, name-matching, and conversion.
     '''
-    __name: str
-    @property
-    def name(self) -> str:
-        '''
-        The name of the command.
-        '''
-        return self.__name
+    
+    __aliases: dict[str,Callable]
 
     __arg_transforms: dict[str, ArgTransform]
     @property
@@ -390,16 +398,61 @@ class CommandInvoker(SessionInvoker):
         '''
         return self.__arg_transforms
 
+    __export: Callable[[Any,str|None],None]|None
+    @property
+    def export(self) -> Callable[[Any,str|None],None]|None:
+        '''
+        The function that is used to export the invoker.
+        '''
+        return self.__export
 
     def __init__(self, cmd: Callable,
-                 name: Optional[str] = None,
+                 name: Optional[str] = None, /, *,
+                 aliases: dict[str,Callable],
+                 export: Optional[Callable[[Any,str|None],None]] = None,
                  flags: Optional[KeywordInputSpecs] = None,
                  exclude: set[str] = set(),
                  **kwargs):
-        super().__init__(cmd, flags, **kwargs)
+        super().__init__(cmd, name,
+                         flags=flags,
+                         **kwargs)
         self.__arg_transforms = {}
-        self.__name = name or cmd.__name__
         self.__exclude = exclude
+        def on_load(session_args: dict[str, Any]):
+            self.inject(session_args)
+        events.on_xgit_load(on_load)
+        self.__export = export
+        self.__aliases = aliases
+        
+    def inject(self, /, session_vars: dict[str, Any]):
+        '''
+        Injects session variables into the invoker.
+        '''
+        runner = self.create_runner(invoker=self, name=self.name)
+        self._perform_injections(runner, session_vars)
+        
+    def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
+        
+        sig = self.signature
+        s_args = dict(session_vars)
+        for key in self.__exclude:
+            s_args.pop(key, None)
+        for key in session_vars:
+            if key not in sig.parameters:
+                s_args.pop(key, None)
+        runner.inject(s_args)
+        self.__aliases[self.name] = runner
+        unexport: Callable|None = None
+        export = self.__export
+        if export is not None:
+            export(self, self.function.__name__)
+        aliases = self.__aliases
+        def on_unload():
+            aliases.pop(self.name, None)
+            if unexport is not None:
+                unexport()
+            runner.uninject()
+        events.on_xgit_unload(on_unload)
 
     def _runner_signature(self) -> Signature:
         sig: Signature = self.signature
@@ -429,9 +482,7 @@ class CommandInvoker(SessionInvoker):
         return Signature([args, *session_keywords],
                         return_annotation=sig.return_annotation)
 
-    def create_runner(self, /,  *,
-               _aliases: dict[str,Callable],
-               _export: Callable[[Any,str|None],None],
+    def create_runner(self, /,
                **kwargs) -> run.Command:
         '''
         Creates a runner with the given session variables.
@@ -444,8 +495,8 @@ class CommandInvoker(SessionInvoker):
             The function that is used to export the invoker.
         '''
         return run.Command(self ,
-                           _aliases=_aliases,
-                            _export=_export,
+                           aliases=self.__aliases,
+                            export=self.export,
                            **kwargs)
 
     __exclude: set[str]
@@ -537,7 +588,7 @@ class PrefixCommandInvoker(CommandInvoker):
         return command
 
     def inject(self ,/,
-               **session_vars):
+               session_vars: dict[str, Any]) -> None:
         '''
         Injects session variables into the invoker.
         '''
@@ -570,11 +621,13 @@ class PrefixCommandInvoker(CommandInvoker):
         return {f'{self.prefix} {k}' for k in self.subcommands.keys()}
 
     def __init__(self,
-                 cmd: Callable,
+                 cmd: Callable, /,
                  prefix: str,
                  flags: Optional[KeywordInputSpecs] = None,
                  **kwargs):
-        super().__init__(cmd, prefix, flags, **kwargs)
+        super().__init__(cmd, prefix,
+                         flags=flags,
+                         **kwargs)
         self.__prefix = prefix
         self.__subcommands = {}
 

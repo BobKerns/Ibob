@@ -55,9 +55,14 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
             else:
                 name = _h(name)
             exports[name] = func
-        invoker = invoker_class(function, flags=flags)
+        invoker = invoker_class(function, function.__name__,
+                                flags=flags,
+                                aliases=aliases,
+                                export=_export,
+                                )
+        from xonsh.built_ins import XSH
+        from xonsh.events import events
         if session_args is None:
-            from xonsh.built_ins import XSH
             session_args = {
                 'XSH': XSH,
                 'XGIT': _GitContext(XSH),
@@ -66,7 +71,7 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
             _aliases=aliases,
             _export=_export,
             _EXTRA='foo',)
-        runner.inject(session_args)
+        invoker._perform_injections(runner, session_args)
         if expect_no_session_exception:
             with pytest.raises(GitNoSessionException):
                 runner(*args, **kwargs)
@@ -81,6 +86,7 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
                         )
                 return
         result = runner(*args, **kwargs)
+        events.on_xgit_loaded.fire(XSH=XSH)
         yield CommandSetup(
                            function=function,
                            invoker=invoker,

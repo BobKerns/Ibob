@@ -177,8 +177,8 @@ class Command(SessionRunner):
     '''
 
     def __init__(self, invoker : 'CommandInvoker', /, *,
-                _export: Callable|None = None,
-                 _aliases: dict[str, Callable] = {},
+                export: Callable|None = None,
+                 aliases: dict[str, Callable] = {},
                  **kwargs: Any):
         '''
         Initializes the command with the given invoker.
@@ -191,17 +191,17 @@ class Command(SessionRunner):
         '''
         super().__init__(invoker,
                         **kwargs)
-        self.__aliases = _aliases
+        self.__aliases = aliases
         alias_name = _h(self.__name__)
-        old = _aliases.get(alias_name, _NO_VALUE)
-        _aliases[alias_name] = self
+        old = aliases.get(alias_name, _NO_VALUE)
+        aliases[alias_name] = self
         def unload():
             if old is _NO_VALUE:
-                del _aliases[alias_name]
+                del aliases[alias_name]
             else:
-                _aliases[alias_name] = self
-        if _export:
-            _export(self, self.__name__)
+                aliases[alias_name] = self
+        if export:
+            export(self, self.__name__)
 
         self.__unload = unload
         self.__session_args = None
@@ -222,14 +222,7 @@ class Command(SessionRunner):
         '''
         Injects the session variables into the command.
         '''
-        sig = self.invoker.signature
-        s_args = dict(session_args)
-        for key in self.__exclude:
-            s_args.pop(key, None)
-        for key in session_args:
-            if key not in sig.parameters:
-                s_args.pop(key, None)
-        self.__session_args = s_args
+        self.__session_args = session_args
 
     def uninject(self) -> None:
         '''

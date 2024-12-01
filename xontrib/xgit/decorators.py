@@ -26,6 +26,7 @@ from xonsh.events import events
 from xontrib.xgit.types import (
     GitError, ObjectId, _NO_VALUE,
     Directory, File, PythonFile,
+    KeywordInputSpecs,
 )
 from xontrib.xgit.ref_types import (
     Branch, Tag, RemoteBranch, GitRef,
@@ -181,7 +182,7 @@ def convert(p: Parameter, value: str) -> Any:
 
 def command(
     cmd: Optional[Callable] = None,
-    flags: set = set(),
+    flags: KeywordInputSpecs = {},
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
@@ -233,7 +234,9 @@ def command(
     if alias is None:
         alias = cmd.__name__.replace("_", "-")
 
-    invoker: CommandInvoker = CommandInvoker(cmd, alias)
+    invoker: CommandInvoker = CommandInvoker(cmd, alias,
+                                             aliases=_aliases,
+                                             export=_export,)
 
     if prefix is not None:
         prefix_cmd, prefix_alias = prefix
@@ -244,7 +247,9 @@ def prefix_command(alias: str):
     """
     Create a command that invokes other commands selected by prefix.
     """
-    prefix_cmd = PrefixCommandInvoker(lambda: None, alias)
+    prefix_cmd = PrefixCommandInvoker(lambda: None, alias,
+                                      aliases=_aliases,
+                                      export=_export)
     _aliases[alias] = prefix_cmd
     @contextual_completer
     def completer(ctx: CompletionContext):
@@ -255,7 +260,7 @@ def prefix_command(alias: str):
     completer.__doc__ = f"Completer for {alias}"
     def init_prefix_command(xsh: XonshSession):
         add_one_completer(alias, completer, "start")
-        prefix_cmd.inject(XSH=xsh, XGIT=context(xsh))
+        prefix_cmd.inject(dict(XSH=xsh, XGIT=context(xsh)))
     return prefix_cmd
 
 xgit = prefix_command("xgit")
