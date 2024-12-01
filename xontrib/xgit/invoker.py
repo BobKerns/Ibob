@@ -412,7 +412,8 @@ class CommandInvoker(SessionInvoker):
                          **kwargs)
         self.__arg_transforms = {}
         self.__exclude = exclude
-        def on_load(session_args: dict[str, Any]):
+        self.__for_value = for_value
+        def on_load(**session_args):
             self.inject(session_args)
         events.on_xgit_load(on_load)
         self.__export = export
