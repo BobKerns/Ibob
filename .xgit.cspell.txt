@@ -13,6 +13,7 @@ Canonicalizes
 capsys
 chdir
 cmds
+colorama
 Commitish
 contextlib
 decscriptor
@@ -35,6 +36,8 @@ gitdir
 Gitter
 gpgsig
 hashable
+ipython
+isort
 itercheck
 ivar
 Jsonable
@@ -73,6 +76,7 @@ pyproject
 pyreadline3
 pytest
 pythonic
+pyupgrade
 Redirections
 refactor
 refactoring
@@ -98,6 +102,7 @@ typeshed
 uninject
 unloadable
 unrooted
+venv
 worktree
 Worktree
 worktrees
