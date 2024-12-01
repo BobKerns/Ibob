@@ -31,8 +31,8 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
     )
     from xontrib.xgit.runners import Runner
     from xontrib.xgit.context import _GitContext
-    class CommandSetup(NamedTuple, Generic[R]):
-        function: Callable[...,R]
+    class CommandSetup(NamedTuple):
+        function: Callable[...,Any]
         invoker: SessionInvoker
         command: Runner
         args: tuple
@@ -40,13 +40,13 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
         session_args: dict|None
         result: Any
     @contextmanager
-    def run_command_(function: Callable[...,R], /, *args,
+    def run_command_(function: Callable[...,Any], /, *args,
                      expected: tuple,
                      session_args: dict[str,Any]|None = None,
                      invoker_class: type[SessionInvoker] = CommandInvoker,
                      flags: Optional[KeywordInputSpecs] = None,
                      expect_no_session_exception: bool = True,
-                     **kwargs) -> Generator[CommandSetup[R], Any, None]:
+                     **kwargs) -> Generator[CommandSetup, Any, None]:
         aliases: dict[str, Callable[...,Any]] = {}
         exports: dict[str, Any] = {}
         def _export(func: Any, name: str|None):
