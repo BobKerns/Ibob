@@ -3,7 +3,7 @@ Tests for the display module.
 """
 
 import re
-from typing import Any
+from typing import Any, cast
 _xgit_displayhook: Any
 
 def test_display_loads(modules):
@@ -21,6 +21,7 @@ def test_displayhook_simple(xonsh_session,
                             sysdisplayhook,
                             capsys,
                             test_branch):
+    XSH = with_xgit.XSH
     _events = __import__('xonsh.events').events.events
     with modules('xontrib.xgit.display') as ((mod,), kwargs):
         _events2 = mod.__dict__['events']
@@ -35,9 +36,12 @@ def test_displayhook_simple(xonsh_session,
 
 def test_displayhook_None(with_xgit,
                           modules,
+                          xonsh_session,
                           capsys,
                           test_branch):
     from xontrib.xgit.display import _xgit_displayhook
+    XSH = with_xgit.XSH
+    cast(Any, _xgit_displayhook).inject({'XSH': xonsh_session})
     _xgit_displayhook(None)
     out = capsys.readouterr()
     assert out.out == ""

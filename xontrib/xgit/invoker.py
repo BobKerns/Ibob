@@ -467,10 +467,6 @@ class CommandInvoker(SessionInvoker):
         '''
         __tracebackhide__ = True
 
-        if "--help" in args:
-            print(self.__doc__, file=stderr)
-            return
-
         params = self.signature.parameters
         if 'stdout' in params:
             kwargs['stdout'] = stdout
@@ -481,6 +477,7 @@ class CommandInvoker(SessionInvoker):
 
         result = super().__call__(*args, **kwargs)
         return result
+
 
 class PrefixCommandInvoker(CommandInvoker):
     '''

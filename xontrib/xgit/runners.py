@@ -16,7 +16,9 @@ them, to obtain shared data, such as calling signature.
 
 from types import MappingProxyType
 from typing import Callable, Generic, Mapping, TypeVar, Any, TYPE_CHECKING
-from inspect import Signature
+from inspect import Signature, stack
+
+import xonsh
 
 if TYPE_CHECKING:
     from xontrib.xgit.invoker import (
@@ -84,6 +86,18 @@ class Runner(Generic[C]):
         '''
         return self.__signature__
 
+    def inject(self, session_args: dict[str, Any]) -> None:
+        '''
+        Injects the session variables into the command.
+        '''
+        pass
+
+    def uninject(self) -> None:
+        '''
+        Removes the session variables from the command.
+        '''
+        pass
+
 
 class SessionRunner(Runner['SessionInvoker']):
     '''
@@ -91,7 +105,6 @@ class SessionRunner(Runner['SessionInvoker']):
     '''
     def __init__(self, invoker: 'SessionInvoker', /, *,
                  _exclude: set[str] = set(),
-                 _aliases: dict[str, Callable] = {},
                  **kwargs: Any):
         '''
         Initializes the runner with the given invoker.
@@ -108,8 +121,31 @@ class SessionRunner(Runner['SessionInvoker']):
                          **kwargs)
 
         self.__exclude = _exclude
-        self.___aliases = _aliases
-        self.__session_args = None
+
+
+    @property
+    def session_args(self) -> Mapping[str, Any]:
+        '''
+        The session arguments that are injected into the command.
+        '''
+        for frame in stack():
+            if 'XSH' in frame.frame.f_globals:
+                XSH = frame.frame.f_globals['XSH']
+            elif 'XSH' in frame.frame.f_locals:
+                XSH = frame.frame.f_locals['XSH']
+            else:
+                continue
+            if 'XGIT' in frame.frame.f_globals:
+                return {
+                    'XSH': xonsh,
+                    'XGIT': frame.frame.f_globals['XGIT'],
+                }
+            if 'XGIT' in XSH.env:
+                return {
+                    'XSH': XSH,
+                    'XGIT': XSH.env['XGIT'],
+                }
+        raise GitNoSessionException(self.__name__)
 
     __exclude: set[str] = set()
     @property
@@ -118,36 +154,6 @@ class SessionRunner(Runner['SessionInvoker']):
         The names of the session variables that are excluded from the signature.
         '''
         return self.__exclude
-
-    __session_args: dict[str, Any]|None
-    @property
-    def session_args(self) -> Mapping[str, Any]:
-        '''
-        The session arguments that are injected into the command.
-        '''
-        if self.__session_args is None:
-            raise GitNoSessionException(self.__name__)
-        return MappingProxyType(self.__session_args)
-
-
-    def inject(self, session_args: dict[str, Any]) -> None:
-        '''
-        Injects the session variables into the command.
-        '''
-        sig = self.invoker.signature
-        s_args = dict(session_args)
-        for key in self.__exclude:
-            s_args.pop(key, None)
-        for key in session_args:
-            if key not in sig.parameters:
-                s_args.pop(key, None)
-        self.__session_args = s_args
-
-    def uninject(self) -> None:
-        '''
-        Removes the session variables from the command.
-        '''
-        self.__session_args = None
 
     def __call__(self, *args, **kwargs):
         '''
@@ -196,16 +202,41 @@ class Command(SessionRunner):
                 _aliases[alias_name] = self
         if _export:
             _export(self, self.__name__)
-        
+
         self.__unload = unload
-        
+        self.__session_args = None
+
+
+    __session_args: dict[str, Any]|None
+    @property
+    def session_args(self) -> Mapping[str, Any]:
+        '''
+        The session arguments that are injected into the command.
+        '''
+        if self.__session_args is None:
+            raise GitNoSessionException(self.__name__)
+        return MappingProxyType(self.__session_args)
+
+
+    def inject(self, session_args: dict[str, Any]) -> None:
+        '''
+        Injects the session variables into the command.
+        '''
+        sig = self.invoker.signature
+        s_args = dict(session_args)
+        for key in self.__exclude:
+            s_args.pop(key, None)
+        for key in session_args:
+            if key not in sig.parameters:
+                s_args.pop(key, None)
+        self.__session_args = s_args
+
     def uninject(self) -> None:
         '''
         Removes the session variables from the command.
         '''
-        super().uninject()
+        self.__session_args = None
         self.__unload()
-
 
     def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
         '''
@@ -213,6 +244,11 @@ class Command(SessionRunner):
 
         '''
         __tracebackhide__ = True
+
+        if "--help" in args:
+            print(self.__doc__)
+            return
+
         kwargs.update(self.session_args)
 
         split = self.invoker.extract_keywords(args)

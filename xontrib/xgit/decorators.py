@@ -91,8 +91,8 @@ def session(
     When the plugin is unloaded, the functions are turned into no-ops.
     '''
     def decorator(func: Callable[P,T]) -> Callable[...,T]:
-        wrapper = SessionInvoker(func)
-        return cast(Callable[...,T], wrapper)
+        invoker = SessionInvoker(func)
+        return invoker.create_runner()
     return decorator
 
 @contextual_completer

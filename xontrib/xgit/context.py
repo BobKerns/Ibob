@@ -159,9 +159,10 @@ class _GitContext(_GitCmd, GitContext):
             raise GitNoWorktreeException("Worktree has not been set")
         return self.__worktree
     @worktree.setter
-    def worktree(self, value: GitWorktree):
+    def worktree(self, value: GitWorktree|None):
         self.__worktree = value
-        self.__repository = value.repository
+        if value is not None:
+            self.__repository = value.repository
 
     __repository: GitRepository|None
     # Set for bare repositories; otherwise we use the one from

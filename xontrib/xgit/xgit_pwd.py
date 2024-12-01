@@ -13,14 +13,16 @@ from xontrib.xgit.types import GitNoRepositoryException
     export=True,
     prefix=(xgit, 'pwd'),
 )
-def git_pwd(*, XGIT: GitContext, **_):
+def git_pwd(*, XGIT: GitContext, stdout, **_):
     """
     Print the current working directory and git context information if available.
     """
     try:
-        XGIT.repository
-    except GitNoRepositoryException:
-        print(f"cwd: {_relative_to_home(Path.cwd())}")
-        print("Not in a git repository")
-        return
+        return XGIT.repository
+    except Exception as ex:
+        if type(ex).__name__ == 'GitNoRepositoryException':
+            print(f"cwd: {_relative_to_home(Path.cwd())}", file=stdout)
+            print("Not in a git repository", file=stdout)
+            return
+        raise ex
     return XGIT

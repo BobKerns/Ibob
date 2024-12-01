@@ -3,23 +3,30 @@ Test the XGit commands.
 '''
 
 from pathlib import Path
+from textwrap import shorten
 from typing import Any, cast
+import sys
 
 from pytest import raises
-import xonsh
-def test_pwd_no_repo(git_context, worktree, capsys, chdir):
+
+def test_pwd_no_repo(git_context, worktree, capsys, chdir, xonsh_session):
     '''
     Test the xsh proxy.
     '''
     from xontrib.xgit.xgit_pwd import git_pwd
-    root = Path('/').resolve()
+    root = worktree.location.parent.resolve()
     chdir(worktree.location.parent)
-    git_pwd(XGIT=git_context)
+    git_context.worktree = None
+    git_context.repository = None
+    git_pwd(XGIT=git_context,XSH=xonsh_session, stderr=sys.stderr, stdout=sys.stdout, stdin=sys.stdin)
     output = capsys.readouterr()
     lines = output.out.strip().split('\n')
 
     if len(lines) > 0:
-        assert lines[0] == f'cwd: {root}'
+        def shorten_path(p: Path):
+            p = p.relative_to(Path.home())
+            return Path('~') / p
+        assert lines[0] == f'cwd: {shorten_path(root)}'
     if len(lines) > 1:
         assert lines[1] == 'Not in a git repository'
     assert len(lines) == 2, f"Expected 2 lines, got {len(lines)}: {lines}"
@@ -32,8 +39,9 @@ def test_ls(clean_modules, git_context, repository, chdir):
     from xontrib.xgit.types import GitNoWorktreeException
     chdir(repository.path.parent)
 
-    with raises(GitNoWorktreeException):
+    with raises(Exception) as exc:
         git_ls(XGIT=git_context)
+    assert exc.typename == 'GitNoWorktreeException'
 
 def test_ls_cmd(git_context, xonsh_session, worktree):
     '''
