@@ -4,7 +4,7 @@ This manages type conversions for xgit, mostly from
 '''
 
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Optional, TypeAliasType, cast
+from typing import Any, Callable, Optional, cast
 import re
 
 from xontrib.xgit.types import (
@@ -39,7 +39,7 @@ class ConversionManager:
         self._converters[File] = self._convert_file
         self._converters[PythonFile] = self._convert_python_file
 
-    def convert(self, value: Any, type_: type|TypeAliasType) -> Any:
+    def convert(self, value: Any, type_: type|Any) -> Any:
         '''
         Converts a value to a type.
         '''
