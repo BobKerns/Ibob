@@ -54,5 +54,5 @@ def test_ls_cmd(git_context, xonsh_session, worktree):
         _export=lambda func, name: None,
         _exports={},
     )
-    runner.inject({'XGIT': git_context, 'XSH': xonsh_session})
+    runner.inject(XGIT=git_context, XSH=xonsh_session)
     runner([])

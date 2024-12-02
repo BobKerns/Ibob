@@ -40,8 +40,7 @@ def test_displayhook_None(with_xgit,
                           capsys,
                           test_branch):
     from xontrib.xgit.display import _xgit_displayhook
-    XSH = with_xgit.XSH
-    cast(Any, _xgit_displayhook).inject({'XSH': xonsh_session})
+    XSH = with_xgit.XSH # Found here on the stack.
     _xgit_displayhook(None)
     out = capsys.readouterr()
     assert out.out == ""

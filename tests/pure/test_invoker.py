@@ -427,7 +427,7 @@ def test_session_invoker_clear_session(xonsh_session):
     _aliases = {}
     _export = lambda x, y: None
     command: Command = invoker.create_runner(_aliases=_aliases, _export=_export)
-    command.inject(dict(XSH=xonsh_session))
+    command.inject(XSH=xonsh_session)
     command([1, True, 3, 4])
 
 def test_command_invoker(run_command, xonsh_session):
@@ -439,7 +439,7 @@ def test_command_invoker(run_command, xonsh_session):
           stdin: IO[str],
           **kwargs):
         return  a, b, c, args, type(XSH), kwargs
-    
+
     with run_command(f, [1, True, '3', 4],
                      expected=(1, True, '3', (4,), type(xonsh_session), {}),
                      expect_no_session_exception=False) as cmd_info:

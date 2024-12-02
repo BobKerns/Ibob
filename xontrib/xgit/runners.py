@@ -25,7 +25,9 @@ if TYPE_CHECKING:
         SessionInvoker, CommandInvoker, PrefixCommandInvoker,
     )
 
-from xontrib.xgit.types import _NO_VALUE, GitNoSessionException, GitValueError, list_of
+from xontrib.xgit.types import (
+    _NO_VALUE, GitNoSessionException, GitValueError, ValueHandler, list_of,
+)
 
 
 def _u(s: str) -> str:
@@ -86,7 +88,8 @@ class Runner(Generic[C]):
         '''
         return self.__signature__
 
-    def inject(self, session_args: dict[str, Any]) -> None:
+    def inject(self, /,
+               **session_args: Any) -> None:
         '''
         Injects the session variables into the command.
         '''
@@ -176,6 +179,8 @@ class Command(SessionRunner):
     We could use the bound method directly, but that won't allow setting the signature.
     '''
 
+    __for_value: bool
+
     def __init__(self, invoker : 'CommandInvoker', /, *,
                 export: Callable|None = None,
                  **kwargs: Any):
@@ -191,6 +196,7 @@ class Command(SessionRunner):
         super().__init__(invoker,
                         **kwargs)
         self.__session_args = None
+        self.__for_value = invoker.for_value
 
 
     __session_args: dict[str, Any]|None
@@ -203,11 +209,12 @@ class Command(SessionRunner):
             raise GitNoSessionException(self.__name__)
         return MappingProxyType(self.__session_args)
 
-
-    def inject(self, session_args: dict[str, Any]) -> None:
+    __value_handler: ValueHandler
+    def inject(self, /, *, value_handler: ValueHandler=lambda x:x, **session_args: Any) -> None:
         '''
         Injects the session variables into the command.
         '''
+        self.__value_handler = value_handler
         self.__session_args = session_args
 
     def uninject(self) -> None:
@@ -230,7 +237,9 @@ class Command(SessionRunner):
         kwargs.update(self.session_args)
 
         split = self.invoker.extract_keywords(args)
-        return self.invoker(*split.args, **split.kwargs, **kwargs)
+        return self.__value_handler(self.invoker(*split.args,
+                                                 **split.kwargs,
+                                                 **kwargs))
 
 
 class PrefixCommand(Command):

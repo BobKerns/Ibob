@@ -54,16 +54,15 @@ def _xgit_displayhook(value: Any, /, *,
     assert isinstance(env, MutableMapping), \
         f"XSH.env not a MutableMapping: {env!r}"
     if isinstance(value, HiddenCommandPipeline):
-        value = XSH.ctx.get("_XGIT_RETURN", value)
-        if "_XGIT_RETURN" in XSH.ctx:
+        value = XSH.ctx.get("$", value)
+        if "$" in XSH.ctx:
             if env.get("XGIT_TRACE_DISPLAY"):
-                print("clearing _XGIT_RETURN in XSH.ctx", file=sys.stderr)
-            del XSH.ctx["_XGIT_RETURN"]
+                print("clearing $ in XSH.ctx", file=sys.stderr)
+            del XSH.ctx["$"]
         else:
             if env.get("XGIT_TRACE_DISPLAY"):
                 msg = (
-                    "No _XGIT_RETURN, "
-                    + "result has been displayed with str() and suppressed"
+                    "No $; result has been displayed with str() and suppressed"
                 )
                 print(msg, file=sys.stderr)
 
@@ -151,12 +150,11 @@ def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     env = XSH.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env not a MutableMapping: {env!r}"
-    if "_XGIT_RETURN" in XSH.ctx:
+    if "$" in XSH.ctx:
         if env.get("XGIT_TRACE_DISPLAY"):
-            print("Clearing _XGIT_RETURN before command", file=sys.stderr)
-        del XSH.ctx["_XGIT_RETURN"]
+            print("Clearing $ before command", file=sys.stderr)
+        del XSH.ctx["$"]
     XSH.ctx["-"] = cmd.strip()
     XSH.ctx["+"] = builtins._  # type: ignore # noqa
     XSH.ctx["++"] = XSH.ctx.get("__")
     XSH.ctx["+++"] = XSH.ctx.get("___")
-

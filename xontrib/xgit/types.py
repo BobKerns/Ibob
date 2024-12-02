@@ -98,6 +98,13 @@ class InitFn(Generic[S, V], Protocol):
     """
     def __call__(self, source: S, /) -> V: ...
 
+
+class ValueHandler(Protocol[S,V]):
+    """
+    A protocol for a value handle, such as the return from a command.
+    """
+    def __call__(self, value: S, /) -> V: ...
+
 class GitException(Exception):
     """
     A base class for exceptions in the xgit xontrib.

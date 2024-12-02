@@ -254,7 +254,7 @@ def prefix_command(alias: str):
     completer.__doc__ = f"Completer for {alias}"
     def init_prefix_command(xsh: XonshSession):
         add_one_completer(alias, completer, "start")
-        prefix_cmd.inject(dict(XSH=xsh, XGIT=context(xsh)))
+        prefix_cmd.inject(XSH=xsh, XGIT=context(xsh))
     return prefix_cmd
 
 xgit = prefix_command("xgit")

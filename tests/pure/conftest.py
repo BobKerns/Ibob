@@ -71,7 +71,7 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
             _aliases=aliases,
             _export=_export,
             _EXTRA='foo',)
-        invoker._perform_injections(runner, session_args)
+        invoker._perform_injections(runner, **session_args)
         if expect_no_session_exception:
             with pytest.raises(GitNoSessionException):
                 runner(*args, **kwargs)

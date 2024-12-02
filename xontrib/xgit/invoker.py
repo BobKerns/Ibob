@@ -8,10 +8,11 @@ from os import name
 import sys
 from types import MappingProxyType
 from typing import (
-    IO, Any, Callable, Literal, NamedTuple, Optional,
+    IO, Any, Callable, Literal, MutableMapping, NamedTuple, Optional,
 )
 from inspect import Parameter, Signature
 
+from xonsh.built_ins import XonshSession
 from xonsh.events import events
 from xonsh.completers.tools import (
     contextual_completer, ContextualCompleter, CompletionContext,
@@ -261,7 +262,10 @@ class SimpleInvoker(BaseInvoker):
         return s
 
 class SignatureInvoker(BaseInvoker):
-
+    '''
+    An invoker that can handle more complex argument parsing that
+    examines the signature of the underlying function.
+    '''
     _signature: Signature|None = None
     __signature__: Signature
     @property
@@ -341,7 +345,7 @@ class SessionInvoker(Invoker):
         return run.SessionRunner(self, **kwargs)
 
 
-    def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
+    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
         pass
 
 
@@ -401,10 +405,19 @@ class CommandInvoker(SessionInvoker):
         '''
         return self.__export
 
+    __for_value: bool
+    @property
+    def for_value(self) -> bool:
+        '''
+        Whether the invoker is used to return a value.
+        '''
+        return self.__for_value
+
     def __init__(self, cmd: Callable,
                  name: Optional[str] = None, /, *,
                  export: Optional[Callable[[Any,str|None],None]] = None,
                  flags: Optional[KeywordInputSpecs] = None,
+                 for_value: bool = False,
                  exclude: set[str] = set(),
                  **kwargs):
         super().__init__(cmd, name,
@@ -414,32 +427,40 @@ class CommandInvoker(SessionInvoker):
         self.__exclude = exclude
         self.__for_value = for_value
         def on_load(**session_args):
-            self.inject(session_args)
+            self.inject(**session_args)
         events.on_xgit_load(on_load)
         self.__export = export
 
-    def inject(self, /, session_vars: dict[str, Any]):
+    def inject(self, /, **session_vars: Any):
         '''
         Injects session variables into the invoker.
         '''
         runner = self.create_runner(invoker=self, name=self.name)
-        self._perform_injections(runner, session_vars)
+        self._perform_injections(runner, **session_vars)
 
-    def _perform_injections(self, runner: run.Runner, session_vars: dict[str, Any]):
+    def _perform_injections(self, runner: run.Runner, /, *, XSH: XonshSession,  **session_vars: Any):
         '''
         Injects session variables into the runner.
         '''
-        XSH = session_vars['XSH']
         aliases = XSH.aliases
+        assert isinstance(aliases, MutableMapping)
+        ctx = XSH.ctx
+
+        for_value = self.__for_value
+        def value_handler(result: Any):
+            if for_value:
+                ctx['$'] = result
+            return result
 
         sig = self.signature
-        s_args = dict(session_vars)
         for key in self.__exclude:
-            s_args.pop(key, None)
+            session_vars.pop(key, None)
+        # Copy so we can modify while iterating.
+        s_vars = dict(session_vars, XSH=XSH)
         for key in session_vars:
             if key not in sig.parameters:
-                s_args.pop(key, None)
-        runner.inject(s_args)
+                s_vars.pop(key, None)
+        runner.inject(value_handler=value_handler, **s_vars)
         aliases[self.name] = runner
         unexport: Callable|None = None
         export = self.__export
@@ -580,8 +601,7 @@ class PrefixCommandInvoker(CommandInvoker):
 
         return command
 
-    def inject(self ,/,
-               session_vars: dict[str, Any]) -> None:
+    def inject(self ,/, **session_vars: Any) -> None:
         '''
         Injects session variables into the invoker.
         '''
