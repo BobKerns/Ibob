@@ -1,4 +1,5 @@
 argcnt
+argl
 argname
 autoimport
 autolock
@@ -83,6 +84,8 @@ refactoring
 refactorings
 remodularization
 remodularizations
+RPSI
+RPSR
 sdist
 setenv
 sorteddict

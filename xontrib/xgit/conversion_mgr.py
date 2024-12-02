@@ -9,10 +9,8 @@ import re
 
 from xontrib.xgit.types import (
     ObjectId, GitEntryMode, GitObjectType, GitRepositoryId,
-    GitReferenceType, GitObjectReference, JsonAtomic, JsonArray, JsonObject,
-    JsonData, Directory, File, PythonFile, KeywordArity, KeywordSpec,
-    KeywordSpecs, KeywordInputSpec, KeywordInputSpecs, HeadingStrategy,
-    ColumnKeys,
+    JsonAtomic, JsonArray, JsonObject,
+    JsonData, Directory, File, PythonFile,
 )
 
 # Usually a max of 40 characters for SHA-1, but can be 64 if SHA-256 is enabled.

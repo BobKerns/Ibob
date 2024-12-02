@@ -2,13 +2,13 @@
 Utilities for invoking commands based on their signatures.
 '''
 
-from collections.abc import Sequence, abstractmethod
+from collections.abc import Sequence
 from itertools import chain
 
 import sys
 from types import MappingProxyType
 from typing import (
-    IO, Any, Callable, Literal, NamedTuple, Optional,
+    IO, Any, Callable, Literal, NamedTuple, Optional, abstractmethod,
 )
 from collections.abc import MutableMapping
 from inspect import Parameter, Signature
@@ -16,16 +16,14 @@ from inspect import Parameter, Signature
 from xonsh.built_ins import XonshSession
 from xonsh.events import Event, events
 from xonsh.completers.tools import (
-    contextual_completer, CompletionContext,
+    CompletionContext,
 )
-from xonsh.completers.completer import add_one_completer
 
 from xontrib.xgit.types import (
     GitValueError, KeywordSpec, KeywordSpecs,
     KeywordInputSpec, KeywordInputSpecs,
     list_of,
 )
-from xontrib.xgit.decorators import session
 from xontrib.xgit.conversion_mgr import ArgTransform
 import xontrib.xgit.runners as run
 
@@ -381,7 +379,7 @@ class BaseSessionInvoker(Invoker):
     
     
     @abstractmethod
-    def create_runner(self, /, **kwargs) -> run.SessionRunner:
+    def create_runner(self, /, **kwargs) -> run.BaseSessionRunner:
         '''
         Creates a `Runner` for this `Invoker`.
         '''
@@ -527,7 +525,7 @@ class EventInvoker(RunnerPerSessionInvoker):
         '''
         return self._event
         
-    def create_runner(self, /, **kwargs) -> run.SessionRunner:
+    def create_runner(self, /, **kwargs) -> run.EventRunner:
         return run.EventRunner(self, event=self.event, **kwargs)
         
     def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
@@ -598,8 +596,6 @@ class CommandInvoker(RunnerPerSessionInvoker):
             return result
 
         sig = self.signature
-        for key in self.__exclude:
-            session_vars.pop(key, None)
         # Copy so we can modify while iterating.
         s_vars = dict(session_vars, XSH=XSH)
         for key in session_vars:
@@ -650,15 +646,13 @@ class CommandInvoker(RunnerPerSessionInvoker):
                 (Literal[f'--{p.name}'], p.annotation)
                 for p in sig.parameters.values()
                 if p.kind is p.KEYWORD_ONLY
-                if p.name not in self.__exclude
             )
             for t in ts
         ]
         session_keywords = [
             p for p in sig.parameters.values()
-            if (p.kind in (p.KEYWORD_ONLY, p.VAR_KEYWORD)
-                or p.name in self.__exclude)
-            ]
+            if p.kind in (p.KEYWORD_ONLY, p.VAR_KEYWORD)
+        ]
 
         params = tuple(chain(keywords, params))
         # list_of is a workaround python 3.10.
@@ -681,15 +675,6 @@ class CommandInvoker(RunnerPerSessionInvoker):
         return run.Command(self,
                             export=self.export,
                            **kwargs)
-
-    __exclude: set[str]
-    @property
-    def exclude(self) -> set[str]:
-        '''
-        The names of the session variables that are excluded from the signature.
-        '''
-        return self.__exclude
-
 
 
 class PrefixCommandInvoker(CommandInvoker):
@@ -748,7 +733,6 @@ class PrefixCommandInvoker(CommandInvoker):
     
         return run.PrefixCommand(self,
                                  subcommands=subcommands,
-                                 exclude=self.exclude,
                                  **kwargs)
 
     def _complete_subcommands(self, ctx: CompletionContext) -> set[str]:
@@ -782,12 +766,7 @@ class PrefixCommandInvoker(CommandInvoker):
         super().__init__(cmd, prefix,
                          flags=flags,
                          **kwargs)
-        
-        @contextual_completer
-        @session
-        def completer_subcommands(ctx: CompletionContext):
-            return self._complete_subcommands(ctx)
-        add_one_completer(self.name, completer_subcommands, 'start')
+    
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''

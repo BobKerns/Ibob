@@ -8,7 +8,7 @@ from xontrib.xgit.context_types import GitContext
 from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.object_types import GitObject, GitTree
 from xontrib.xgit.entry_types import GitEntry, GitEntryTree, EntryObject
-from xontrib.xgit.types import GitException, GitNoRepositoryException, GitNoWorktreeException
+from xontrib.xgit.types import GitNoRepositoryException, GitNoWorktreeException
 from xontrib.xgit.view import View
 from xontrib.xgit.table import TableView
 

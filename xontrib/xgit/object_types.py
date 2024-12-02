@@ -12,10 +12,10 @@ classes are complex. It is very easy to end up with circular imports.
 
 from pathlib import PurePosixPath
 from typing import (
-    Optional, Protocol, overload, runtime_checkable, Any, Iterator, Literal,
-    Sequence, Mapping, TypeAlias, IO,
+    Optional, Protocol, overload, runtime_checkable, Any, Literal,
+    TypeAlias, IO, abstractmethod,
 )
-from abc import abstractmethod
+from collections.abc import Iterator, Sequence, Mapping\
 
 from xontrib.xgit.types import (
     ObjectId, GitObjectType, GitEntryMode,
@@ -310,6 +310,3 @@ class GitTagObject(GitObject, Protocol):
     @property
     @abstractmethod
     def signature(self) -> str: ...
-
-
-import xontrib.xgit.entry_types as et

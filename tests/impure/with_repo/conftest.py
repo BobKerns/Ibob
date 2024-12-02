@@ -5,8 +5,8 @@ This file contains fixtures that work with an actual repository.
 
 import os
 from pathlib import Path
-from threading import RLock
-from typing import Generator, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
+from collections.abc import Generator
 import pytest
 
 
@@ -106,7 +106,9 @@ def repository_unzipped(
     yield to_git
 
 @pytest.fixture()
-def repository(git_context, repository_unzipped) -> Generator['GitRepository', None, None]:
+def repository(git_context,
+               repository_unzipped,
+               ) -> Generator['GitRepository', None, None]:
     '''
     Fixture to create a test repository.
     '''
@@ -121,9 +123,9 @@ def worktree(
     '''
     Fixture to create a test worktree.
     '''
-    from xontrib.xgit.worktree import _GitWorktree
-    from xontrib.xgit.ref import _GitRef
-    from xontrib.xgit.objects import _GitCommit
+    #from xontrib.xgit.worktree import _GitWorktree
+    #from xontrib.xgit.ref import _GitRef
+    #from xontrib.xgit.objects import _GitCommit
     worktree = repository.path.parent
     chdir(worktree)
     git('reset', '--hard', 'HEAD', cwd=worktree)

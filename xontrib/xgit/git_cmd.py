@@ -2,19 +2,22 @@
 A mixin class for git commands on a repository or worktree.
 '''
 
-from abc import abstractmethod
 from pathlib import Path
 from subprocess import (
     run, PIPE, Popen, CompletedProcess,
 )
 import shutil
 from typing import (
-    Optional, Sequence, runtime_checkable, Protocol, Iterator,
-    IO, cast,
+    Optional, runtime_checkable, Protocol,
+    IO, cast, abstractmethod,
+    TYPE_CHECKING,
 )
+from collections.abc import Sequence, Iterator
 
 from xontrib.xgit.types import ObjectId, CommitId, GitException
-import xontrib.xgit.context_types as ct
+
+if TYPE_CHECKING:
+    import xontrib.xgit.context_types as ct
 
 @runtime_checkable
 class GitCmd(Protocol):
@@ -545,7 +548,7 @@ class _GitCmd:
     def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, CommitId]:
         path = path.resolve()
         for p in path.parents:
-            git_dir = path / ".git"
+            git_dir = p / ".git"
             if git_dir.is_dir():
                 commit = self.rev_parse("HEAD")
                 return path, path, git_dir, commit
@@ -557,7 +560,12 @@ class _GitCmd:
                     "--absolute-git-path",
                     "--git-common-dir", "HEAD"
                 )
-                return Path(worktree), Path(private), Path(common), CommitId(ObjectId(commit))
+                return (
+                    Path(worktree),
+                    Path(private),
+                    Path(common),
+                    CommitId(ObjectId(commit))
+                )
         raise GitException(f"   Not a git repository: {path}")
 
 

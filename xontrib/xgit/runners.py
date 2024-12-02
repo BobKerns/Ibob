@@ -15,8 +15,10 @@ them, to obtain shared data, such as calling signature.
 '''
 
 from types import MappingProxyType
-from Collections.abc import Mapping, abstractmethod
-from typing import Callable, Generic, TypeVar, Any, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import (
+    Callable, Generic, TypeVar, Any, TYPE_CHECKING,
+)
 from inspect import Signature, stack
 
 import xonsh
@@ -57,8 +59,6 @@ class Runner(Generic[C]):
         ----------
         invoker: BaseInvoker
             The invoker that is used to invoke the command.
-        _exclude: set[str]
-            The names of the session variables that are excluded from the signature.
         '''
         self.__invoker = invoker
 
@@ -107,7 +107,7 @@ class Runner(Generic[C]):
     
 
 BSR = TypeVar('BSR', bound='BaseSessionInvoker')
-class BaseSessionRunner(Runner['BSR']):
+class BaseSessionRunner(Generic[BSR], Runner['BSR']):
     '''
     A runner that is used to run a command that requires a session.
     '''
@@ -120,13 +120,10 @@ class BaseSessionRunner(Runner['BSR']):
         ----------
         invoker: BaseSessionInvoker
             The invoker that is used to invoke the command.
-        _exclude: set[str]
-            The names of the session variables that are excluded from the signature.
         '''
         super().__init__(invoker, **kwargs)
 
     @property
-    @abstractmethod
     def session_args(self) -> Mapping[str, Any]:
         '''
         The session arguments that are injected into the command.
@@ -139,13 +136,11 @@ class BaseSessionRunner(Runner['BSR']):
         '''
         __tracebackhide__ = True
         kwargs.update(self.session_args)
-        for key in self.exclude:
-            kwargs.pop(key, None)
         return self.invoker(*args, **kwargs)
     
 
 SSI = TypeVar('SSR', bound='SharedSessionInvoker')
-class SharedSessionRunner(BaseSessionRunner['SSI']):
+class SharedSessionRunner(Generic[SSI], BaseSessionRunner['SSI']):
     '''
     A runner that is used to run a command that requires a session.
     '''
@@ -157,8 +152,6 @@ class SharedSessionRunner(BaseSessionRunner['SSI']):
         ----------
         invoker: SharedSessionInvoker
             The invoker that is used to invoke the command.
-        _exclude: set[str]
-            The names of the session variables that are excluded from the signature.
         '''
         super().__init__(invoker, **kwargs)
 
@@ -194,8 +187,6 @@ class SharedSessionRunner(BaseSessionRunner['SSI']):
         '''
         __tracebackhide__ = True
         kwargs.update(self.session_args)
-        for key in self.exclude:
-            kwargs.pop(key, None)
         return self.invoker(*args, **kwargs)
     
 
@@ -356,8 +347,6 @@ class PrefixCommand(Command):
             The invoker that is used to invoke the command.
         subcommands: MappingProxyType[str, CommandInvoker]
             The subcommands that are available to the prefix
-        exclude: set[str]
-            The names of the session variables that are excluded from the signature.
         '''
         super().__init__(invoker,
                         **kwargs)

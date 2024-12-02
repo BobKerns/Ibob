@@ -4,9 +4,10 @@ A table view of objects.
 
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Generic, Iterable, Optional, TypeAlias,
+    Any, Callable, Generic, Optional, TypeAlias,
     cast
 )
+from collections.abc import Iterable
 from itertools import count
 
 from xonsh.lib.pretty import RepresentationPrinter
@@ -97,17 +98,20 @@ class TableView(MultiView[T,K,X,Rcv]):
     By default, for sequences, the key is the index in the sequence, and for mappings,
     the key is the key in the mapping.
 
-    The columns are sized, and assigned a position in the table. A header name can be assigned.
+    The columns are sized, and assigned a position in the table.
+    A header name can be assigned.
     '''
 
-    __columns: dict[str|int, Column] = {}
+    __columns: dict[str|int, Column]
     @property
     def _columns(self):
         '''
-        Get/set the columns. The columns will be updated to reflect the target's current state.
+        Get/set the columns. The columns will be updated to reflect 
+        he target's current state.
 
-        If the order is set and has keys not in the columns, they will be removed from the order.
-        If the order is not set, it will be set to the keys of the columns.
+        If the order is set and has keys not in the columns, they will
+        be removed from the order. If the order is not set, it will be
+        set to the keys of the columns.
         '''
         self.__collect_columns(self._target_value)
         return self.__columns
@@ -121,7 +125,7 @@ class TableView(MultiView[T,K,X,Rcv]):
         else:
             self.__order = list(self.__columns.keys())
 
-    __order: list[str|int] = []
+    __order: list[str|int]
     @property
     def _order(self) -> list[str|int]:
         '''
@@ -163,14 +167,14 @@ class TableView(MultiView[T,K,X,Rcv]):
     Whether to show the row ids.
     '''
 
-    x__column_extractor: Optional[ExtractorFnMulti[T,K,X]] = None
+    __column_extractor: Optional[ExtractorFnMulti[T,K,X]] = None
 
     @property
     def _column_extractor(self) -> ExtractorFnMulti[T,K,X]:
         '''
         Get/set the column extractor.
         '''
-        val = getattr(self, 'x__column_extractor')
+        val = self.__column_extractor
         if val is None:
             return cast(ExtractorFnMulti[T,K,X], default_extractor)
         return val
@@ -197,8 +201,8 @@ class TableView(MultiView[T,K,X,Rcv]):
         '''
         super().__init__(target, **kwargs)
         self._column_extractor = column_extractor
-        self._columns = columns or {}
-        self._order = order or []
+        self.__columns = columns or {}
+        self.__order = order or []
         self._heading_strategy = heading_strategy
         self._heading_separator = heading_separator
         self._cell_separator = cell_separator

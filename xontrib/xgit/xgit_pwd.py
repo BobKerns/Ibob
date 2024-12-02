@@ -4,9 +4,8 @@ The xgit pwd command.
 from pathlib import Path
 
 from xontrib.xgit.context_types import GitContext
-from xontrib.xgit.decorators import command, session, xgit
+from xontrib.xgit.decorators import command, xgit
 from xontrib.xgit.context import _relative_to_home
-from xontrib.xgit.types import GitNoRepositoryException
 
 @command(
     for_value=True,

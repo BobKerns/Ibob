@@ -11,11 +11,11 @@ These are the four types that live in a git object database:
     but are used to tag commits. (Unsigned tags are just references.)
 '''
 
-from abc import abstractmethod
 from typing import (
-    MutableMapping, Optional, Literal, Sequence, Any, cast, TypeAlias,
-    Callable, overload, Iterable, Iterator, Mapping
+    Optional, Literal, Any, cast, TypeAlias,
+    Callable, overload
 )
+from collections.abc import MutableMapping, Sequence, Iterable, Iterator, Mapping
 from types import MappingProxyType
 from pathlib import PurePosixPath
 from collections import defaultdict
@@ -48,7 +48,7 @@ from xontrib.xgit.object_types import (
 )
 from xontrib.xgit.context_types import GitContext, GitRepository
 from xontrib.xgit.entry_types import (
-    O, ParentObject, EntryObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
+    OBJ, ParentObject, EntryObject, GitEntry, GitEntryTree, GitEntryBlob, GitEntryCommit
 )
 import xontrib.xgit.entries as xe
 import xontrib.xgit.git_cmd as gc
@@ -257,7 +257,10 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     def values(self):
         return dict.values(self._expand())
 
-    def get(self, key: str|PurePosixPath, default: Any = None) -> 'GitEntry[xe.EntryObject]':
+    def get(self,
+            key: str|PurePosixPath,
+            default: Any = None,
+            ) -> 'GitEntry[xe.EntryObject]':
         self._expand()
         ex = next(iter(dict.values(self)))
         repository = ex.repository
@@ -303,8 +306,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         if cycle:
             p.text(f"GitTree({self.hash})")
         else:
-            l = len(self._expand())
-            with p.group(4, f"GitTree({self.hash!r}, len={l}, '''", "\n''')"):
+            tree_len = len(self._expand())
+            with p.group(4, f"GitTree({self.hash!r}, len={tree_len}, '''", "\n''')"):
                 for e in self.values():
                     p.break_()
                     if e.type == "tree":
@@ -319,8 +322,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                         rw = "-"
                     size = int(e.size)
                     suffix = '/' if e.type == 'tree' else ''
-                    l = f'{rw} {e.hash} {size:>8d} {e.name}{suffix}'
-                    p.text(l)
+                    tree_len = f'{rw} {e.hash} {size:>8d} {e.name}{suffix}'
+                    p.text(tree_len)
 
     def _parse_git_entry(
         self,
@@ -336,7 +339,8 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         type = cast(GitObjectType, type)
         parent = repository.get_object(parent_hash) if parent_hash is not None else None
         size_ = -1 if size == '-' else int(size)
-        return self._git_entry(ObjectId(hash), name, mode, type, size_, repository, parent)
+        return self._git_entry(ObjectId(hash), name, mode, type, size_,
+                               repository, parent)
 
 
     @overload
@@ -384,7 +388,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: ObjectId|O,
+        hash_or_obj: ObjectId|OBJ,
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -393,12 +397,12 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         parent: Optional[GitObject] = None,
         parent_entry: Optional[GitEntryTree] = None,
         path: Optional[PurePosixPath] = None,
-    ) -> tuple[str, GitEntry[O]]: ...
+    ) -> tuple[str, GitEntry[OBJ]]: ...
 
     # Implementation
     def _git_entry(
         self,
-        hash_or_obj: ObjectId|O,
+        hash_or_obj: ObjectId|OBJ,
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -407,13 +411,12 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         parent: Optional[GitObject] = None,
         parent_entry: Optional[GitEntryTree] = None,
         path: Optional[PurePosixPath] = None,
-    ) -> tuple[str, GitEntry[O]]:
+    ) -> tuple[str, GitEntry[OBJ]]:
         """
         Obtain or create a `GitObject` from a parsed entry line or equivalent.
         """
         assert isinstance(XSH.env, MutableMapping),\
             f"XSH.env not a MutableMapping: {XSH.env!r}"
-        parent_hash = parent.hash if parent is not None else ''
 
         match hash_or_obj:
             case str():
@@ -426,13 +429,13 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                 raise ValueError(f"Invalid hash or object: {hash_or_obj}")
 
         if XSH.env.get("XGIT_TRACE_OBJECTS"):
-            args = f"{hash=}, {name=}, {mode=}, {type=}, {size=}, {repository.path=}, {parent=}"
+            args = (
+                f"{hash=}, {name=}, {mode=}, {type=}, {size=}, " +
+                f"{repository.path=}, {parent=}"
+            )
             msg = f"git_entry({args})"
             print(msg)
-        if path is not None:
-            this_path = path / name
-        else:
-            this_path = PurePosixPath() / name
+        this_path = path / name if path is not None else PurePosixPath() / name
         match type:
             case 'tree':
                 entry = xe._GitEntryTree(cast(GitTree, obj), name, mode,
@@ -454,7 +457,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                             parent_object=cast(ParentObject, parent))
             case _:
                 raise ValueError(f"Unknown type {type}")
-        return name, cast(GitEntry[O], entry)
+        return name, cast(GitEntry[OBJ], entry)
 
 
 class _GitBlob(_GitObject, GitBlob):
@@ -668,10 +671,12 @@ class _GitCommit(_GitObject, GitCommit):
                         p.text(f"{parent.hash},")
                         p.breakable()
                 p.breakable()
-                p.text(f"author='{self.author.person.full_name} @ {self.author.date}',")
+                author = self.author
+                p.text(f"author='{author.person.full_name} @ {author.date}',")
                 p.breakable()
 
-                p.text(f"committer='{self.committer.person.full_name} @ {self.committer.date}',")
+                committer = self.committer
+                p.text(f"committer='{committer.person.full_name} @ {committer.date}',")
                 p.breakable()
                 with p.group(4, "message='''", "''',"):
                     for i, line in enumerate(self.message.splitlines()):
@@ -752,10 +757,14 @@ class _GitTagObject(_GitObject, GitTagObject):
             lines = repository.git_lines("cat-file", "tag", hash)
             for line in lines:
                 if line.startswith("object"):
-                    def load_object(_):
-                        id = ObjectId(line.split()[1])
-                        return repository.get_object(TagId(id))
-                    self.__object = load_object
+                    # Bind the loop variable so it gets its own closure
+                    # sell each iteration.
+                    def obj_loader(line):
+                        def load_object(_):
+                            id = ObjectId(line.split()[1])
+                            return repository.get_object(TagId(id))
+                        return load_object
+                    self.__object = obj_loader(line)
                 elif line.startswith("type"):
                     tag_type = line.split()[1]
                     assert tag_type in ("commit", "tree", "blob", "tag")
@@ -799,7 +808,7 @@ class _GitTagObject(_GitObject, GitTagObject):
         else:
             with p.group(4, f"GitTagObject({self.hash!r}, ", "\n)"):
                 p.breakable()
-                p.text(f"object=")
+                p.text("object=")
                 p.pretty(self.object)
                 p.breakable()
                 p.text(f"tagger='{self.tagger.person.full_name} @ {self.tagger.date}',")

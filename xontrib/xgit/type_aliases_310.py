@@ -5,10 +5,8 @@ type statement was added in 3.12.
 We try to make these invisible to type checkers; they're for
 downrev runtime compatibility only.
 '''
-from typing import Literal, Any, Callable, Literal
+from typing import Literal, Any, Callable
 from pathlib import Path, PurePosixPath
-
-from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.ids import ObjectId, GitRepositoryId
 

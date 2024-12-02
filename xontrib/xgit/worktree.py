@@ -16,6 +16,7 @@ from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
 
+ROOT = PurePosixPath(".")
 
 class _GitWorktree(_GitCmd, GitWorktree):
     """
@@ -95,7 +96,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 repository_path: Path,
                 branch: 'rt.GitRef|str|None',
                 commit: 'Commitish',
-                path: PurePosixPath = PurePosixPath("."),
+                path: PurePosixPath = ROOT,
                 locked: str = '',
                 prunable: str = '',
                 **kwargs

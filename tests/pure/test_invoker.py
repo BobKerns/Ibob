@@ -1,21 +1,24 @@
 '''
 Test the XGit invoker, used for invoking commands based on their signatures.
 '''
-from typing import IO
+from typing import IO, TYPE_CHECKING
 from pytest import raises
 
-from inspect import Signature, signature
+from inspect import Signature
 
 from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.invoker import (
-    SessionInvoker, SimpleInvoker, Invoker, ArgSplit, ArgumentError,
+    SharedSessionInvoker, SimpleInvoker, Invoker, ArgumentError,
     CommandInvoker,
 )
 from xontrib.xgit.types import GitNoSessionException
 
+if TYPE_CHECKING:
+    from xontrib.xgit.runners import Command
+
 def test_simple_invoker_bad_flags():
-    with raises(ValueError) as exc:
+    with raises(ValueError):
         SimpleInvoker(lambda:None,
             flags = {'flag1': ['cow']}, # type: ignore
         )
@@ -336,7 +339,7 @@ def test_command_empty(run_command):
     with run_command(f, [],
                      expected=1,
                      expect_no_session_exception=False,
-                     ) as cmd_info:
+                     ):
         pass
 
 
@@ -347,11 +350,12 @@ def test_command_positional(run_command):
                      expected=1,
                      expect_no_session_exception=False,
                      ) as cmd_info:
-        assert cmd_info.invoker.signature.parameters['a'].annotation == int
-        assert cmd_info.invoker.signature.parameters['b'].annotation == bool
-        assert cmd_info.invoker.signature.parameters['c'].annotation == str
-        assert cmd_info.invoker.signature.return_annotation == int
-        #assert next(iter(cmd_info.command.signature.parameters.values())).annotation == list
+        assert cmd_info.invoker.signature.parameters['a'].annotation is int
+        assert cmd_info.invoker.signature.parameters['b'].annotation is bool
+        assert cmd_info.invoker.signature.parameters['c'].annotation is str
+        assert cmd_info.invoker.signature.return_annotation is int
+        #assert next(iter(
+            # cmd_info.command.signature.parameters.values())).annotation is list
         # It's more complex than just list.
 
 def test_command_positional_extra(run_command):
@@ -361,10 +365,10 @@ def test_command_positional_extra(run_command):
                      expected=1,
                      expect_no_session_exception=False,
                      ) as cmd_info:
-        assert cmd_info.invoker.signature.parameters['a'].annotation == int
-        assert cmd_info.invoker.signature.parameters['b'].annotation == bool
-        assert cmd_info.invoker.signature.parameters['c'].annotation == str
-        assert cmd_info.invoker.signature.return_annotation == int
+        assert cmd_info.invoker.signature.parameters['a'].annotation is int
+        assert cmd_info.invoker.signature.parameters['b'].annotation is bool
+        assert cmd_info.invoker.signature.parameters['c'].annotation is str
+        assert cmd_info.invoker.signature.return_annotation is int
 
 def test_command_positional_extra_kw(run_command):
     def f(a:int, b:bool, c:str, /, *args, **kwargs):
@@ -372,7 +376,7 @@ def test_command_positional_extra_kw(run_command):
     with run_command(f,[1,True, '3', 4, '--d', 5],
                      expect_no_session_exception=False,
                      flags={'d': 1},
-                     expected=(1, True, '3', (4,), {'d'})) as cmd_info:
+                     expected=(1, True, '3', (4,), {'d'})):
         pass
 
 def test_command_positional_decl_extra_kw(run_command):
@@ -381,7 +385,7 @@ def test_command_positional_decl_extra_kw(run_command):
     with run_command(f, [1, True, '3', 4, '--d', 5],
                      flags={'d': True},
                      expected=(1, True, '3', (4,5), True, set()),
-                     expect_no_session_exception=False,) as cmd_info:
+                     expect_no_session_exception=False,):
         pass
 
 def test_command_kw_equals(run_command ):
@@ -390,19 +394,21 @@ def test_command_kw_equals(run_command ):
     with run_command(f, [1, True, '3', 4, '--d=30'],
                 expected=(1, True, '3', (4,), '30', set()),
                 expect_no_session_exception=False,
-                ) as cmd_info:
+                ):
         pass
 
 def test_session_invoker():
     def f(a:int, b:bool, c:str, /, *args, session: str, **kwargs):
         return  a, b, c, args, session, kwargs
-    invoker = SessionInvoker(f)
-    assert invoker(1, True, '3', 4, session='session-1') == (1, True, '3', (4,), 'session-1', {})
+    invoker = SharedSessionInvoker(f)
+    assert invoker(1, True, '3', 4, session='session-1') == (
+        1, True, '3', (4,), 'session-1', {}
+    )
 
 def test_session_invoker_more_kw():
     def f(a:int, b:bool, c:str, /, *args, **kwargs):
         return  a, b, c, args, kwargs
-    invoker = SessionInvoker(f)
+    invoker = SharedSessionInvoker(f)
     result = invoker(1, True, '3', 4,
                             extra='fun')
     assert result == (
@@ -413,19 +419,18 @@ def test_session_invoker_more_kw():
 def test_session_invoker_no_session():
     def f(a:int, b:bool, c:str, /, *args, XSH=None, **kwargs):
         return  a, b, c, args, XSH, kwargs
-    invoker = SessionInvoker(f)
+    invoker = SharedSessionInvoker(f)
     runner = invoker.create_runner()
     with raises(GitNoSessionException):
         runner(1, True, '3', 4)
 
 
 def test_session_invoker_clear_session(xonsh_session):
-    from xontrib.xgit.runners import Command
     def f(a:int, b:bool, c:str, /, *args, XSH: XonshSession, **kwargs):
         return  a, b, c, args, XSH, kwargs
     invoker = CommandInvoker(f, aliases={})
     _aliases = {}
-    _export = lambda x, y: None
+    _export = lambda x, y: None  # noqa: E731
     command: Command = invoker.create_runner(_aliases=_aliases, _export=_export)
     command.inject(XSH=xonsh_session)
     command([1, True, 3, 4])
@@ -442,7 +447,7 @@ def test_command_invoker(run_command, xonsh_session):
 
     with run_command(f, [1, True, '3', 4],
                      expected=(1, True, '3', (4,), type(xonsh_session), {}),
-                     expect_no_session_exception=False) as cmd_info:
+                     expect_no_session_exception=False):
         pass
 
 def test_command_invoker_extra_kw(run_command, xonsh_session):
@@ -456,7 +461,7 @@ def test_command_invoker_extra_kw(run_command, xonsh_session):
     with run_command(f, [1, True, '3', 4, '--extra', 'fun'],
                      expected=(1, True, '3', (4,), type(xonsh_session), {'extra'}),
                      expect_no_session_exception=False,
-                     flags={'extra': 1}) as cmd_info:
+                     flags={'extra': 1}):
         pass
 
 def test_invoker_repr():

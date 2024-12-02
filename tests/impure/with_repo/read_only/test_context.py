@@ -4,7 +4,6 @@ Tests for `GitContext`.
 
 from typing import Any, cast
 from unittest.mock import NonCallableMock
-from pathlib import Path
 
 to_json: Any
 from_json: Any
@@ -25,7 +24,6 @@ def test_context_json(with_xgit,
                       git,
                       sysdisplayhook,
                       test_branch):
-    import xontrib.xgit.context as ctx
     from xontrib.xgit.to_json import to_json
     head = worktree.rev_parse('HEAD')
     branch = worktree.symbolic_ref('HEAD')

@@ -14,27 +14,26 @@ duck typing.
 BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
-from abc import abstractmethod
+
 from typing import (
     Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable,
+    abstractmethod,
+    TYPE_CHECKING,
 )
 from pathlib import PurePosixPath
 
 from xontrib.xgit.types import GitEntryMode, GitObjectType, ObjectId
-import xontrib.xgit.context_types as ct
 
-#if TYPE_CHECKING:
+if TYPE_CHECKING:
+    import xontrib.xgit.object_types as ot
+    import xontrib.xgit.context_types as ct
+
 ParentObject: TypeAlias = 'ot.GitTree | ot.GitCommit | ot.GitTagObject'
 EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
-O = TypeVar('O', bound='EntryObject', covariant=True)
-#else:
-#    import xontrib.xgit.object_types as ot
-#    ParentObject = None
-#    EntryObject = None
-#    O = TypeVar('O', covariant=True)
+OBJ = TypeVar('OBJ', bound='EntryObject', covariant=True)
 
 @runtime_checkable
-class GitEntry(Generic[O], Protocol):
+class GitEntry(Generic[OBJ], Protocol):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
     it supplies the mode and name.
@@ -65,7 +64,7 @@ class GitEntry(Generic[O], Protocol):
     def entry_long(self) -> str: ...
     @property
     @abstractmethod
-    def object(self) -> O: ...
+    def object(self) -> OBJ: ...
     @property
     @abstractmethod
     def repository(self) -> 'ct.GitRepository': ...
@@ -86,7 +85,6 @@ class GitEntryTree(GitEntry, Protocol):
     @abstractmethod
     def __getitem__(self, key: str) -> 'GitEntry': ...
 
-import xontrib.xgit.object_types as ot
 class GitEntryBlob(GitEntry):
     ...
 

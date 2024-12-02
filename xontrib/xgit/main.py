@@ -14,8 +14,9 @@ In addition, it extends the displayhook to provide the following variables:
 """
 
 from contextlib import suppress
-from pathlib import Path, PurePosixPath
-from typing import MutableMapping, Any, cast
+from pathlib import Path
+from typing import Any
+from collections.abc import MutableMapping
 from collections.abc import Callable
 import sys
 
@@ -194,7 +195,7 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         del sys.modules[m]
     return dict()
 
-if __name__ == "__main__" and False:
+if __name__ == "__main__" and False:  # noqa: SIM223
     print("This is a xontrib module for xonsh, it is not meant to be executed.")
     print("But we'll do it anyway.")
 

@@ -71,13 +71,13 @@ return the target object, converted to the intermediate representation.
 The previous target object is saved and restored. (This is not thread-safe).
 '''
 
-from abc import abstractmethod
 from dataclasses import dataclass
 
 from typing import (
-    Any, Callable, Iterable,
+    Any, Callable, abstractmethod,
     Optional, Protocol, TypeVar, Generic, cast,
 )
+from collections.abc import Iterable
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -302,9 +302,8 @@ class View(Generic[T, Rcv]):
         t = type(self)
         if hasattr(t, name):
             p = getattr(t, name, None)
-            if p is not None:
-                if hasattr(p, '__get__'):
-                    return p.__get__(self)
+            if p is not None and hasattr(p, '__get__'):
+                return p.__get__(self)
         return getattr(self._target, name)
 
     def __setattr__(self, name: str, value: Any) -> None:

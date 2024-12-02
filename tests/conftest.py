@@ -1,24 +1,26 @@
 
 from contextlib import contextmanager
 from inspect import currentframe, stack
-from pathlib import Path
 from threading import RLock, Lock
 from types import ModuleType as Module
 import pytest
 from importlib import import_module
 from typing import (
-    Callable, Any, Generator, NamedTuple, Optional, TypeAlias, cast,
-    TYPE_CHECKING
+    Callable, Any, NamedTuple, TypeAlias
 )
+from collections.abc import Generator
 import sys
 from xonsh.built_ins import XonshSession
 
 
 def run_stdout(args, **kwargs):
     from subprocess import run, PIPE
-    run(args, check=True, stdout=PIPE, text=True, **kwargs).stdout
+    return run(args, check=True, stdout=PIPE, text=True, **kwargs).stdout
 
-def cleanup(target: dict[str, Any], before: dict[str, Any], loaded: dict[str, Any], after: dict[str, Any]):
+def cleanup(target: dict[str, Any],
+            before: dict[str, Any],
+            loaded: dict[str, Any],
+            after: dict[str, Any]):
     '''
     Undo additions and deletions, while preserving modifications.
     '''
@@ -108,7 +110,9 @@ def modules():
                     after = dict(f_globals)
                     after_inner_modules = dict(sys.modules)
                     cleanup(f_globals, before, loaded, after)
-                    cleanup(sys.modules, before_inner_modules, loaded_inner_modules, after_inner_modules)
+                    cleanup(sys.modules, before_inner_modules,
+                            loaded_inner_modules,
+                            after_inner_modules)
 
         try:
             yield modules
@@ -155,7 +159,8 @@ class XontribModule(NamedTuple):
     unload: Loader|None
 
 @contextmanager
-def session_active(module, xonsh_session) -> Generator[XontribModule, None, None]:
+def session_active(module, xonsh_session,
+                   ) -> Generator[XontribModule, None, None]:
     '''
     Context manager to load and unload a xontrib module.
     '''
@@ -178,8 +183,10 @@ def session_active(module, xonsh_session) -> Generator[XontribModule, None, None
 
 @pytest.fixture()
 def with_xgit(xonsh_session, modules, sysdisplayhook):
-    with modules('xontrib.xgit') as ((module,), kwargs):
-        with session_active(module, xonsh_session) as xontrib_module:
+    with (
+        modules('xontrib.xgit') as ((module,), kwargs),
+        session_active(module, xonsh_session) as xontrib_module,
+    ):
             yield xontrib_module
 
 
@@ -217,9 +224,11 @@ def with_events():
         getattr(events, k)._handlers.clear()
         getattr(events, k)._handlers.update(v)
     for k in dir(events):
-        if k.startswith('on_') and hasattr(getattr(events, k), '_handlers'):
-            if k not in existing:
-                delattr(events, k)
+        if (
+            k.startswith('on_') and hasattr(getattr(events, k), '_handlers')
+            and k not in existing
+        ):
+            delattr(events, k)
 
 @pytest.fixture()
 def test_branch(modules):

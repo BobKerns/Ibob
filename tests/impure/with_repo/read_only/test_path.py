@@ -3,7 +3,6 @@ Tests for the `GitPath` class.
 '''
 
 from pathlib import PurePath
-import pytest
 
 def test_create_git_path(repository):
     from xontrib.xgit.git_path import GitPath, PathBase
@@ -21,7 +20,7 @@ def test_create_git_path(repository):
         base=base,
         )
 
-    assert type(p) == GitPath
+    assert type(p) is GitPath
     assert isinstance(p, PurePath)
     assert p.object == commit.tree
     assert p.repository == repository
@@ -42,7 +41,7 @@ def test_create_git_path_unrooted(repository):
             base=base,
             object=commit.tree)
 
-    assert type(p) == GitPath
+    assert type(p) is GitPath
     assert isinstance(p, PurePath)
     assert p.object == commit.tree
     assert p.repository == repository

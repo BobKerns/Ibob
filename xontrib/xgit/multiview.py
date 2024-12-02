@@ -40,7 +40,6 @@ Processing begins with target object. The processing proceeds as follows:
     to display the object.
 '''
 
-from abc import abstractmethod
 from collections.abc import Mapping, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -50,16 +49,14 @@ from datetime import datetime, date, timedelta, timezone
 from itertools import count
 from typing import (
     Any, Callable, Generic, Optional, cast,
-    Protocol, Iterable, Mapping, Sequence
+    Protocol, abstractmethod
 )
 
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue
 from xontrib.xgit.view import (
-    View, ViewConfig,
-    DisplayFn, PrettyFn,
-    T, Tcv, Txv, K, Kcv, Kxv, X, Xcv, Xxv, R, Rxv, Rcv
+    View, T, Txv, K, Kcv, Kxv, X, Xcv, Xxv, Rxv, Rcv
 )
 
 class ConverterFnMulti(Generic[Kxv, Txv, Rcv], Protocol):
@@ -81,7 +78,8 @@ class PrettyFnMulti(Generic[Kxv, Rxv], Protocol):
     A pretty function from `K`, `R` to `str`.
     '''
     @abstractmethod
-    def __call__(self, k: Kxv, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...
+    def __call__(self, k: Kxv, x: Rxv,
+                 p: RepresentationPrinter, cycle: bool) -> None: ...
 
 class ExtractorFnMulti(Generic[Txv, Kcv, Xcv], Protocol):
     '''
@@ -118,7 +116,8 @@ The types that are considered atomic, and do not need to be converted.
 def default_extractor(x: T) -> Iterable[tuple[int|str, T]]:
     '''
     The default extractor for a `MultiView`. This assumes that the target
-    object can be converted to an iterable of tuples, where the first element is the key.
+    object can be converted to an iterable of tuples, where the first element
+    is the key.
     '''
     if isinstance(x, ATOMIC):
         return [(type(x).__name__, x)]
@@ -269,7 +268,9 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
             kwargs['repr_method'] = _repr_method
 
         if pretty_method is not None:
-            def _pretty_method(t: tuple[K, Rcv], p: RepresentationPrinter, cycle: bool) -> None:
+            def _pretty_method(t: tuple[K, Rcv],
+                               p: RepresentationPrinter,
+                               cycle: bool) -> None:
                 return pretty_method(*t, p, cycle)
             kwargs['pretty_method'] = _pretty_method
 

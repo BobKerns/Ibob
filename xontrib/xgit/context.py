@@ -20,8 +20,9 @@ classes are complex. It is very easy to end up with circular imports.
 
 from collections import defaultdict
 from types import MappingProxyType
+from collections.abc import Mapping
 from typing import (
-    Mapping, Optional, cast
+    Optional, cast
 )
 from pathlib import Path, PurePosixPath
 
@@ -33,8 +34,8 @@ from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person
 from xontrib.xgit.types import (
     ObjectId, CommitId, GitObjectReference,
-    GitNoRepositoryException, GitNoWorktreeException, GitException, GitError,
-    GitDirNotFoundError, WorktreeNotFoundError, RepositoryNotFoundError,
+    GitNoRepositoryException, GitNoWorktreeException,
+    WorktreeNotFoundError, RepositoryNotFoundError,
     GitNoBranchException, GitValueError,
     GitRepositoryId, GitReferenceType,
     JsonData,
@@ -50,6 +51,8 @@ from xontrib.xgit.context_types import (
 )
 import xontrib.xgit.repository as rr
 import xontrib.xgit.worktree as wt
+
+ROOT_REPO_PATH = PurePosixPath()
 
 class _GitContext(_GitCmd, GitContext):
     """
@@ -93,7 +96,7 @@ class _GitContext(_GitCmd, GitContext):
                     repository: Optional[GitRepository|str|Path]=None,
                     branch: Optional['PurePosixPath|str|rt.GitRef']=None,
                     commit: Optional['ot.Commitish']=None,
-                    path: PurePosixPath=PurePosixPath(),
+                    path: PurePosixPath=ROOT_REPO_PATH,
                     select: bool=True
                     ) -> 'GitWorktree':
         '''
@@ -327,13 +330,14 @@ class _GitContext(_GitCmd, GitContext):
             assert self.commit is not None, "Commit has not been set"
             with p.group(4, "Context:"):
                 p.break_()
-                wt = _relative_to_home(self.worktree.location)
-                p.text(f"worktree: {wt}")
+                wt = self.worktree
+                wt_loc = _relative_to_home(wt.location)
+                p.text(f"worktree: {wt_loc}")
                 with p.group(2):
                     p.break_()
-                    p.text(f"repository: {_relative_to_home(self.worktree.repository_path)}")
+                    p.text(f"repository: {_relative_to_home(wt.repository_path)}")
                     p.break_()
-                    p.text(f"common: {_relative_to_home(self.worktree.repository.path)}")
+                    p.text(f"common: {_relative_to_home(wt.repository.path)}")
                 p.break_()
                 p.text(f"git_path: {self.path}")
                 p.break_()
@@ -370,17 +374,16 @@ class _GitContext(_GitCmd, GitContext):
 
         repository = describer.repository
 
-    def branch_and_commit(self, worktree: 'wt.GitWorktree') -> tuple['rt.GitRef|None', 'ot.GitCommit']:
+    def branch_and_commit(self,
+                          worktree: 'wt.GitWorktree',
+                          ) -> tuple['rt.GitRef|None', 'ot.GitCommit']:
         """
         Get the current branch and commit based on a worktree. These are nouns,
         not actions. No branches or commits are created.
         """
         repository = worktree.repository
         branch_name = repository.symbolic_ref('HEAD')
-        if branch_name:
-            branch = repository.get_ref(branch_name)
-        else:
-            branch = None # Detached HEAD
+        branch = repository.get_ref(branch_name) if branch_name else None
 
         commit = self.rev_parse("HEAD")
         if commit:

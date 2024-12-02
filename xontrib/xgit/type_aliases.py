@@ -7,8 +7,6 @@ aliases. See type_aliases_310.py for the same type aliases defined using
 from pathlib import Path, PurePosixPath
 from typing import Callable, Literal, TypeVar
 
-from xonsh.built_ins import XonshSession
-
 from xontrib.xgit.ids import ObjectId, GitRepositoryId
 
 type GitLoader = Callable[[], None]
@@ -40,7 +38,11 @@ type GitReferenceType = Literal['ref', 'commit', 'tag', 'tree']
 The type of a git reference, that is, how an object is referenced.
 '''
 
-type GitObjectReference = tuple[GitRepositoryId, ObjectId|PurePosixPath, GitReferenceType]
+type GitObjectReference = tuple[
+    GitRepositoryId,
+    ObjectId|PurePosixPath,
+    GitReferenceType,
+]
 """
 A reference to a git object in a tree in a repository.
 """
@@ -121,7 +123,9 @@ PARAMETERS
 
 >>> `{'flag': ('+', 'flag')}`: --flag value1 value2 => `{'flag': ['value1', 'value2']}`
 
->>> `{'flag': ('*', 'flag'})`: --flag value1 value2 value3 => `{'flag': ['value1', 'value2']}`
+>>> `{'flag': ('*', 'flag'})`: --flag value1 value2 value3 => `{
+    'flag': ['value1', 'value2']
+    }`
 
 >>> `{'flag': (0, 'flag')}`: --no-flag => `['--no-flag']`
 

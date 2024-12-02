@@ -7,7 +7,7 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 
 from pathlib import Path
 from typing import (
-     Generic, Literal, NewType, Optional, Protocol, TypeVar, ParamSpec
+     Generic, NewType, Optional, Protocol, TypeVar, ParamSpec, TYPE_CHECKING
 )
 
 from xontrib.xgit.ids import ObjectId
@@ -25,32 +25,35 @@ try:
         Directory,
         File,
         PythonFile,
-        GitReferenceType, GitRepositoryId, GitObjectReference,
+        GitReferenceType, GitRepositoryId,
         KeywordArity, KeywordSpec, KeywordSpecs,
         KeywordInputSpec, KeywordInputSpecs,
         HeadingStrategy, ColumnKeys,
-        list_of,
+        list_of,  # noqa: F401
         DirectoryKind,
     )
 except SyntaxError:
     from xontrib.xgit.type_aliases_310 import (
-        GitLoader,
-        GitEntryMode,
-        GitObjectType,
-        GitObjectReference,
-        JsonArray,
-        JsonAtomic,
-        JsonObject,
-        JsonData,
-        Directory,
-        File,
-        PythonFile,
-        GitReferenceType, GitObjectReference,
-        KeywordArity, KeywordSpec, KeywordSpecs,
-        KeywordInputSpec, KeywordInputSpecs,
-        HeadingStrategy, ColumnKeys,
-        DirectoryKind,
-    )
+        GitLoader,  # noqa: F401
+        GitEntryMode,  # noqa: F401
+        GitObjectType,  # noqa: F401
+        GitObjectReference,  # noqa: F401
+        JsonArray,  # noqa: F401
+        JsonAtomic,  # noqa: F401
+        JsonObject,  # noqa: F401
+        JsonData,  # noqa: F401
+        Directory,  # noqa: F401
+        File,  # noqa: F401
+        PythonFile,  # noqa: F401
+        GitReferenceType,  # noqa: F401
+        KeywordArity, KeywordSpec, KeywordSpecs,  # noqa: F401
+        KeywordInputSpec, KeywordInputSpecs,  # noqa: F401
+        HeadingStrategy, ColumnKeys,  # noqa: F401
+        )
+    if TYPE_CHECKING:
+        from xontrib.xgit.type_aliases_310 import (
+                DirectoryKind, 
+            )
 
 if 'list_of' not in globals():
     globals()['list_of'] = lambda t: list
@@ -60,7 +63,7 @@ if 'list_of' not in globals():
     globals()['list_of'].__qualname__ = 'xontrib.xgit.types.list_of'
     globals()['list_of'].__name__ = 'list_of'
 
-ObjectId = NewType('ObjectId', str)
+
 '''
 A git hash. Defined as a string to make the code more self-documenting.
 

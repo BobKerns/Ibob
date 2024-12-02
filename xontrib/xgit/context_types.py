@@ -13,11 +13,11 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 
-from abc import abstractmethod
 from pathlib import Path, PurePosixPath
+from collections.abc import Mapping
 from typing import (
-    Literal, Mapping, Protocol, overload, runtime_checkable, Optional,
-    TypeAlias, TYPE_CHECKING, cast,
+    Literal, Protocol, overload, runtime_checkable, Optional,
+    TypeAlias, TYPE_CHECKING, cast, abstractmethod,
 )
 
 from xonsh.built_ins import XonshSession
@@ -74,8 +74,8 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
     @abstractmethod
     def path(self) -> Path:
         """
-        The path to the common part of the repository. This is the same for all worktrees
-        associated with a repository.
+        The path to the common part of the repository. This is the same for all
+        worktrees associated with a repository.
         """
         ...
 
@@ -107,17 +107,21 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @overload
-    def get_object(self, hash: 'ot.Commitish', type: Literal['commit']) -> 'ot.GitCommit':
+    def get_object(self, hash: 'ot.Commitish',
+                   type: Literal['commit']) -> 'ot.GitCommit':
         ...
     @overload
-    def get_object(self, hash: 'ot.Treeish', type: Literal['tree']) -> 'ot.GitTree':
+    def get_object(self, hash: 'ot.Treeish',
+                   type: Literal['tree']) -> 'ot.GitTree':
         ...
     @overload
-    def get_object(self, hash: 'ot.Blobish', type: Literal['blob'],
+    def get_object(self, hash: 'ot.Blobish',
+                   type: Literal['blob'],
                    size: int=-1) -> 'ot.GitBlob':
         ...
     @overload
-    def get_object(self, hash: 'ot.Tagish', type: Literal['tag']) -> 'ot.GitTagObject':
+    def get_object(self, hash: 'ot.Tagish',
+                   type: Literal['tag']) -> 'ot.GitTagObject':
         ...
     @overload
     def get_object(self, hash: 'ot.Objectish',
@@ -128,12 +132,12 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
                    type: Optional[GitObjectType]=None,
                    size: int=-1) -> 'ot.GitObject':
         '''
-        Get an object by its hash. If the type is given, the object is checked and
-        cast to the appropriate type. If the type is not given, the object is
-        returned as `GitObject`.
+        Get an object by its hash. If the type is given, the object is checked
+        and cast to the appropriate type. If the type is not given, the object
+        is returned as `GitObject`.
 
-        It will, however, be converted to the appropriate type when the object is
-        dereferenced.
+        It will, however, be converted to the appropriate type when the object
+        is dereferenced.
         '''
         ...
 
@@ -145,7 +149,9 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @abstractmethod
-    def add_reference(self, target: ObjectId, source: 'ot.GitObject|rt.GitRef'):
+    def add_reference(self,
+                      target: ObjectId,
+                      source: 'ot.GitObject|rt.GitRef'):
         '''
         Add a reference to an object.
         '''
@@ -171,7 +177,8 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
 @runtime_checkable
 class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     """
-    A git worktree. This is the root directory of where the files are checked out.
+    A git worktree. This is the root directory of where the files
+    are checked out.
     """
     @property
     @abstractmethod

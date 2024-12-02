@@ -1,14 +1,19 @@
 '''
 Types for xgit references.
 '''
-from abc import abstractmethod
-from typing import Protocol, TypeAlias, runtime_checkable, Sequence
-from pathlib import PurePosixPath
+
+from typing import (
+    Protocol, TypeAlias, runtime_checkable, TYPE_CHECKING,
+    abstractmethod,
+)
 
 from xontrib.xgit.types import ObjectId
-import xontrib.xgit.object_types as ot
-import xontrib.xgit.context_types as ct
 
+if TYPE_CHECKING:
+    import xontrib.xgit.context_types as ct
+    import xontrib.xgit.object_types as ot
+    from collections.abc import Sequence
+    from pathlib import PurePosixPath
 
 
 RefSpec: TypeAlias = 'PurePosixPath|str|Sequence[RefSpec]|GitRef'

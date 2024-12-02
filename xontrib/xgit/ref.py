@@ -103,7 +103,8 @@ class _GitRef(rt.GitRef):
             else:
                 result = repository.git_string('show-ref', '--verify', name)
                 if not result:
-                    result = repository.git_string('show-ref', '--verify', f'refs/heads/{name}')
+                    result = repository.git_string('show-ref', '--verify',
+                                                   f'refs/heads/{name}')
                 if not result:
                     raise ValueError(f"Ref not found: {name!r}")
                 target, name = result.split()

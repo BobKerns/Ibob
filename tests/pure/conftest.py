@@ -2,11 +2,11 @@
 Fixtures for pure tests.
 '''
 
-from contextlib import contextmanager
+from contextlib import contextmanager, AbstractContextManager
 from typing import (
-    Any, Callable, Generator, NamedTuple, TypeVar, Generic,
-    ContextManager, Optional, Sequence,
+    Any, Callable, NamedTuple, TypeVar, Optional,
 )
+from collections.abc import Generator
 import pytest
 
 from xontrib.xgit.types import GitNoSessionException
@@ -22,18 +22,18 @@ def lock_out_impure(test_lock):
 R = TypeVar('R')
 
 @pytest.fixture()
-def run_command() -> Callable[..., ContextManager[tuple]]:
+def run_command() -> Callable[..., AbstractContextManager[tuple]]:
     '''
     Create a command.
     '''
     from xontrib.xgit.invoker import (
-        SessionInvoker, CommandInvoker, _u, _h, KeywordInputSpecs,
+        SharedSessionInvoker, CommandInvoker, _u, _h, KeywordInputSpecs,
     )
     from xontrib.xgit.runners import Runner
     from xontrib.xgit.context import _GitContext
     class CommandSetup(NamedTuple):
         function: Callable[...,Any]
-        invoker: SessionInvoker
+        invoker: SharedSessionInvoker
         command: Runner
         args: tuple
         kwargs: dict
@@ -43,17 +43,14 @@ def run_command() -> Callable[..., ContextManager[tuple]]:
     def run_command_(function: Callable[...,Any], /, *args,
                      expected: tuple,
                      session_args: dict[str,Any]|None = None,
-                     invoker_class: type[SessionInvoker] = CommandInvoker,
+                     invoker_class: type[SharedSessionInvoker] = CommandInvoker,
                      flags: Optional[KeywordInputSpecs] = None,
                      expect_no_session_exception: bool = True,
                      **kwargs) -> Generator[CommandSetup, Any, None]:
         aliases: dict[str, Callable[...,Any]] = {}
         exports: dict[str, Any] = {}
         def _export(func: Any, name: str|None):
-            if name is None:
-                name = _h(func.__name__)
-            else:
-                name = _h(name)
+            name = _h(func.__name__) if name is None else _h(name)
             exports[name] = func
         invoker = invoker_class(function, function.__name__,
                                 flags=flags,

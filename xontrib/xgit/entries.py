@@ -15,7 +15,8 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
 from types import MappingProxyType
-from typing import ItemsView, Optional, TypeAlias, ValuesView, cast, Mapping
+from typing import Optional, TypeAlias, cast
+from collections.abc import ItemsView, ValuesView, Mapping
 from pathlib import PurePosixPath
 
 
@@ -27,7 +28,7 @@ from xontrib.xgit.types import (
     GitEntryMode, ObjectId,
 )
 from xontrib.xgit.entry_types import (
-    GitEntry, ParentObject, O,
+    GitEntry, ParentObject, OBJ,
     GitEntryBlob, GitEntryTree, GitEntryCommit,
 )
 import xontrib.xgit.object_types as ot
@@ -35,7 +36,7 @@ import xontrib.xgit.object_types as ot
 
 EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
 
-class _GitEntry(GitEntry[O]):
+class _GitEntry(GitEntry[OBJ]):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
     it supplies the mode and name, and the tree, commit, or tag that
@@ -43,7 +44,7 @@ class _GitEntry(GitEntry[O]):
     """
 
     __name: str
-    __object: O
+    __object: OBJ
     __mode: GitEntryMode
     __path: PurePosixPath
     __parent_object: Optional[ParentObject]
@@ -67,7 +68,7 @@ class _GitEntry(GitEntry[O]):
         return self.__object.size
 
     @property
-    def object(self) -> O:
+    def object(self) -> OBJ:
         return self.__object
 
     @property
@@ -120,14 +121,14 @@ class _GitEntry(GitEntry[O]):
     def entry_long(self):
         size = str(self.size) if self.size >= 0 else '-'
         rw = self.prefix
-        return f"{rw} {self.type} {self.hash} {str(size):>8s}\t{self.name}"
+        return f"{rw} {self.type} {self.hash} {size!s:>8s}\t{self.name}"
 
     @property
     def path(self) -> PurePosixPath:
         return self.__path
 
     def __init__(self,
-                 object: O,
+                 object: OBJ,
                  name: str,
                  mode: GitEntryMode,
                  repository: GitRepository,
@@ -185,7 +186,8 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     def hashes(self) -> Mapping[ObjectId, IdentitySet[GitEntry, int]]:
         return MappingProxyType(self.object.hashes)
 
-    def __getitem__(self, name):# -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
+    def __getitem__(self, name):
+    #                   -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
         entry = self.get(name)
         if entry is None:
             raise KeyError(name)
@@ -216,11 +218,12 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
 
                     obj = loc.object[part]
                     path = path / part
-                    _, entry = obj._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
-                                repository=self.repository,
-                                path=path,
-                                parent_entry=loc,
-                                parent=loc.parent)
+                    _, entry = obj._git_entry(obj.object,
+                                            loc.name, loc.mode, loc.type, loc.size,
+                                            repository=self.repository,
+                                            path=path,
+                                            parent_entry=loc,
+                                            parent=loc.parent)
                     loc = entry
         return loc
 
