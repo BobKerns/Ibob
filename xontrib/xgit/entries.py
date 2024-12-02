@@ -120,7 +120,7 @@ class _GitEntry(GitEntry[O]):
     def entry_long(self):
         size = str(self.size) if self.size >= 0 else '-'
         rw = self.prefix
-        return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
+        return f"{rw} {self.type} {self.hash} {str(size):>8s}\t{self.name}"
 
     @property
     def path(self) -> PurePosixPath:

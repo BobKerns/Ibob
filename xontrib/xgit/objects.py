@@ -319,7 +319,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                         rw = "-"
                     size = int(e.size)
                     suffix = '/' if e.type == 'tree' else ''
-                    l = f'{rw} {e.hash} {size:>8s} {e.name}{suffix}'
+                    l = f'{rw} {e.hash} {size:>8d} {e.name}{suffix}'
                     p.text(l)
 
     def _parse_git_entry(
