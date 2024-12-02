@@ -16,7 +16,7 @@ from xontrib.xgit.table import TableView
     for_value=True,
     export=True,
     prefix=(xgit, 'ls'),
-    flags={'table'}
+    flags={'table': True}
 )
 def git_ls(path: Path | str = Path('.'), *,
            XGIT: GitContext,
@@ -30,6 +30,8 @@ def git_ls(path: Path | str = Path('.'), *,
     def do_ls(path: PurePosixPath) -> GitEntry[EntryObject]:
         parent: GitObject  = XGIT.commit
         tree = parent.tree
+        if path == PurePosixPath('.'):
+            return tree.get('.')
         for part in path.parent.parts:
             if part == ".":
                 continue
