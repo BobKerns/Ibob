@@ -5,7 +5,8 @@ allows display of python values returned from commands.
 """
 
 from threading import Lock
-from typing import IO, Any, MutableMapping
+from typing import Any
+from collections.abc import MutableMapping
 import sys
 import builtins
 
@@ -14,10 +15,9 @@ from xonsh.events import events
 from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.context_types import GitContext
-from xontrib.xgit.decorators import session
+from xontrib.xgit.decorators import session, event_handler
 
 # Our events:
-
 
 events.doc(
     "on_xgit_predisplay",
@@ -82,10 +82,9 @@ def _xgit_displayhook(value: Any, /, *,
         print(ex, file=sys.stderr)
         sys.stderr.flush()
 
-setattr(_xgit_displayhook, "original", _xonsh_displayhook)
+_xgit_displayhook.original = _xonsh_displayhook
 
-@events.on_xgit_predisplay
-@session()
+@event_handler(events.on_xgit_predisplay)
 def _on_xgit_predisplay(value: Any, XSH: XonshSession, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
@@ -107,14 +106,13 @@ def _on_xgit_predisplay(value: Any, XSH: XonshSession, **_):
         print(f"{ovar}: ", end="")
 
 
-@events.on_xgit_postdisplay
-@session()
+@event_handler(events.on_xgit_postdisplay)
 def _on_xgit_postdisplay(value: Any, XSH: XonshSession, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
-        setattr(builtins, "_", value)
+        builtins._ = value
         XSH.ctx["__"] = XSH.ctx.get("+")
         XSH.ctx["___"] = XSH.ctx.get("++")
 
@@ -134,8 +132,7 @@ def _xgit_count(*, XGIT: GitContext, **_):
         return next(counter)
 
 
-@events.on_precommand
-@session()
+@event_handler(events.on_precommand)
 def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     """
     Before running a command, save our temporary variables.
@@ -155,6 +152,6 @@ def _on_precommand(cmd: str,  XSH: XonshSession, **_):
             print("Clearing $ before command", file=sys.stderr)
         del XSH.ctx["$"]
     XSH.ctx["-"] = cmd.strip()
-    XSH.ctx["+"] = builtins._  # type: ignore # noqa
+    XSH.ctx["+"] = builtins._  # type: ignore
     XSH.ctx["++"] = XSH.ctx.get("__")
     XSH.ctx["+++"] = XSH.ctx.get("___")

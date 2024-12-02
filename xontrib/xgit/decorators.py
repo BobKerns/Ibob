@@ -4,9 +4,10 @@ Various decorators for xgit commands and functions.
 """
 
 from contextlib import suppress
+from collections.abc import Callable, MutableMapping, Sequence
 from typing import (
-    Any, MutableMapping, NamedTuple, Optional, Callable, Union,
-    cast, TypeVar, ParamSpec, Sequence
+    Any, NamedTuple, Optional, Union,
+    cast, TypeVar, ParamSpec,
 )
 from inspect import signature, Signature, Parameter
 from pathlib import Path
@@ -16,25 +17,21 @@ from xonsh.completers.tools import (
 )
 from xonsh.completers.completer import add_one_completer
 from xonsh.completers.path import (
-    complete_path,
     complete_dir as _complete_dir,
     _complete_path_raw
 )
 from xonsh.built_ins import XonshSession, XSH as GLOBAL_XSH
-from xonsh.events import events
+from xonsh.events import Event
 
 from xontrib.xgit.types import (
-    GitError, ObjectId, _NO_VALUE,
-    Directory, File, PythonFile,
+    GitError,
     KeywordInputSpecs,
 )
-from xontrib.xgit.ref_types import (
-    Branch, Tag, RemoteBranch, GitRef,
+from xontrib.xgit.context_types import GitContext
+from xontrib.xgit.invoker import (
+    CommandInvoker, PrefixCommandInvoker, SharedSessionInvoker,
+    EventInvoker,
 )
-from xontrib.xgit.context import GitContext, _GitContext
-from xontrib.xgit.invoker import CommandInvoker, PrefixCommandInvoker, SessionInvoker
-
-
 
 _exports: dict[str, Any] = {}
 """
@@ -56,7 +53,6 @@ def _export(cmd: Any | str, name: Optional[str] = None):
         name = getattr(cmd, "__name__", None)
     if name is None:
         raise ValueError("No name supplied and no name found in value")
-    old = _exports.get(name, _NO_VALUE)
     _exports[name] = cmd
     return cmd
 
@@ -75,9 +71,7 @@ def context(xsh: Optional[XonshSession] = GLOBAL_XSH) -> GitContext:
 F = TypeVar('F', bound=Callable)
 T =  TypeVar('T')
 P = ParamSpec('P')
-def session(
-    event_name: Optional[str] = None,
-    ):
+def session():
     '''
     Decorator to bind functions such as event handlers to a session.
 
@@ -87,22 +81,37 @@ def session(
     When the plugin is unloaded, the functions are turned into no-ops.
     '''
     def decorator(func: Callable[P,T]) -> Callable[...,T]:
-        invoker = SessionInvoker(func)
+        invoker = SharedSessionInvoker(func)
         return invoker.create_runner()
     return decorator
+
+def event_handler(event: Event):
+    '''
+    Decorator to bind functions as event handlers to a session.
+
+    They receive the session and context as as the keyword arguments:
+    XSH=xsh, XGIT=context
+
+    When the plugin is unloaded, the functions are turned into no-ops.
+    '''
+    def decorator(func: Callable[P,T]) -> Callable[...,T]:
+        return EventInvoker(event, func)
+    return decorator
+
 
 @contextual_completer
 @session()
 def complete_hash(context: CompletionContext, *, XGIT: GitContext) -> set[str]:
     return set(XGIT.objects.keys())
 
-@session()
-def complete_ref(prefix: str = "", *, XGIT: GitContext) -> ContextualCompleter:
+def complete_ref(prefix: str = "") -> ContextualCompleter:
     '''
     Returns a completer for git references.
     '''
+    
+    @session()
     @contextual_completer
-    def completer(context: CompletionContext) -> set[str]:
+    def completer(context: CompletionContext, /, XGIT: GitContext) -> set[str]:
         worktree = XGIT.worktree
         refs = worktree.git_lines("for-each-ref", "--format=%(refname)", prefix)
         return set(refs)
@@ -131,9 +140,6 @@ class CommandInfo(NamedTuple):
     alias_fn: Callable
     alias: str
     signature: Signature
-    # Below only in test hardness
-    _aliases = {}
-    _exports = []
 
 class InvocationInfo(NamedTuple):
     """
@@ -159,13 +165,15 @@ def nargs(p: Callable):
     Return the number of positional arguments accepted by the callable.
     """
     return len([p for p in signature(p).parameters.values()
-                if p.kind in {p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL}])
+                if p.kind in {p.POSITIONAL_ONLY,
+                              p.POSITIONAL_OR_KEYWORD,
+                              p.VAR_POSITIONAL}])
 
 def convert(p: Parameter, value: str) -> Any:
     if value == p.empty:
         return p.default
     t = p.annotation
-    if type(t) == type:
+    if type(t) is type:
         with suppress(Exception):
             return t(value)
     if t == Path or t == Union[Path, str]:
@@ -175,9 +183,10 @@ def convert(p: Parameter, value: str) -> Any:
             return t(value)
     return value
 
+_no_flags = {}
 def command(
     cmd: Optional[Callable] = None,
-    flags: KeywordInputSpecs = {},
+    flags: KeywordInputSpecs = _no_flags,
     for_value: bool = False,
     alias: Optional[str] = None,
     export: bool = False,
@@ -247,8 +256,10 @@ def prefix_command(alias: str):
 
     @contextual_completer
     def completer(ctx: CompletionContext):
-        if ctx.command:
-            if ctx.command.prefix.strip() == alias:
+        if (
+            ctx.command
+            and ctx.command.prefix.strip() == alias
+        ):
                 return set(prefix_cmd.subcommands.keys())
         return set()
     completer.__doc__ = f"Completer for {alias}"

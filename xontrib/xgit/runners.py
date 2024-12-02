@@ -15,18 +15,22 @@ them, to obtain shared data, such as calling signature.
 '''
 
 from types import MappingProxyType
-from typing import Callable, Generic, Mapping, TypeVar, Any, TYPE_CHECKING
+from Collections.abc import Mapping, abstractmethod
+from typing import Callable, Generic, TypeVar, Any, TYPE_CHECKING
 from inspect import Signature, stack
 
 import xonsh
+from xonsh.built_ins import XonshSession
 
 if TYPE_CHECKING:
     from xontrib.xgit.invoker import (
-        SessionInvoker, CommandInvoker, PrefixCommandInvoker,
+        SharedSessionInvoker, EventInvoker,  # noqa: F401
+        CommandInvoker, PrefixCommandInvoker,
+        BaseInvoker, BaseSessionInvoker, RunnerPerSessionInvoker,
     )
 
 from xontrib.xgit.types import (
-    _NO_VALUE, GitNoSessionException, GitValueError, ValueHandler, list_of,
+    GitNoSessionException, GitValueError, ValueHandler,
 )
 
 
@@ -37,7 +41,7 @@ def _h(s: str) -> str:
     return s.replace('_', '-')
 
 
-C = TypeVar('C', bound='SessionInvoker')
+C = TypeVar('C', bound='BaseInvoker')
 
 class Runner(Generic[C]):
     '''
@@ -51,7 +55,7 @@ class Runner(Generic[C]):
 
         PARAMETERS
         ----------
-        invoker: CommandInvoker
+        invoker: BaseInvoker
             The invoker that is used to invoke the command.
         _exclude: set[str]
             The names of the session variables that are excluded from the signature.
@@ -100,36 +104,68 @@ class Runner(Generic[C]):
         Removes the session variables from the command.
         '''
         pass
+    
 
-
-class SessionRunner(Runner['SessionInvoker']):
+BSR = TypeVar('BSR', bound='BaseSessionInvoker')
+class BaseSessionRunner(Runner['BSR']):
     '''
     A runner that is used to run a command that requires a session.
     '''
-    def __init__(self, invoker: 'SessionInvoker', /, *,
-                 _exclude: set[str] = set(),
+    def __init__(self, invoker: BSR, /,
                  **kwargs: Any):
         '''
         Initializes the runner with the given invoker.
 
         PARAMETERS
         ----------
-        invoker: CommandInvoker
+        invoker: BaseSessionInvoker
             The invoker that is used to invoke the command.
         _exclude: set[str]
             The names of the session variables that are excluded from the signature.
         '''
-        super().__init__(invoker,
-                         _exclude=_exclude,
-                         **kwargs)
+        super().__init__(invoker, **kwargs)
 
-        self.__exclude = _exclude
+    @property
+    @abstractmethod
+    def session_args(self) -> Mapping[str, Any]:
+        '''
+        The session arguments that are injected into the command.
+        '''
+        ...
 
+    def __call__(self, *args, **kwargs):
+        '''
+        Runs the command with the given arguments and keyword arguments.
+        '''
+        __tracebackhide__ = True
+        kwargs.update(self.session_args)
+        for key in self.exclude:
+            kwargs.pop(key, None)
+        return self.invoker(*args, **kwargs)
+    
+
+SSI = TypeVar('SSR', bound='SharedSessionInvoker')
+class SharedSessionRunner(BaseSessionRunner['SSI']):
+    '''
+    A runner that is used to run a command that requires a session.
+    '''
+    def __init__(self, invoker: SSI, /, **kwargs: Any):
+        '''
+        Initializes the runner with the given invoker.
+
+        PARAMETERS
+        ----------
+        invoker: SharedSessionInvoker
+            The invoker that is used to invoke the command.
+        _exclude: set[str]
+            The names of the session variables that are excluded from the signature.
+        '''
+        super().__init__(invoker, **kwargs)
 
     @property
     def session_args(self) -> Mapping[str, Any]:
         '''
-        The session arguments that are injected into the command.
+        Find the session arguments to inject into the command.
         '''
         for frame in stack():
             if 'XSH' in frame.frame.f_globals:
@@ -137,6 +173,8 @@ class SessionRunner(Runner['SessionInvoker']):
             elif 'XSH' in frame.frame.f_locals:
                 XSH = frame.frame.f_locals['XSH']
             else:
+                continue
+            if not isinstance(XSH, XonshSession):
                 continue
             if 'XGIT' in frame.frame.f_globals:
                 return {
@@ -150,14 +188,6 @@ class SessionRunner(Runner['SessionInvoker']):
                 }
         raise GitNoSessionException(self.__name__)
 
-    __exclude: set[str] = set()
-    @property
-    def exclude(self) -> set[str]:
-        '''
-        The names of the session variables that are excluded from the signature.
-        '''
-        return self.__exclude
-
     def __call__(self, *args, **kwargs):
         '''
         Runs the command with the given arguments and keyword arguments.
@@ -167,8 +197,76 @@ class SessionRunner(Runner['SessionInvoker']):
         for key in self.exclude:
             kwargs.pop(key, None)
         return self.invoker(*args, **kwargs)
+    
 
-class Command(SessionRunner):
+RPSI = TypeVar('RPSR', bound='RunnerPerSessionInvoker')
+
+class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
+    '''
+    A `Runner` that is used to run a function that requires a session, and which
+    can be registered per session. It is created and registered when the `Invoker`
+    is notified that the plugin has been loaded (which is when the session is
+    available).
+    '''
+    
+    def __init__(self, invoker: RPSI, /, **kwargs: Any):
+        '''
+        Initializes the runner with the given invoker.
+
+        PARAMETERS
+        ----------
+        invoker: RunnerPerSessionInvoker
+            The invoker that is used to invoke the command.
+        '''
+        super().__init__(invoker, **kwargs)
+        self.__session_args = None
+
+    __session_args: dict[str, Any]|None
+    @property
+    def session_args(self) -> Mapping[str, Any]:
+        '''
+        The session arguments that are injected into the command.
+        '''
+        if self.__session_args is None:
+            raise GitNoSessionException(self.__name__)
+        return MappingProxyType(self.__session_args)
+    
+    def inject(self, /,
+               **session_args: Any) -> None:
+        '''
+        Injects the session variables into the command.
+        '''
+        self.__session_args = session_args
+
+    def uninject(self) -> None:
+        '''
+        Removes the session variables from the command.
+        '''
+        self.__session_args = None
+        
+    def __call__(self, *args, **kwargs):
+        '''
+        Runs the command with the given arguments and session arguments.
+        '''
+        __tracebackhide__ = True
+        kwargs.update(self.session_args)
+        return self.invoker(*args, **kwargs)
+    
+
+class EventRunner(RunnerPerSessionRunner['EventInvoker']):
+    '''
+    A runner that is used to run an event that requires a session.
+    '''
+    
+    def uninject(self) -> None:
+        '''
+        Removes the session variables from the command.
+        '''
+        self.__session_args = None
+
+
+
+class Command(RunnerPerSessionRunner['CommandInvoker']):
     '''
     A command that can be invoked with the command-line calling sequence rather than
     the python one. This translates the command-line arguments (strings) into the
@@ -195,38 +293,23 @@ class Command(SessionRunner):
         '''
         super().__init__(invoker,
                         **kwargs)
-        self.__session_args = None
         self.__for_value = invoker.for_value
 
 
-    __session_args: dict[str, Any]|None
-    @property
-    def session_args(self) -> Mapping[str, Any]:
-        '''
-        The session arguments that are injected into the command.
-        '''
-        if self.__session_args is None:
-            raise GitNoSessionException(self.__name__)
-        return MappingProxyType(self.__session_args)
-
     __value_handler: ValueHandler
-    def inject(self, /, *, value_handler: ValueHandler=lambda x:x, **session_args: Any) -> None:
+    def inject(self, /, *,
+               value_handler: ValueHandler=lambda x:x,
+               **session_args: Any) -> None:
         '''
         Injects the session variables into the command.
         '''
+        super().inject(**session_args)
         self.__value_handler = value_handler
-        self.__session_args = session_args
-
-    def uninject(self) -> None:
-        '''
-        Removes the session variables from the command.
-        '''
-        self.__session_args = None
+        
 
     def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
         '''
         Invokes the command with the given arguments and keyword arguments.
-
         '''
         __tracebackhide__ = True
 
@@ -235,7 +318,6 @@ class Command(SessionRunner):
             return
 
         kwargs.update(self.session_args)
-
         split = self.invoker.extract_keywords(args)
         return self.__value_handler(self.invoker(*split.args,
                                                  **split.kwargs,
@@ -252,14 +334,6 @@ class PrefixCommand(Command):
 
     We could use the bound method directly, but that won't allow setting the signature.
     '''
-
-    __invoker: 'PrefixCommandInvoker'
-    @property
-    def invoker(self) -> 'PrefixCommandInvoker':
-        '''
-        The invoker that is used to invoke the command.
-        '''
-        return self.__invoker
 
     __subcommands: Mapping[str, 'Command']
     @property
@@ -278,7 +352,7 @@ class PrefixCommand(Command):
 
         PARAMETERS
         ----------
-        invoker: Invoker
+        invoker: PrefixCommandInvoker
             The invoker that is used to invoke the command.
         subcommands: MappingProxyType[str, CommandInvoker]
             The subcommands that are available to the prefix
@@ -287,8 +361,8 @@ class PrefixCommand(Command):
         '''
         super().__init__(invoker,
                         **kwargs)
-        self.__invoker = invoker
         self.__subcommands = subcommands
+
 
     def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
         '''
@@ -296,12 +370,10 @@ class PrefixCommand(Command):
 
         '''
         __tracebackhide__ = True
-        subcmd_name = args[0]
+        subcmd_name = args.pop(0)
 
         if subcmd_name not in self.subcommands:
             raise GitValueError(f"Invalid subcommand: {subcmd_name}")
-        for key in self.__exclude:
-            kwargs.pop(key, None)
         subcmd = self.subcommands[subcmd_name]
 
-        return subcmd(args[1:], **kwargs)
+        return subcmd(args, **kwargs)

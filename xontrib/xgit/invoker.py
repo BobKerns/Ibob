@@ -2,28 +2,30 @@
 Utilities for invoking commands based on their signatures.
 '''
 
-from collections.abc import Sequence
+from collections.abc import Sequence, abstractmethod
 from itertools import chain
-from os import name
+
 import sys
 from types import MappingProxyType
 from typing import (
-    IO, Any, Callable, Literal, MutableMapping, NamedTuple, Optional,
+    IO, Any, Callable, Literal, NamedTuple, Optional,
 )
+from collections.abc import MutableMapping
 from inspect import Parameter, Signature
 
 from xonsh.built_ins import XonshSession
-from xonsh.events import events
+from xonsh.events import Event, events
 from xonsh.completers.tools import (
-    contextual_completer, ContextualCompleter, CompletionContext,
+    contextual_completer, CompletionContext,
 )
 from xonsh.completers.completer import add_one_completer
 
 from xontrib.xgit.types import (
-    GitNoSessionException, GitValueError, KeywordSpec, KeywordSpecs,
-    KeywordInputSpec, KeywordInputSpec, KeywordInputSpecs,
+    GitValueError, KeywordSpec, KeywordSpecs,
+    KeywordInputSpec, KeywordInputSpecs,
     list_of,
 )
+from xontrib.xgit.decorators import session
 from xontrib.xgit.conversion_mgr import ArgTransform
 import xontrib.xgit.runners as run
 
@@ -84,7 +86,10 @@ class BaseInvoker:
         try:
             return self.__function(*args, **kwargs)
         except TypeError as e:
-            if e.__traceback__ and e.__traceback__.tb_frame.f_locals.get('self') is self:
+            if (
+                e.__traceback__ and
+                e.__traceback__.tb_frame.f_locals.get('self') is self
+            ):
                 raise ArgumentError(str(e)) from None
             raise
 
@@ -212,15 +217,21 @@ class SimpleInvoker(BaseInvoker):
                 case '+', str(k), False:
                     if len(args) == 0:
                         raise ArgumentError(f"Missing argument for {arg}")
-                    l = [args.pop(0)]
-                    while args and not (isinstance(args[0], str) and args[0].startswith("-")):
-                        l.append(args.pop(0))
-                    to[k] = l
+                    argl1 = [args.pop(0)]
+                    while (
+                        args
+                        and not (isinstance(args[0], str) and args[0].startswith("-"))
+                    ):
+                       argl1.append(args.pop(0))
+                    to[k] = argl1
                 case '*', str(k), False:
-                    l = []
-                    while args and not (isinstance(args[0], str) and args[0].startswith("-")):
-                        l.append(args.pop(0))
-                    to[k] = l
+                    argl2 = []
+                    while (
+                        args
+                        and not (isinstance(args[0], str) and args[0].startswith("-"))
+                    ):
+                        argl2.append(args.pop(0))
+                    to[k] = argl2
                 case _:
                     raise ValueError(f"Invalid flag usage: {arg} {n!r}")
         while args:
@@ -240,10 +251,13 @@ class SimpleInvoker(BaseInvoker):
                         else:
                             consume_kw_args(k, (1, k), to=s.extra_kwargs)
                     else:
-                        if arg.startswith("--no-") and ((n := flags.get(key := arg[5:])) is not None):
+                        if (
+                            arg.startswith("--no-")
+                            and ((n := flags.get(key := arg[5:])) is not None)
+                        ):
                             consume_kw_args(arg, n, negate=True)
                         elif ((n:= flags.get(key := arg[2:])) is not None):
-                            consume_kw_args(arg, n)
+                            consume_kw_args(key, n)
                         elif arg.startswith("--no-"):
                             s.extra_kwargs[_u(arg[5:])] = False
                         else:
@@ -317,6 +331,7 @@ class Invoker(SignatureInvoker, SimpleInvoker):
         self.__flags_with_signature = flags
         return flags
 
+
     def __init__(self,
                  cmd: Callable,
                  name: Optional[str] = None, /, *,
@@ -327,28 +342,24 @@ class Invoker(SignatureInvoker, SimpleInvoker):
                          flags=flags,
                          **kwargs)
         self.__flags_with_signature = None
+        
 
-class SessionInvoker(Invoker):
+class BaseSessionInvoker(Invoker):
     '''
-    An invoker that handles creating runners with session variables.
+    An invoker that handles creating runners with session variables. This divides
+    into two types: `RunnerPerSessionInvoker` and `SharedSessionInvoker`.
+    
+    `RunnerPerSessionInvoker` creates a new runner for each session, and registers
+    it within the session. This is the preferred protocol, where there is not an
+    exclusive value for a global variable, such as `sys.displayhook`.displayhook
+    
+    The alternative, `SharedSessionInvoker`, creates a single runner that is shared
+    in all sessions. It retrieves the session variables from from inspecting its
+    context. This typically involves searching up the stack to find the session
+    variables.
     '''
-    def create_runner(self, /,
-               **kwargs) -> run.SessionRunner:
-        '''
-        Creates a runner with the given session variables.
-
-        PARAMETERS
-        ----------
-        _export: Callable[[Any,str|None],None]
-            The function that is used to export the invoker.
-        '''
-        return run.SessionRunner(self, **kwargs)
-
-
-    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
-        pass
-
-
+    
+    
     __runner_signature: Signature|None = None
     @property
     def runner_signature(self) -> Signature:
@@ -359,32 +370,178 @@ class SessionInvoker(Invoker):
             self.__runner_signature = self._runner_signature()
         return self.__runner_signature
 
-    def _runner_signature(self) -> Signature:
-        return self.signature
 
+    def _runner_signature(self) -> Signature:
+        '''
+        Compute the `Signature` of the `Runner` that is created by the `Invoker`.
+        
+        The default is to use the `Invoker`'s signature, but this can be overridden.
+        '''
+        return self.signature
+    
+    
+    @abstractmethod
+    def create_runner(self, /, **kwargs) -> run.SessionRunner:
+        '''
+        Creates a `Runner` for this `Invoker`.
+        '''
+        ...
+        
+        
+    @abstractmethod
+    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+        '''
+        Injects session variables into the `Runner`. In subclasses where the
+        `Invoker` is notified of the session variables, this method should be
+        overridden to perform the injections.
+        
+        In subclasses where the `Runner` is shared (cannot be per-session),
+        the `Runner` is responsible for discovering the session variables,
+        and this method should do nothing.
+        
+        PARAMETERS
+        ----------
+        runner: run.Runner
+            The runner to be injected.
+        session_vars: dict[str, Any]
+            The session variables to be injected.
+        '''
+        ...
+        
+        
     def __call__(self, /, *args: Any,
-                stdout: IO[str]=sys.stdout,
-                stderr: IO[str]=sys.stderr,
-                stdin: IO[str]=sys.stdin,
+                stdout: Optional[IO[str]]=None,
+                stderr: Optional[IO[str]]=None,
+                stdin: Optional[IO[str]]=None,
                 **kwargs: Any) -> Any:
         '''
-        Invokes the command with the given arguments and keyword arguments.
+        Invokes the function with the given arguments and keyword arguments.
+        
+        We supply `stdin`, `stdout`, and `stderr` as keyword arguments, if the
+        underlying function accepts them explicitly.
 
         '''
         __tracebackhide__ = True
 
         params = self.signature.parameters
         if 'stdout' in params:
-            kwargs['stdout'] = stdout
+            kwargs['stdout'] = stdout or sys.stdout
         if 'stderr' in params:
-            kwargs['stderr'] = stderr
+            kwargs['stderr'] = stderr or sys.stderr
         if 'stdin' in params:
-            kwargs['stdin'] = stdin
+            kwargs['stdin'] = stdin or sys.stdin
 
         result = super().__call__(*args, **kwargs)
         return result
+    
 
-class CommandInvoker(SessionInvoker):
+class SharedSessionInvoker(BaseSessionInvoker):
+    '''
+    An invoker that handles creating runners with session variables.
+    '''
+    
+    @abstractmethod
+    def create_runner(self, /, **kwargs) -> run.SharedSessionRunner:
+        '''
+        Creates a runner for this `Invoker`.
+
+        PARAMETERS
+        ----------
+        kwargs: dict[str, Any]
+            `Invoker`-specific keyword arguments.
+        '''
+        return run.SharedSessionRunner(self, **kwargs)
+
+
+    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+        '''
+        In `SharedSessionInvoker`, the `Runner` is responsible for discovering
+        the session variables on the fly, so this method should do nothing.
+        
+        PARAMETERS
+        ----------
+        runner: run.Runner
+            The runner to be injected.
+        session_vars: dict[str, Any]
+            The session variables to be injected.
+        '''
+        pass
+
+    
+class RunnerPerSessionInvoker(BaseSessionInvoker):
+    '''
+    An invoker that creates a new runner for each session.
+    '''
+    
+    def __init__(self, cmd: Callable, name: Optional[str] = None, /, ** kwargs):
+        super().__init__(cmd, name, **kwargs)
+        self._register_invoker()
+    
+    
+    def inject(self, /, **session_vars: Any):
+        '''
+        Injects session variables into the `Invoker`.  In subclasses of
+        `RunnerPerSessionInvoker`, this method this method creates a new
+        `Runner` for each session, and injects the session variables into
+        `Runner`.
+        '''
+        runner = self.create_runner(invoker=self, name=self.name)
+        self._perform_injections(runner, **session_vars)
+        self._register_runner(runner, **session_vars)
+    
+    
+    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+        '''
+        Injects session variables into the `Runner`. By default, this is
+        delegated to the `Runner` itself.
+        '''
+        runner.inject(**session_vars)
+        
+        
+    @abstractmethod
+    def _register_invoker(self, *args, **kwargs):
+        '''
+        Registers to be notified of the session
+        '''
+        # Pytest fails setting a verify attribute on a bound method, so use
+        # a real function.
+        def on_load(**session_args):
+            self.inject(**session_args)
+        events.on_xgit_load(on_load)
+    
+    
+    @abstractmethod
+    def _register_runner(self, runner: run.Runner, /, **session_vars: Any):
+        '''
+        Registers the `Runner` with the session.
+        '''
+        ...
+
+
+class EventInvoker(RunnerPerSessionInvoker):
+    _event: Event
+    @property
+    def event(self) -> Event:
+        '''
+        The event that the invoker registers with.
+        '''
+        return self._event
+        
+    def create_runner(self, /, **kwargs) -> run.SessionRunner:
+        return run.EventRunner(self, event=self.event, **kwargs)
+        
+    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+        return super()._perform_injections(runner, **session_vars)
+        self.__event(runner)     
+    
+    def __init__(self, event: Event, cmd: Callable,
+                    name: Optional[str] = None, /,
+                    **kwargs):
+        self._event = event
+        super().__init__(cmd, name,  **kwargs)
+    
+
+class CommandInvoker(RunnerPerSessionInvoker):
     '''
     An invoker that can handle more complex argument parsing that
     involves type checking, name-matching, and conversion.
@@ -418,32 +575,20 @@ class CommandInvoker(SessionInvoker):
                  export: Optional[Callable[[Any,str|None],None]] = None,
                  flags: Optional[KeywordInputSpecs] = None,
                  for_value: bool = False,
-                 exclude: set[str] = set(),
                  **kwargs):
         super().__init__(cmd, name,
                          flags=flags,
                          **kwargs)
         self.__arg_transforms = {}
-        self.__exclude = exclude
         self.__for_value = for_value
-        def on_load(**session_args):
-            self.inject(**session_args)
-        events.on_xgit_load(on_load)
         self.__export = export
 
-    def inject(self, /, **session_vars: Any):
-        '''
-        Injects session variables into the invoker.
-        '''
-        runner = self.create_runner(invoker=self, name=self.name)
-        self._perform_injections(runner, **session_vars)
-
-    def _perform_injections(self, runner: run.Runner, /, *, XSH: XonshSession,  **session_vars: Any):
+    def _perform_injections(self, runner: run.Runner, /, *,
+                            XSH: XonshSession,
+                            **session_vars: Any):
         '''
         Injects session variables into the runner.
         '''
-        aliases = XSH.aliases
-        assert isinstance(aliases, MutableMapping)
         ctx = XSH.ctx
 
         for_value = self.__for_value
@@ -461,7 +606,21 @@ class CommandInvoker(SessionInvoker):
             if key not in sig.parameters:
                 s_vars.pop(key, None)
         runner.inject(value_handler=value_handler, **s_vars)
+        
+    def _register_runner(self, runner: run.Runner, /, *,
+                        XSH: XonshSession,
+                        **session_vars: Any):
+        '''
+        Registers the `Runner` (`Command`) with the session:
+        * Adds the `Command` to the aliases.
+        * Adds the `Command` to the unload event.
+        * Calls the export function to export the `Command` function into the
+          session.
+        '''
+        aliases = XSH.aliases
+        assert isinstance(aliases, MutableMapping)
         aliases[self.name] = runner
+        
         unexport: Callable|None = None
         export = self.__export
         if export is not None:
@@ -474,6 +633,13 @@ class CommandInvoker(SessionInvoker):
         events.on_xgit_unload(on_unload)
 
     def _runner_signature(self) -> Signature:
+        '''
+        The signature of the `Runner` that is created by the `Invoker`.
+        
+        For commands, the `Runner` signature is quite different from the `Invoker`.
+        We do our best to capture the `Command`'s signature, including the parsed
+        string arguments and the session variables.
+        '''
         sig: Signature = self.signature
         params = [
             p.annotation|str for p in sig.parameters.values()
@@ -496,7 +662,8 @@ class CommandInvoker(SessionInvoker):
 
         params = tuple(chain(keywords, params))
         # list_of is a workaround python 3.10.
-        args = Parameter('args', Parameter.POSITIONAL_ONLY, annotation=list_of(params))
+        args = Parameter('args', Parameter.POSITIONAL_ONLY,
+                         annotation=list_of(params))
 
         return Signature([args, *session_keywords],
                         return_annotation=sig.return_annotation)
@@ -523,27 +690,6 @@ class CommandInvoker(SessionInvoker):
         '''
         return self.__exclude
 
-    def __call__(self, *args: Any,
-                 stderr: IO[str]=sys.stderr,
-                 stdout: IO[str]=sys.stdout,
-                 stdin: IO[str]=sys.stdin,
-                 **kwargs: Any) -> Any:
-        '''
-        Invokes the command with the given arguments and keyword arguments.
-
-        '''
-        __tracebackhide__ = True
-
-        params = self.signature.parameters
-        if 'stdout' in params:
-            kwargs['stdout'] = stdout
-        if 'stderr' in params:
-            kwargs['stderr'] = stderr
-        if 'stdin' in params:
-            kwargs['stdin'] = stdin
-
-        result = super().__call__(*args, **kwargs)
-        return result
 
 
 class PrefixCommandInvoker(CommandInvoker):
@@ -584,33 +730,26 @@ class PrefixCommandInvoker(CommandInvoker):
         def subcommands(self) -> MappingProxyType[str, CommandInvoker]:
             return MappingProxyType(self.__subcommands)
 
-    def create_runner(self, /, *,
-               _export: Callable[[Any,str|None],None],
-               **kwargs) -> run.PrefixCommand:
+    def create_runner(self, /,
+                    **kwargs) -> run.PrefixCommand:
+        '''
+        Creates a `PrefixCommand` runner, and all its subcommands.
+        '''
+        def create_and_inject(invoker: CommandInvoker):
+            runner = invoker.create_runner(**kwargs)
+            invoker._perform_injections(runner, **kwargs)
+            # But don't register this runner
+            return runner
+        
         subcommands = {
-            k: invoker.create_runner(**kwargs)
+            k: create_and_inject(invoker)
             for k, invoker in self.subcommands.items()
         }
-        command = run.PrefixCommand(self,
+    
+        return run.PrefixCommand(self,
                                  subcommands=subcommands,
                                  exclude=self.exclude,
                                  **kwargs)
-
-        if _export is not None:
-            _export(self, self.function.__name__)
-
-        return command
-
-    def inject(self ,/, **session_vars: Any) -> None:
-        '''
-        Injects session variables into the invoker.
-        '''
-        # This is the wrong place to inject this; it needs to be per-registered-completer.
-
-        @contextual_completer
-        def completer_subcommands(ctx: CompletionContext):
-            return self._complete_subcommands(ctx)
-        add_one_completer(self.name, completer_subcommands, 'start')
 
     def _complete_subcommands(self, ctx: CompletionContext) -> set[str]:
         '''
@@ -631,18 +770,24 @@ class PrefixCommandInvoker(CommandInvoker):
         prefix = cmd_ctx.prefix
         if self.prefix.startswith(prefix):
             return {self.prefix}
-        return {f'{self.prefix} {k}' for k in self.subcommands.keys()}
+        return {f'{self.prefix} {k}' for k in self.subcommands}
 
     def __init__(self,
                  cmd: Callable, /,
                  prefix: str,
                  flags: Optional[KeywordInputSpecs] = None,
                  **kwargs):
+        self.__prefix = prefix
+        self.__subcommands = {}
         super().__init__(cmd, prefix,
                          flags=flags,
                          **kwargs)
-        self.__prefix = prefix
-        self.__subcommands = {}
+        
+        @contextual_completer
+        @session
+        def completer_subcommands(ctx: CompletionContext):
+            return self._complete_subcommands(ctx)
+        add_one_completer(self.name, completer_subcommands, 'start')
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''
