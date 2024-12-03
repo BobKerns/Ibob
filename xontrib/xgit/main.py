@@ -17,7 +17,6 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from collections.abc import MutableMapping
-from collections.abc import Callable
 import sys
 
 from xonsh.built_ins import XonshSession
@@ -30,9 +29,6 @@ from xontrib.xgit.decorators import (
     session,
 )
 from xontrib.xgit.display import (
-    _on_xgit_predisplay,
-    _on_xgit_postdisplay,
-    _on_precommand,
     _xonsh_displayhook,
     _xgit_displayhook,
 )
@@ -168,17 +164,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     sys.displayhook = _xonsh_displayhook
 
-    def remove(event: str, func: Callable):
-        try:
-            getattr(events, event).remove(func)
-        except ValueError:
-            pass
-        except KeyError:
-            pass
-
-    remove("on_precommand", _on_precommand)
-    remove("on_xgit_predisplay", _on_xgit_predisplay)
-    remove("on_xgit_postdisplay", _on_xgit_postdisplay)
     env = xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
@@ -190,9 +175,12 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         print("Unloaded xontrib-xgit", file=sys.stderr)
     if 'xgit.version' in prompt_fields:
         del prompt_fields['xgit.version']
+        
+    events.on_xgit_unload.fire(XSH=xsh, XGIT=xsh.env['XGIT'])
 
     for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
         del sys.modules[m]
+
     return dict()
 
 if __name__ == "__main__" and False:  # noqa: SIM223

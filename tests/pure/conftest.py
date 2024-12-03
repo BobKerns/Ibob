@@ -6,7 +6,7 @@ from contextlib import contextmanager, AbstractContextManager
 from typing import (
     Any, Callable, NamedTuple, TypeVar, Optional,
 )
-from collections.abc import Generator
+from collections.abc import Generator, MutableMapping
 import pytest
 
 from xontrib.xgit.types import GitNoSessionException
@@ -22,7 +22,7 @@ def lock_out_impure(test_lock):
 R = TypeVar('R')
 
 @pytest.fixture()
-def run_command() -> Callable[..., AbstractContextManager[tuple]]:
+def run_command(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
     '''
     Create a command.
     '''
@@ -54,10 +54,11 @@ def run_command() -> Callable[..., AbstractContextManager[tuple]]:
             exports[name] = func
         invoker = invoker_class(function, function.__name__,
                                 flags=flags,
-                                aliases=aliases,
                                 export=_export,
                                 )
-        from xonsh.built_ins import XSH
+        XSH = xonsh_session
+        aliases = XSH.aliases
+        assert isinstance(aliases, MutableMapping)
         from xonsh.events import events
         if session_args is None:
             session_args = {
@@ -65,10 +66,10 @@ def run_command() -> Callable[..., AbstractContextManager[tuple]]:
                 'XGIT': _GitContext(XSH),
             }
         runner = invoker.create_runner(
-            _aliases=aliases,
             _export=_export,
             _EXTRA='foo',)
-        invoker._perform_injections(runner, **session_args)
+        invoker._perform_injections(runner, **session_args) 
+        invoker._register_runner(runner, **session_args)
         if expect_no_session_exception:
             with pytest.raises(GitNoSessionException):
                 runner(*args, **kwargs)
@@ -82,8 +83,8 @@ def run_command() -> Callable[..., AbstractContextManager[tuple]]:
                            result=None,
                         )
                 return
+        #events.on_xgit_loaded.fire(XSH=XSH)
         result = runner(*args, **kwargs)
-        events.on_xgit_loaded.fire(XSH=XSH)
         yield CommandSetup(
                            function=function,
                            invoker=invoker,
@@ -96,9 +97,10 @@ def run_command() -> Callable[..., AbstractContextManager[tuple]]:
         assert result == expected
         assert '_EXTRA' not in runner.session_args
         if issubclass(invoker_class, CommandInvoker):
-            assert _h(function.__name__) in aliases
+            name = runner.invoker.name
+            assert name in aliases
             if _export is not None:
                 assert _u(function.__name__) in exports
-        runner.uninject()
-        assert aliases == {}, 'Cleanup failed: aliases not empty'
+            events.on_xgit_unload.fire(XSH=XSH)
+            assert name not in aliases, 'Cleanup failed: alias not removed'
     return run_command_

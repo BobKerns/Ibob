@@ -115,6 +115,7 @@ class TableView(MultiView[T,K,X,Rcv]):
         '''
         self.__collect_columns(self._target_value)
         return self.__columns
+    
     @_columns.setter
     def _columns(self, value):
         self.__columns = value
@@ -181,7 +182,7 @@ class TableView(MultiView[T,K,X,Rcv]):
 
     @_column_extractor.setter
     def _column_extractor(self, value: Optional[ExtractorFnMulti[T,K,X]]):
-        self.x__column_extractor = value
+        self.__column_extractor = value
 
     def __init__(self, target: T|_NoValue=_NO_VALUE,
                 columns: Optional[ColumnDict] = None,
@@ -200,7 +201,7 @@ class TableView(MultiView[T,K,X,Rcv]):
         :param columns: The columns to use.
         '''
         super().__init__(target, **kwargs)
-        self._column_extractor = column_extractor
+        self.__column_extractor = column_extractor
         self.__columns = columns or {}
         self.__order = order or []
         self._heading_strategy = heading_strategy

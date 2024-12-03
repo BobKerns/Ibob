@@ -227,7 +227,9 @@ class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
         '''
         Injects the session variables into the command.
         '''
-        self.__session_args = session_args
+        sig = self.signature
+        self.__session_args = {k:v for k,v in session_args.items()
+                                 if k in sig.parameters}
 
     def uninject(self) -> None:
         '''
@@ -254,6 +256,7 @@ class EventRunner(RunnerPerSessionRunner['EventInvoker']):
         Removes the session variables from the command.
         '''
         self.__session_args = None
+        self.__event.discard(self)
 
 
 

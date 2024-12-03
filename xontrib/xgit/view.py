@@ -304,12 +304,27 @@ class View(Generic[T, Rcv]):
             p = getattr(t, name, None)
             if p is not None and hasattr(p, '__get__'):
                 return p.__get__(self)
+        if (
+            name.startswith('_')
+            and not name.endswith('_')
+            and '__' not in name
+        ):
+            # This is a private attribute of the view
+            # That we got here means the attribute was not found.
+            raise AttributeError(f'Attribute {name} not found on view {t.__name__}')
         return getattr(self._target, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if hasattr(self.__class__, name):
             super().__setattr__(name, value)
             return
+        if (
+            name.startswith('_')
+            and not name.endswith('__')
+            and '__' in name
+        ):
+            # This is a private attribute of the view
+            return super().__setattr__(name, value)
         setattr(self._target, name, value)
 
     def __getitem__(self, key: Any) -> Any:
