@@ -180,9 +180,6 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         
     events.on_xgit_unload.fire(XSH=xsh, XGIT=xsh.env['XGIT'])
 
-    for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
-        del sys.modules[m]
-
     return dict()
 
 if __name__ == "__main__" and False:  # noqa: SIM223

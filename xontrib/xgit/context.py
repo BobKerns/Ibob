@@ -359,7 +359,7 @@ class _GitContext(_GitCmd, GitContext):
             case str() | Path():
                 self.open_worktree(value)
             case _:
-                raise GitValueError(f"Invalid worktree: {value}")
+                raise GitValueError(f"estInvalid worktree: {value}")
             
 
     __repository: GitRepository|None

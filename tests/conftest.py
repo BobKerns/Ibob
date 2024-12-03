@@ -1,6 +1,5 @@
 
 from contextlib import contextmanager
-from inspect import currentframe, stack
 from threading import RLock, Lock
 from types import ModuleType as Module
 import pytest
@@ -17,36 +16,6 @@ def run_stdout(args, **kwargs):
     from subprocess import run, PIPE
     return run(args, check=True, stdout=PIPE, text=True, **kwargs).stdout
 
-def cleanup(target: dict[str, Any],
-            before: dict[str, Any],
-            loaded: dict[str, Any],
-            after: dict[str, Any]):
-    '''
-    Undo additions and deletions, while preserving modifications.
-    '''
-    all_vars = after.keys() | loaded.keys() | before.keys()
-    for k in all_vars:
-        if k in after and k not in loaded:
-            # This is a variable that was added by the test
-            pass
-        elif k in after and k in loaded and (after[k] is not loaded[k]):
-            # This is a variable that was modified by the test
-            pass
-        elif k not in after and k in loaded:
-            # This is a variable that was deleted by the test
-            pass
-        elif k not in before and k in loaded:
-            # This is a variable that was added by the fixture
-            del target[k]
-        elif k in before and k not in loaded:
-            # This is a variable that was deleted by the fixture
-            target[k] = before[k]
-        elif k in before and k in loaded and (before[k] is not loaded[k]):
-            # This is a variable that was modified by the fixture
-            target[k] = before[k]
-        else:
-            # This is a variable that was not touched by either
-            pass
 
 @pytest.fixture()
 def sysdisplayhook(with_events):
@@ -83,42 +52,24 @@ def modules():
     The module, and any modules it load, will be unloaded afterwards.
     """
     with modules_lock:
-        existing_outer_modules = dict(sys.modules)
         @contextmanager
         def modules(*mod_names: str):
             with modules_lock:
-                top = currentframe() or stack()[0].frame
-                frame = top.f_back
-                assert frame is not None
-                frame = frame.f_back
-                assert frame is not None
-                f_globals = frame.f_globals
-                before_inner_modules = dict(sys.modules)
-                before = dict(f_globals)
                 mods = [import_module(m) for m in mod_names]
-                loaded_inner_modules = dict(sys.modules)
                 kwargs = {
                     k:v
                     for m in reversed(mods)
                     for k,v in m.__dict__.items()
                 }
-                f_globals.update(kwargs)
-                loaded = dict(f_globals)
                 try:
                     yield LoadedModules(modules=mods, variables=kwargs)
                 finally:
-                    after = dict(f_globals)
-                    after_inner_modules = dict(sys.modules)
-                    cleanup(f_globals, before, loaded, after)
-                    cleanup(sys.modules, before_inner_modules,
-                            loaded_inner_modules,
-                            after_inner_modules)
+                    pass
 
         try:
             yield modules
         finally:
-            sys.modules.clear()
-            sys.modules.update(existing_outer_modules)
+            pass
 
 @pytest.fixture(autouse=True)
 def debug_env(monkeypatch  ):
