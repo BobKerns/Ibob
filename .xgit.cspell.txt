@@ -8,6 +8,7 @@ autouse
 blist
 Blobish
 bobkerns
+bname
 bset
 bstring
 Canonicalizes

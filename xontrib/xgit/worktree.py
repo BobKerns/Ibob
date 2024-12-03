@@ -4,6 +4,7 @@ Worktree implementation.
 
 from pathlib import Path, PurePosixPath
 from typing import cast
+from contextlib import suppress
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -113,7 +114,9 @@ class _GitWorktree(_GitCmd, GitWorktree):
             self.prunable = prunable
 
     def to_json(self, describer: JsonDescriber):
-        branch = self.branch.name if self.branch else None
+        branch = None
+        with suppress(GitNoBranchException):
+            branch = self.branch.name
         return cast(JsonData,{
             "repository": str(self.repository.path),
             "repository_path": str(self.repository_path),
@@ -153,7 +156,10 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 p.break_()
                 p.text(f".path: {self.path}")
                 p.break_()
-                p.text(f"..branch: {shorten_branch(self.branch)}")
+                branch = '(None)'
+                with suppress(GitNoBranchException):
+                    branch = self.branch.name
+                p.text(f".branch: {shorten_branch(branch)}")
                 p.break_()
                 p.text(f"commit: {self.commit.hash[:14]}")
                 with p.indent(2):

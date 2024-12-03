@@ -2,7 +2,6 @@
 Tests for the display module.
 """
 
-import re
 
 def test_display_loads(modules):
     with modules('xontrib.xgit.display') as ((m_display,), vars):

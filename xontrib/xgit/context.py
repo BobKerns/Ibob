@@ -538,6 +538,11 @@ class _GitContext(_GitCmd, GitContext):
 
 
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
+        def bname(obj):
+            with suppress(GitNoBranchException):
+                return shorten_branch(obj.branch.name)
+            return '(None)'
+        
         if cycle:
             p.text(f"GitContext({self.worktree} {self.path}")
         else:
@@ -570,7 +575,7 @@ class _GitContext(_GitCmd, GitContext):
                                 p = relative_to_home(wt.repository.path)
                                 p.text(f".repository.path (shared): {p}")
                         p.break_()
-                        p.text(f".branch: {shorten_branch(wt.branch)}")
+                        p.text(f".branch: {bname(wt)}")
                         p.break_()
                         p.text(f".commit: {wt.commit.hash[:14]}")
                     except GitNoWorktreeException:
@@ -584,7 +589,7 @@ class _GitContext(_GitCmd, GitContext):
                     p.break_()
                     p.text(f".path: {self.path}")
                     p.break_()
-                    p.text(f".branch: {shorten_branch(self.branch)}")
+                    p.text(f".branch: {bname(self)}")
                     p.break_()
                     p.text(f".commit: {self.commit.hash[:14]}")
                     with p.group(2):
