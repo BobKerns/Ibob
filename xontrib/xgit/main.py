@@ -26,14 +26,18 @@ from xonsh.execer import Execer
 from xontrib.xgit.decorators import (
     _exports,
     _export,
-    session,
+    event_handler,
 )
 from xontrib.xgit.display import (
     _xonsh_displayhook,
     _xgit_displayhook,
 )
 import xontrib.xgit.context as ct
-from xontrib.xgit.types import GitDirNotFoundError, GitException
+from xontrib.xgit.types import (
+    GitNoWorktreeException, GitNoRepositoryException,
+    WorktreeNotFoundError, RepositoryNotFoundError,
+)
+from xontrib.xgit.utils import print_if
 
 # Export the functions and values we want to make available.
 
@@ -46,7 +50,7 @@ _export(None, "___")
 _export("_xgit_counter")
 
 _xgit_version: str = ""
-def xgit_version():
+def     xgit_version():
     """
     Return the version of xgit.
     """
@@ -79,29 +83,27 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         f"XSH.env is not a MutableMapping: {env!r}"
     # Set the context on loading.
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
-    @events.on_chdir
-    @session()
+    
+    @event_handler(events.on_chdir)
     def update_git_context(olddir, newdir,
                            XSH: XonshSession,
-                           XGIT,
-                           stderr=sys.stderr,
+                           XGIT: ct.GitContext,
                            **_):
         """
         Update the git context when changing directories.
         """
-
-        newpath = Path(newdir)
-        path = newpath
-        try:
-            while path != path.parent:
-                if path.suffix == ".git" or path.name == ".git":
-                    XGIT.open_repository(path)
-                    return
-                if (path / ".git").exists():
-                    XGIT.open_worktree(path)
-                    return
-        except Exception as ex:
-            raise GitException(F"Failed to open worktree at {newpath}") from ex
+        pr = print_if('CD_CHANGE', XSH=xsh)
+        newdir = Path(newdir)
+        with suppress(GitNoWorktreeException, WorktreeNotFoundError):
+            XGIT.open_worktree(newdir)
+            pr(f"XGIT: Opened worktree {newdir}")
+            return
+        with suppress(GitNoRepositoryException, RepositoryNotFoundError):
+            XGIT.open_repository(newdir)
+            pr(f"XGIT: Opened repository {newdir}")
+            return
+        XGIT.repository = None
+        pr(f"XGIT: Closed repository {olddir}")
 
     # Assertions are to flag bad test
     env = xsh.env
@@ -112,8 +114,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     assert isinstance(ctx, MutableMapping),\
         f"XSH.ctx is not a MutableMapping: {ctx!r}"
 
-    if "_XGIT_RETURN" in xsh.ctx:
-        del env["_XGIT_RETURN"]
+    if "$" in xsh.ctx:
+        del env["$"]
 
     # Install our displayhook
     global _xonsh_displayhook
@@ -142,8 +144,8 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         XSH=xsh,
         XGIT=XGIT,
     )
-    with suppress(GitDirNotFoundError):
-        XGIT.open_repository(Path.cwd())
+    
+    update_git_context(olddir=None, newdir=Path.cwd(), XSH=xsh, XGIT=XGIT)
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Load ed xontrib-xgit", file=sys.stderr)

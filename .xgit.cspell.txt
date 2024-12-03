@@ -34,6 +34,7 @@ frozendict
 fspath
 gctx
 gitdir
+gitpath
 Gitter
 gpgsig
 hashable
@@ -69,6 +70,7 @@ postfilter
 precommand
 predisplay
 prefilter
+prepost
 procs
 proxied
 pycache
@@ -102,6 +104,7 @@ tracebackhide
 Treeish
 typecheck
 typeshed
+undefer
 uninject
 unloadable
 unrooted

@@ -7,6 +7,7 @@ allows display of python values returned from commands.
 from threading import Lock
 from typing import Any
 from collections.abc import MutableMapping
+from contextlib import suppress
 import sys
 import builtins
 
@@ -152,6 +153,7 @@ def _on_precommand(cmd: str,  XSH: XonshSession, **_):
             print("Clearing $ before command", file=sys.stderr)
         del XSH.ctx["$"]
     XSH.ctx["-"] = cmd.strip()
-    XSH.ctx["+"] = builtins._  # type: ignore
+    with suppress(AttributeError):
+        XSH.ctx["+"] = builtins._  # type: ignore
     XSH.ctx["++"] = XSH.ctx.get("__")
     XSH.ctx["+++"] = XSH.ctx.get("___")

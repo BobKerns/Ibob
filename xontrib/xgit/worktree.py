@@ -15,6 +15,7 @@ import xontrib.xgit.ref_types as rt
 from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.utils import shorten_branch
 
 ROOT = PurePosixPath(".")
 
@@ -146,21 +147,22 @@ class _GitWorktree(_GitCmd, GitWorktree):
         else:
             with p.group(4, "Worktree:"):
                 p.break_()
-                p.text(f"repository: {self.repository.path}")
+                p.text(f".repository: {self.repository.path}")
                 p.break_()
-                p.text(f"repository_path: {self.repository_path}")
+                p.text(f".repository_path: {self.repository_path}")
                 p.break_()
-                p.text(f"path: {self.path}")
+                p.text(f".path: {self.path}")
                 p.break_()
-                p.text(f"branch: {self.branch}")
+                p.text(f"..branch: {shorten_branch(self.branch)}")
                 p.break_()
-                p.text(f"commit: {self.commit.hash}")
-                with p.group(2):
+                p.text(f"commit: {self.commit.hash[:14]}")
+                with p.indent(2):
                     p.break_()
-                    p.text(f'{self.commit.author} {self.commit.author.date}')
-                    for line in self.commit.message.splitlines():
-                        p.break_()
-                        p.text(line)
+                    p.text(f'{self.commit.author.name} {self.commit.author.date}')
+                    with p.indent(2):
+                        for line in self.commit.message.splitlines():
+                            p.break_()
+                            p.text(line)
                 p.break_()
                 p.text(f"locked: {self.locked}")
                 p.break_()

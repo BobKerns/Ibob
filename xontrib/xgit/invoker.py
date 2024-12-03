@@ -267,7 +267,9 @@ class RunnerPerSessionInvoker(BaseSessionInvoker):
         `Runner` for each session, and injects the session variables into
         `Runner`.
         '''
-        runner = self.create_runner(invoker=self, name=self.name)
+        runner = self.create_runner(invoker=self,
+                                    name=self.name,
+                                    **session_vars)
         self._perform_injections(runner, **session_vars)
         self._register_runner(runner, **session_vars)
     

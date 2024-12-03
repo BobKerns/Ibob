@@ -481,7 +481,6 @@ class _GitCmd:
         return list(self.run_lines(cmd, *args, **kwargs))
 
     def git_string(self, subcmd: str, *args,
-            path: Optional[str|Path]=None,
             stdout=PIPE,
             text: bool=True,
             check: bool=True,
@@ -493,7 +492,6 @@ class _GitCmd:
             **kwargs)
 
     def git_list(self, subcmd: str, *args,
-            path: Optional[str|Path]=None,
             stdout=PIPE,
             text: bool=True,
             check: bool=True,
@@ -505,13 +503,11 @@ class _GitCmd:
             **kwargs)
 
     def git_lines(self, subcmd: str, *args,
-                path: Optional[str|Path]=None,
                 **kwargs):
         return self.run_lines(str(self.__git), subcmd, *args,
-            **kwargs)
+                            **kwargs)
 
     def git_stream(self, subcmd: str, *args,
-                cwd: Optional[str|Path]=None,
                 stdout=PIPE,
                 text: bool=False,
                 **kwargs):
@@ -521,7 +517,6 @@ class _GitCmd:
             **kwargs)
 
     def git_binary(self, subcmd: str, *args,
-                cwd: Optional[str|Path]=None,
                 stdout=PIPE,
                 text: bool=False,
                 **kwargs) -> IO[bytes]:
@@ -545,9 +540,10 @@ class _GitCmd:
             result = [self.git_string("rev-parse", param) for param in params]
         return result
 
+
     def worktree_locations(self, path: Path) -> tuple[Path, Path, Path, CommitId]:
         path = path.resolve()
-        for p in path.parents:
+        for p in (path, *path.parents):
             git_dir = p / ".git"
             if git_dir.is_dir():
                 commit = self.rev_parse("HEAD")

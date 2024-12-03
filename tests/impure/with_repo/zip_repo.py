@@ -31,7 +31,7 @@ def unzip_repo(frm: Path, to: Path):
         raise ValueError(f'Target not a .git directory: {to}')
     worktree = to.parent
     worktree.mkdir(parents=False, exist_ok=True)
-    for p in to.parent.iterdir():
+    for _ in to.parent.iterdir():
         raise ValueError(f'Target parent not empty: {worktree}')
     with zipfile.ZipFile(frm, 'r') as zipf:
         zipf.extractall(worktree)
@@ -41,13 +41,15 @@ def zip_repo(frm: Path, to: Path):
     frm = frm.resolve()
     if frm.name != '.git' or not (frm / 'HEAD').is_file():
         raise ValueError(f'Not a .git repository: {frm}')
-    with chdir(frm.parent):
-        with zipfile.ZipFile(to, 'w') as zipf:
-            for p in (d / f for d, _, fs in frm.walk()
-                    for f in fs):
-                p = p.relative_to(frm.parent)
-                print(p)
-                zipf.write(p)
+    with (
+        chdir(frm.parent),
+        zipfile.ZipFile(to, 'w') as zipf
+    ):
+        for p in (d / f for d, _, fs in frm.walk()
+                for f in fs):
+            p = p.relative_to(frm.parent)
+            print(p)
+            zipf.write(p)
                     
 
 def main(frm: Path, to: Path):  
@@ -57,7 +59,13 @@ def main(frm: Path, to: Path):
         case '', False, '.zip', _:
             zip_repo(frm, to)
         case _, _, _, _:
-            raise ValueError(f'Invalid arguments: {frm.suffix!r} {frm.is_file()!r} {to.suffix!r} {to.is_file()!r}')
+            raise ValueError(
+                f'Invalid arguments: '
+                f'{frm.suffix!r} '
+                f'{frm.is_file()!r} '
+                f'{to.suffix!r} '
+                f'{to.is_file()!r}'
+            )
     
 if __name__ == '__main__':
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -66,8 +74,12 @@ if __name__ == '__main__':
         prog=Path(__file__).stem,
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('frm', type=Path, help='Path to zip or directory to zip or unzip')
-    parser.add_argument('to', type=Path, help='Path to zip or directory to zip or unzip')
+    parser.add_argument('frm',
+                        type=Path,
+                        help='Path to zip or directory to zip or unzip')
+    parser.add_argument('to',
+                        type=Path,
+                        help='Path to zip or directory to zip or unzip')
     args = parser.parse_args()
     main(args.frm, args.to)
     

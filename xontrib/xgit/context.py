@@ -19,8 +19,8 @@ classes are complex. It is very easy to end up with circular imports.
 '''
 
 from collections import defaultdict
-from types import MappingProxyType
 from collections.abc import Mapping
+from types import MappingProxyType
 from typing import (
     Optional, cast
 )
@@ -29,6 +29,7 @@ from pathlib import Path, PurePosixPath
 from xonsh.built_ins import XonshSession
 from xonsh.tools import chdir
 from xonsh.lib.pretty import RepresentationPrinter
+from xonsh.events import events
 
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.person import Person
@@ -51,8 +52,15 @@ from xontrib.xgit.context_types import (
 )
 import xontrib.xgit.repository as rr
 import xontrib.xgit.worktree as wt
+from xontrib.xgit.utils import path_and_parents, relative_to_home, shorten_branch
 
 ROOT_REPO_PATH = PurePosixPath()
+
+events.doc('on_xgit_repository_change', 'Runs when the current repository changes.')
+events.doc('on_xgit_worktree_change', 'Runs when the current worktree changes.')
+events.doc('on_xgit_branch_change', 'Runs when the current branch changes.')
+events.doc('on_xgit_commit_change', 'Runs when the current commit changes.')
+events.doc('on_xgit_path_change', 'Runs when the current path changes.')
 
 class _GitContext(_GitCmd, GitContext):
     """
@@ -65,9 +73,13 @@ class _GitContext(_GitCmd, GitContext):
     __session: XonshSession
     @property
     def session(self) -> XonshSession:
+        '''
+        Get the xonsh session this context is associated with.
+        '''
         return self.__session
 
     __repositories: dict[Path, GitRepository]
+    @property
     def repositories(self) -> dict[Path, GitRepository]:
         return self.__repositories
 
@@ -76,6 +88,18 @@ class _GitContext(_GitCmd, GitContext):
         """
         Open a repository at the given path. If the path is already open,
         return the existing repository.
+        
+        If the path is a repository, return the repository. If the path
+        is a worktree, return the repository associated with the worktree.
+        
+        Raises `RepositoryNotFoundError` if the repository is not found.
+        
+        PARAMETERS
+        ----------
+        path: Path | str | GitRepository
+            The path to the repository, or the repository itself.
+        select: bool
+            If `True`, select the repository as the current repository.
         """
         if isinstance(path, GitRepository):
             repository = path
@@ -83,31 +107,167 @@ class _GitContext(_GitCmd, GitContext):
             path = Path(path)
             repository = self.__repositories.get(path)
             if repository is None:
+                path, _ = self.find_repository(path)
                 repository = rr._GitRepository(path=path,
                                             context=self,
                                             )
                 self.__repositories[path] = repository
         if select and (self.__repository is not repository):
-            self.repository = repository
+            events.on_xgit_repository_change.fire(old=self.__repository, new=repository)
+            self.__repository = repository
+            if (
+                self.__worktree is not None
+                and self.__worktree.repository is not repository
+            ):
+                self.worktree = None
         return repository
+    
+    
+    def find_repository(self, path: Path, /) -> Path:
+        '''
+        Find the repository associated with the given path.
+        
+        Raises `RepositoryNotFoundError` if the repository is not found.
+        
+        This is done by looking for a .git directory in the path or
+        any of its parents.
+        
+        PARAMETERS
+        ----------
+        path: Path
+            The path to start looking for the repository.
+        RETURNS
+        -------
+        common: Path
+            The path to the main repository.
+        private: Path | None
+            The path to the private area for the worktree, or `None` if
+            the repository is a bare repository.
+        '''
+        path = Path(path).resolve()
+        for loc in path_and_parents(path):
+            if loc.is_dir():
+                if loc.name == '.git' and (loc / 'HEAD').exists():
+                    return loc, loc.parent
+                if loc.suffix == '.git':
+                    return loc, None
+            if (gitpath := (loc / '.git')).exists():
+                return self._read_gitdir(gitpath)
+        raise RepositoryNotFoundError(path)
+    
+    
+    def _read_gitdir(self, gitdir: Path, /) -> Path:
+        '''
+        Read the .git file and return the path to the repository.
+        
+        Raises `RepositoryNotFoundError` if the repository is not found
+        or is not a repository.
+        
+        PARAMETERS
+        ----------
+        gitdir: Path
+            The path to the .git directory/file.
+        RETURNS
+        -------
+        common: Path
+            The path to the main repository.
+        private: Path
+            The path to the private area for the worktree.
+        '''
+        if gitdir.name == '.git':
+            if gitdir.is_dir():
+                if (gitdir / 'HEAD').exists():
+                    return gitdir, gitdir
+            elif gitdir.is_file():
+                with gitdir.open() as f:
+                    line = f.readline().strip()
+                    if line.startswith('gitdir: '):
+                        for_worktree = (gitdir.parent / line[8:])
+                        return for_worktree.parent.parent, for_worktree
+        raise RepositoryNotFoundError(gitdir, 'file')
+    
 
+    def find_worktree(self, path: Path, /) -> tuple[Path, Path]:
+        '''
+        Find the worktree associated with the given path.
+        
+        Raises `WorktreeNotFoundError` if the worktree is not found.
+
+        This is done by looking for a .git directory in the path or
+        any of its parents.
+        
+        Raises `WorktreeNotFoundError` if the worktree is not found.
+        
+        PARAMETERS
+        ----------
+        path: Path
+        
+        RETURNS
+        -------
+        common: Path
+            The path to the main repository.
+        private: Path
+            The path to the private area for the worktree.
+        '''
+        path = Path(path).resolve()
+        for p in path_and_parents(path):
+            if p.suffix == ".git":
+                # This is a repository, not a worktree
+                raise WorktreeNotFoundError(path)
+            if p.name == ".git":
+                # This is a repository, inside a worktree
+                return p.parent, p
+            if (gitpath := (p / ".git")).is_dir():
+                # This is a worktree, with a repository inside
+                return p, gitpath
+            if gitpath.is_file():
+                # This is a worktree, with a linked repository
+                return self._read_gitdir(gitpath)
+        raise WorktreeNotFoundError(path)
 
     def open_worktree(self, location: Path|str, /, *,
                     repository: Optional[GitRepository|str|Path]=None,
                     branch: Optional['PurePosixPath|str|rt.GitRef']=None,
                     commit: Optional['ot.Commitish']=None,
-                    path: PurePosixPath=ROOT_REPO_PATH,
+                    path: Optional[PurePosixPath]=None,
                     select: bool=True
                     ) -> 'GitWorktree':
         '''
         Open a worktree associated with this repository.
+        
+        If the worktree is already open, return the existing worktree.
+        
+        If the location is not a directory, raise a `WorktreeNotFoundError`.
+        
+        If the repository is not provided, the repository is found by
+        looking for a .git directory. If the repository is not found,
+        raise a `RepositoryNotFoundError`.
+        
+        PARAMETERS
+        ----------
+        location: Path | str
+            The path to the worktree.
+        repository: GitRepository | Path | str | None
+            The repository associated with the worktree. If not provided,
+            the repository is found by looking for a .git directory.
+        branch: str | GitRef | None
+            The branch to use for the worktree. If not provided, the
+            branch is found from the repository.
+        commit: Commitish | None
+            The commit to use for the worktree. If not provided, the
+            commit is found from the repository.
+        path: PurePosixPath
+            The path within the worktree to use.
+        select: bool
+            If `True`, select the worktree as the current worktree.            
         '''
-        location = Path(location).resolve()
-        worktree = self.worktrees.get(location)
-        if worktree is not None:
-            return worktree
-        if not location.is_dir():
-            raise WorktreeNotFoundError(location)
+        given_location = location
+        location, _ = self.find_worktree(location)
+        for repo in self.repositories.values():
+            if (wtree := repo.worktrees.get(location)) is not None:
+                if select:
+                    self.worktree = wtree
+                return wtree
         match repository:
             case GitRepository():
                 pass
@@ -132,6 +292,10 @@ class _GitContext(_GitCmd, GitContext):
                 branch = repository.get_ref(branch_name)
         else:
             branch = repository.get_ref(branch)
+        if path is None:
+            p = given_location.relative_to(location)
+            path = PurePosixPath(p)
+            
         worktree = wt._GitWorktree(
             location=location,
             repository=repository,
@@ -142,48 +306,86 @@ class _GitContext(_GitCmd, GitContext):
             locked='',
             prunable='',
         )
+        
+        # If our table of worktrees is deferred, undefer it now.
         if callable(self.__worktrees):
             self.__worktrees = self.__worktrees(self)
         self.__worktrees[location] = worktree
+        
+        # Make sure the repository knows about this worktree. (They can
+        # become disconnected if moved.)
         repository._add_worktree(worktree)
-        if select:
-            self.worktree = worktree
+        if select and self.__worktree is not worktree:
+            events.on_xgit_worktree_change.fire(old=self.__worktree, new=worktree)
+            self.__worktree = worktree
+            self.path = worktree.path
+            self.branch = worktree.branch
+            self.commit = worktree.commit
         return worktree
 
-    __worktrees: dict[Path, GitWorktree]
-    @property
-    def worktrees(self) -> Mapping[Path, GitWorktree]:
-        return MappingProxyType(self.__worktrees)
 
     __worktree: GitWorktree|None
     @property
     def worktree(self) -> GitWorktree:
+        '''
+        Get/Set/Unset the current worktree.
+        
+        If the worktree is not set, raise a `GitNoWorktreeException`.
+        '''
         if self.__worktree is None:
             raise GitNoWorktreeException("Worktree has not been set")
         return self.__worktree
+    
     @worktree.setter
     def worktree(self, value: GitWorktree|None):
-        self.__worktree = value
-        if value is not None:
-            self.__repository = value.repository
+        match value:
+            case None:
+                if self.__worktree is not None:
+                    events.on_xgit_worktree_change.fire(old=self.__worktree, new=None)
+                self.__worktree = None
+                self.__path = PurePosixPath()
+                self.branch = None
+                self.commit = None
+            case GitWorktree():
+                if self.__worktree is not value:
+                    events.on_xgit_worktree_change.fire(old=self.__worktree, new=value)
+                self.__worktree = value
+                self.__path = value.path
+                self.branch = value.branch
+                self.commit = value.commit
+            case str() | Path():
+                self.open_worktree(value)
+            case _:
+                raise GitValueError(f"Invalid worktree: {value}")
+            
 
     __repository: GitRepository|None
     # Set for bare repositories; otherwise we use the one from
     # the current worktree.
     @property
     def repository(self) -> GitRepository:
+        '''
+        Get/set the current repository.
+        '''
         if self.__repository is None:
             raise GitNoRepositoryException()
 
         return self.__repository
+    
     @repository.setter
     def repository(self, value: GitRepository):
-        if value != self.__repository:
-            self.__worktree = None
-            self.__branch = None
-            self.__commit = None
-            self.__path = PurePosixPath()
-        self.__repository = value
+        match value:
+            case None | GitRepository():
+                if self.__repository is not value:
+                    events.on_xgit_repository_change.fire(old=self.__repository,
+                                                          new=value)
+                self.__repository = None
+                self.worktree = None
+            case str() | Path():
+                self.open_repository(value)
+            case _:
+                raise GitValueError(f"Invalid repository: {value}")
+        
 
     __path: PurePosixPath
     @property
@@ -192,7 +394,11 @@ class _GitContext(_GitCmd, GitContext):
 
     @path.setter
     def path(self, value: PurePosixPath|str):
-        self.__path = PurePosixPath(value)
+        value = PurePosixPath(value)
+        if self.__path != value:
+            self.__path = value
+            events.on_xgit_path_change.fire(old=self.__path, new=value)
+
 
     __branch: 'rt.GitRef|None'
     @property
@@ -202,50 +408,52 @@ class _GitContext(_GitCmd, GitContext):
                 raise GitNoBranchException()
             return self.worktree.branch
         return self.__branch
+    
     @branch.setter
     def branch(self, value: 'str|rt.GitRef|None'):
         match value:
             case None:
-                self.__branch = None
+                branch = None
             case rt.GitRef():
-                self.__branch = value
+                branch = value
             case str():
                 value = value.strip()
-                if value:
-                    self.__branch = self.repository.get_ref(value,)
-                else:
-                    self.__branch = None
+                branch = self.repository.get_ref(value) if value else None
             case _:
                 raise GitValueError(f"Invalid branch: {value!r}")
+        if branch is not self.__branch:
+            events.on_xgit_branch_change.fire(old=self.__branch, new=branch)
+            self.__branch = branch
+
 
     __commit: 'ot.GitCommit|None'
     @property
     def commit(self) -> ot.GitCommit:
         if self.__commit is None:
-            return self.worktree.commit
+            self.commit = self.worktree.commit
         return self.__commit
 
     @commit.setter
     def commit(self, value: 'ot.Commitish'):
         match value:
             case None:
-                self.__commit = None
+                commit = None
             case str(v):
                 value = CommitId(ObjectId(v.strip()))
-                if value == '':
-                    self.__commit = None
-                    return
-                self.__commit = self.repository.get_object(value, 'commit')
+                commit = self.repository.get_object(value, 'commit') if value else None
             case ot.GitCommit():
-                self.__commit = value
+                commit = value
             case ot.GitTagObject():
                 # recurse if necessary to get the commit
                 # or error if the tag doesn't point to a commit
-                self.__commit = cast(ot.GitCommit, value.object)
+                commit = cast(ot.GitCommit, value.object)
             case rt.GitRef():
-                self.__commit = cast(ot.GitCommit, value.target)
+                commit = cast(ot.GitCommit, value.target)
             case _:
                 raise GitValueError(f'Not a commit: {value}')
+        if commit is not self.__commit:
+            events.on_xgit_commit_change.fire(old=self.__commit, new=commit)
+            self.__commit = commit
 
     __objects: dict[ObjectId, 'ot.GitObject']
     @property
@@ -296,6 +504,8 @@ class _GitContext(_GitCmd, GitContext):
         self.__repositories = {}
         self.__worktrees = {}
         self.__objects = {}
+        self.__branch = None
+        self.__commit = None
         if worktree is None:
             self.__repository = None
         else:
@@ -323,35 +533,66 @@ class _GitContext(_GitCmd, GitContext):
     def cwd(self, value: Path|str):
         chdir(Path(value))
 
+
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
         if cycle:
             p.text(f"GitContext({self.worktree} {self.path}")
         else:
-            assert self.commit is not None, "Commit has not been set"
-            with p.group(4, "Context:"):
+            with p.group(4, "$XGIT (context)"):
                 p.break_()
-                wt = self.worktree
-                wt_loc = _relative_to_home(wt.location)
-                p.text(f"worktree: {wt_loc}")
-                with p.group(2):
-                    p.break_()
-                    p.text(f"repository: {_relative_to_home(wt.repository_path)}")
-                    p.break_()
-                    p.text(f"common: {_relative_to_home(wt.repository.path)}")
-                p.break_()
-                p.text(f"git_path: {self.path}")
-                p.break_()
-                p.text(f"branch: {self.branch}")
-                p.break_()
-                p.text(f"commit: {self.commit.hash}")
-                with p.group(2):
-                    p.break_()
-                    p.text(f'{self.commit.author} {self.commit.author.date}')
-                    for line in self.commit.message.splitlines():
+                with p.group(2, '$XGIT.repository:'):
+                    try:
+                        repo = self.repository
                         p.break_()
-                        p.text(line)
+                        p.pretty(repo)
+                    except GitNoRepositoryException:
+                        p.text("Repository: Not set")
+                        return
+                    except Exception as e:
+                        p.text(f"Error: {e}")
+                        return
                 p.break_()
-                p.text(f"cwd: {_relative_to_home(Path.cwd())}")
+                with p.group(2, '$XGIT.worktree:'):
+                    try:
+                        p.break_()
+                        wt = self.worktree
+                        wt_loc = relative_to_home(wt.location)
+                        p.text(f".location: {wt_loc}")
+                        if wt.repository_path != wt.repository.path:
+                            with p.group(2):
+                                p.break_()
+                                p = relative_to_home(wt.repository_path)
+                                p.text(f".repository_path (private): {p}")
+                                p.break_()
+                                p = relative_to_home(wt.repository.path)
+                                p.text(f".repository.path (shared): {p}")
+                        p.break_()
+                        p.text(f".branch: {shorten_branch(wt.branch)}")
+                        p.break_()
+                        p.text(f".commit: {wt.commit.hash[:14]}")
+                    except GitNoWorktreeException:
+                        p.break_()
+                        p.text("Worktree: Not set")
+                    except Exception as e:
+                        p.text(f"Error: {e}")
+                        return
+                p.breakable()
+                with p.group(2, '$XGIT:'):
+                    p.break_()
+                    p.text(f".path: {self.path}")
+                    p.break_()
+                    p.text(f".branch: {shorten_branch(self.branch)}")
+                    p.break_()
+                    p.text(f".commit: {self.commit.hash[:14]}")
+                    with p.group(2):
+                        p.break_()
+                        p.text(f'{self.commit.author.person.name} '
+                               f'{self.commit.author.date}')
+                        for line in self.commit.message.splitlines():
+                            p.break_()
+                            p.text(line)
+                p.break_()
+                p.text(f"cwd: {relative_to_home(Path.cwd())}")
 
     def to_json(self, describer: JsonDescriber) -> JsonData:
         branch = self.branch.name if self.branch else None
@@ -391,18 +632,3 @@ class _GitContext(_GitCmd, GitContext):
         else:
             raise GitValueError("No commit found")
         return branch, commit
-
-def _relative_to_home(path: Path) -> Path:
-    """
-    Get a path for display relative to the home directory.
-    This is for display only.
-    """
-    home = Path.home()
-    if path == home:
-        return Path("~")
-    if path == home.parent:
-        return Path(f"~{home.name}")
-    try:
-        return Path("~") / path.relative_to(home)
-    except ValueError:
-        return path

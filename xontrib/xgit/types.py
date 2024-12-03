@@ -157,7 +157,7 @@ class GitValueError(GitError, ValueError):
     '''
     def __init__(self, message: str, /):
         super().__init__(message)
-class GitDirNotFoundError(GitError):
+class  GitDirNotFoundError(GitError):
     '''
     Thrown when a git directory is not found.
     '''

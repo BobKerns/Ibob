@@ -22,10 +22,10 @@ import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
 import xontrib.xgit.worktree as wtree
 import xontrib.xgit.objects as obj
-import xontrib.xgit.context as ctx
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.utils import shorten_branch, relative_to_home
 
 
 DEFAULT_BRANCH=(
@@ -233,10 +233,11 @@ class _GitRepository(_GitCmd, ct.GitRepository):
             # and it uses xor to ensure order independence.
 
             # Any repo with the same ID will be clones of each other.
-            return GitRepositoryId(hex(reduce(xor, (
+            id = hex(reduce(xor, (
                 int(f'0{x}', 16)
                 for x in self.git_lines('log', '--format=%H', '--max-parents=0')),
-                0)))
+                0))
+            return GitRepositoryId(id[2:])
         self.__id = init_id
         self.__preferred_worktree = None
         def init_worktrees(self: '_GitRepository') -> 'ct.WorktreeMap':
@@ -247,6 +248,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
             commit: ot.GitCommit|None = None
             locked: str = ''
             prunable: str = ''
+            
             for line in self.git_lines('worktree', 'list', '--porcelain'):
                 match line.strip().split(' ', maxsplit=1):
                     case ['worktree', wt]:
@@ -356,17 +358,13 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         else:
             with p.group(4, "Repository:"):
                 p.break_()
-                p.text(f"path: {ctx._relative_to_home(self.path)}")
+                p.text(f".path: {relative_to_home(self.path)}")
                 p.break_()
-                with p.group(4, "worktrees:", "\n"):
+                p.text('.worktrees:') 
+                with p.indent(4):
                     wts = self.worktrees.values()
-                    f1 = max(len(str(ctx._relative_to_home(wt.location)))
+                    f1 = max(len(str(relative_to_home(wt.location)))
                              for wt in wts)
-                    def shorten_branch(branch: str):
-                        branch = branch.replace('refs/heads/', '')
-                        branch = branch.replace('refs/remotes/', '')
-                        branch = branch.replace('refs/tags/', 'tag:')
-                        return branch
                     f2 = max(len(shorten_branch(wt.branch.name if wt.branch else '-'))
                              for wt in wts)
                     f4 = max(len(wt.commit.author.person.name)
@@ -375,17 +373,17 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                         p.breakable()
                         branch = shorten_branch(wt.branch.name if wt.branch else '-')
                         author = wt.commit.author
-                        rel_location = ctx._relative_to_home(wt.location)
+                        rel_location = relative_to_home(wt.location)
                         line = (
                             f"{rel_location!s:{f1}s}: "
                             f"{branch:{f2}s} "
-                            f"{wt.commit.hash} "
+                            f"{wt.commit.hash[:14]} "
                             f"{author.person.name:{f4}s} "
                             f"{author.date}"
                         )
                         p.text(line)
                 p.breakable()
                 pref = self.worktree
-                p.text(f"preferred_worktree: {ctx._relative_to_home(pref.location)}")
+                p.text(f".preferred_worktree: {relative_to_home(pref.location)}")
                 p.break_()
-                p.text(f"objects: {len(self.__objects)}")
+                p.text(f".objects: {len(self.__objects)}")
