@@ -33,7 +33,8 @@ def test_open_worktree(git_context):
     assert worktree is not None
     assert worktree.path == PurePosixPath('.')
     assert worktree.location == Path('.').resolve()
-    assert worktree.repository_path == Path('.git').resolve()
+    # Invalid in seperate worktrees.
+    #assert worktree.repository_path == Path('.git').resolve()
     assert worktree.repository_path.exists()
     assert worktree.repository_path.is_dir
 

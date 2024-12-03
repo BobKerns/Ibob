@@ -205,8 +205,10 @@ class _GitContext(_GitCmd, GitContext):
         
         RETURNS
         -------
+        worktree: Path
+            The path to the workktree
         common: Path
-            The path to the main repository.
+            The path to the shared repository
         private: Path
             The path to the private area for the worktree.
         '''
@@ -217,13 +219,14 @@ class _GitContext(_GitCmd, GitContext):
                 raise WorktreeNotFoundError(path)
             if p.name == ".git":
                 # This is a repository, inside a worktree
-                return p.parent, p
+                return p.parent, p, p
             if (gitpath := (p / ".git")).is_dir():
                 # This is a worktree, with a repository inside
-                return p, gitpath
+                return p, gitpath, gitpath
             if gitpath.is_file():
                 # This is a worktree, with a linked repository
-                return self._read_gitdir(gitpath)
+                repo, private = self._read_gitdir(gitpath)
+                return p, repo, private
         raise WorktreeNotFoundError(path)
 
     def open_worktree(self, location: Path|str, /, *,
@@ -263,7 +266,7 @@ class _GitContext(_GitCmd, GitContext):
             If `True`, select the worktree as the current worktree.            
         '''
         given_location = location
-        location, _ = self.find_worktree(location)
+        location, _, _ = self.find_worktree(location)
         for repo in self.repositories.values():
             if (wtree := repo.worktrees.get(location)) is not None:
                 if select:
