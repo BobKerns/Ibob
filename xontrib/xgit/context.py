@@ -25,6 +25,7 @@ from typing import (
     Optional, cast
 )
 from pathlib import Path, PurePosixPath
+from contextlib import suppress
 
 from xonsh.built_ins import XonshSession
 from xonsh.tools import chdir
@@ -319,7 +320,8 @@ class _GitContext(_GitCmd, GitContext):
             events.on_xgit_worktree_change.fire(old=self.__worktree, new=worktree)
             self.__worktree = worktree
             self.path = worktree.path
-            self.branch = worktree.branch
+            with suppress(GitNoBranchException):
+                self.branch = worktree.branch
             self.commit = worktree.commit
         return worktree
 
@@ -351,7 +353,8 @@ class _GitContext(_GitCmd, GitContext):
                     events.on_xgit_worktree_change.fire(old=self.__worktree, new=value)
                 self.__worktree = value
                 self.__path = value.path
-                self.branch = value.branch
+                with suppress(GitNoBranchException):
+                    self.branch = value.branch
                 self.commit = value.commit
             case str() | Path():
                 self.open_worktree(value)
