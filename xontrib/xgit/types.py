@@ -7,7 +7,7 @@ Types for public use will be defined in the xgit module via `__init__.py`. and t
 
 from pathlib import Path
 from typing import (
-     Generic, NewType, Optional, Protocol, TypeVar, ParamSpec, TYPE_CHECKING
+     Generic, NewType, Optional, Protocol, TypeVar, ParamSpec,
 )
 
 from xontrib.xgit.ids import ObjectId
@@ -49,11 +49,8 @@ except SyntaxError:
         KeywordArity, KeywordSpec, KeywordSpecs,  # noqa: F401
         KeywordInputSpec, KeywordInputSpecs,  # noqa: F401
         HeadingStrategy, ColumnKeys,  # noqa: F401
+        DirectoryKind,  # noqa: TC001
         )
-    if TYPE_CHECKING:
-        from xontrib.xgit.type_aliases_310 import (
-                DirectoryKind, 
-            )
 
 if 'list_of' not in globals():
     globals()['list_of'] = lambda t: list
