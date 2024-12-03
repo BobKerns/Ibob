@@ -134,21 +134,6 @@ def debug_env(monkeypatch  ):
     monkeypatch.setenv("XONSH_SHOW_TRACEBACK", "1")
     monkeypatch.setenv("XONSH_TRACE_SUBPROC", "1")
 
-@pytest.fixture(autouse=True)
-def clean_modules():
-    """
-    Ensure a clean module namespace before and after each test.
-    """
-    import sys
-    for k in list(sys.modules.keys()):
-        if k.startswith('xontrib.xgit'):
-            del sys.modules[k]
-    try:
-        yield
-    finally:
-        for k in list(sys.modules.keys()):
-            if k.startswith('xontrib.xgit'):
-                del sys.modules[k]
 
 Loader: TypeAlias = Callable[[XonshSession], dict[str, Any]]
 

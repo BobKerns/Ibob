@@ -5,7 +5,7 @@ Test the XGit commands.
 from typing import Any, cast
 
 from pytest import raises
-def test_ls(clean_modules, git_context, repository, chdir):
+def test_ls(git_context, repository, chdir):
     '''
     Test the xgit ls command.
     '''

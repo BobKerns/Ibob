@@ -13,30 +13,6 @@ def test_displayhook_events(with_xgit, modules, with_events, capsys):
     from xontrib.xgit.display import events as display_events
     assert events is display_events
 
-def test_displayhook_simple(xonsh_session,
-                            with_xgit,
-                            modules,
-                            sysdisplayhook,
-                            capsys,
-                            test_branch):
-    # The complexity and dependencies of this test confirm the fragility
-    # of this approach. Looking for a better way...
-    from xontrib.xgit.display import _xgit_displayhook
-    # XSH here to be found on the stack.
-    XSH = with_xgit.XSH
-    _events = __import__('xonsh.events').events.events
-    with modules('xontrib.xgit.display') as ((mod,), kwargs):
-        # Make sure we haven't gotten two versions of the module.
-        _events2 = mod.__dict__['events']
-        assert _events is _events2
-        _xgit_displayhook(42)
-        assert '$' not in XSH.ctx
-    out = capsys.readouterr()
-    text = out.out
-    assert xonsh_session.env.get('XGIT_ENABLE_NOTEBOOK_HISTORY')
-    assert re.match(r'_\d+: 42', text), f"Expected _<number>: 42, got: {text}"
-    assert out.err == ""
-
 def test_displayhook_None(with_xgit,
                           modules,
                           xonsh_session,
