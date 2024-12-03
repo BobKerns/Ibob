@@ -5,6 +5,7 @@ Miscellaneous utility functions.
 from typing import TypeVar
 from collections.abc import Iterable
 from pathlib import Path
+from contextlib import contextmanager
 import sys
 
 from xonsh.built_ins import XonshSession
@@ -82,6 +83,7 @@ def shorten_branch(branch):
     branch = branch.replace('refs/tags/', 'tag:')
     return branch
 
+
 def relative_to_home(path: Path) -> Path:
     """
     Get a path for display relative to the home directory.
@@ -96,4 +98,18 @@ def relative_to_home(path: Path) -> Path:
         return Path("~") / path.relative_to(home)
     except ValueError:
         return path
-    
+
+
+@contextmanager
+def suppress(*exceptions: type[Exception]):
+    '''
+    Test alternate implementation of suppress.
+    '''
+    try:
+        yield
+    except Exception as e:
+        ename = type(e).__name__
+        if not isinstance(e, exceptions):
+            if any((type(x).__name__ == ename) for x in exceptions):
+                raise Exception(f'Suppressed exception missed: {e!r}') from e
+            raise

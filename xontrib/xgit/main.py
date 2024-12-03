@@ -129,7 +129,6 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     events.on_xgit_unload(unhook_display)
     sys.displayhook = _xgit_displayhook
 
-
     prompt_fields = env['PROMPT_FIELDS']
     assert isinstance(prompt_fields, MutableMapping), \
         f"PROMPT_FIELDS not a MutableMapping: {prompt_fields!r}"
