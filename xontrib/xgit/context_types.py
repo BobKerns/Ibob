@@ -222,7 +222,7 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     def branch(self, value: 'rt.GitRef|str|None'):
         '''
         The branch of the worktree. If the worktree is not on a branch,
-        set to None. 
+        set to None.
         '''
         ...
 
@@ -231,8 +231,8 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     @abstractmethod
     def commit(self) -> 'ot.GitCommit':
         '''
-        The current commit checked out in the worktree. 
-        
+        The current commit checked out in the worktree.
+
         When no commit is checked out, a `GitNoCheckoutException` is raised.
         '''
         ...
@@ -314,6 +314,11 @@ class GitContext(Jsonable, Protocol):
         '''
         ...
 
+    @worktree.setter
+    @abstractmethod
+    def worktree(self, value: 'GitWorktree|None|str|Path'): ...
+
+
     @property
     @abstractmethod
     def repository(self) -> GitRepository:
@@ -326,6 +331,12 @@ class GitContext(Jsonable, Protocol):
             The repository object.
         '''
         ...
+
+
+    @repository.setter
+    @abstractmethod
+    def repository(self, value: 'GitRepository|None|str|Path'): ...
+
 
     @property
     @abstractmethod

@@ -342,7 +342,7 @@ class _GitContext(_GitCmd, GitContext):
         return self.__worktree
 
     @worktree.setter
-    def worktree(self, value: GitWorktree|None):
+    def worktree(self, value: GitWorktree|None|str|Path):
         match value:
             case None:
                 if self.__worktree is not None:
@@ -379,7 +379,7 @@ class _GitContext(_GitCmd, GitContext):
         return self.__repository
 
     @repository.setter
-    def repository(self, value: GitRepository):
+    def repository(self, value: GitRepository|None|str|Path):
         match value:
             case None | GitRepository():
                 if self.__repository is not value:
