@@ -42,7 +42,7 @@ Processing begins with target object. The processing proceeds as follows:
 
 from abc import abstractmethod
 from collections.abc import Mapping, Iterable, Sequence
-from contextlib import suppress
+#from contextlib import suppress
 from dataclasses import dataclass
 from decimal import Decimal
 from fractions import Fraction
@@ -59,6 +59,7 @@ from xontrib.xgit.types import _NO_VALUE, _NoValue
 from xontrib.xgit.view import (
     View, T, Txv, K, Kcv, Kxv, X, Xcv, Xxv, Rxv, Rcv
 )
+from xontrib.xgit.utils import suppress
 
 class ConverterFnMulti(Generic[Kxv, Txv, Rcv], Protocol):
     '''

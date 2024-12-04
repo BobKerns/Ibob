@@ -2,7 +2,7 @@
 Implementation of the `GitRepository` class.
 '''
 
-from contextlib import suppress
+#from contextlib import suppress
 from pathlib import Path, PurePosixPath
 import re
 from typing import Literal, Optional, cast, overload
@@ -25,7 +25,7 @@ import xontrib.xgit.objects as obj
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.to_json import JsonDescriber
-from xontrib.xgit.utils import shorten_branch, relative_to_home
+from xontrib.xgit.utils import shorten_branch, relative_to_home, suppress
 
 
 DEFAULT_BRANCH=(

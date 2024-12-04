@@ -13,7 +13,7 @@ In addition, it extends the displayhook to provide the following variables:
 - _<m>" The nth value.
 """
 
-from contextlib import suppress
+#from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from collections.abc import MutableMapping
@@ -37,7 +37,7 @@ from xontrib.xgit.types import (
     GitNoWorktreeException, GitNoRepositoryException,
     WorktreeNotFoundError, RepositoryNotFoundError,
 )
-from xontrib.xgit.utils import print_if
+from xontrib.xgit.utils import print_if, suppress
 
 # Export the functions and values we want to make available.
 

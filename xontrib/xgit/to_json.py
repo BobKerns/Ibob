@@ -1,7 +1,7 @@
 """
 A module to create description of an object for debugging or tests.
 """
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager #suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import (
@@ -18,6 +18,7 @@ from xontrib.xgit.json_types import (
    JsonHandler, JsonReturn, FromJsonOverride, ToJsonOverride,
    JsonKV, JsonDescriber
 )
+from xontrib.xgit.utils import suppress
 
 def is_sequence(obj):
     return isinstance(obj, Sequence)

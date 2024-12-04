@@ -7,7 +7,7 @@ allows display of python values returned from commands.
 from threading import Lock
 from typing import Any
 from collections.abc import MutableMapping
-from contextlib import suppress
+#from contextlib import suppress
 import sys
 import builtins
 
@@ -17,6 +17,7 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.context_types import GitContext
 from xontrib.xgit.decorators import session, event_handler
+from xontrib.xgit.utils import suppress
 
 # Our events:
 
