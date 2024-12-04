@@ -30,7 +30,7 @@ jobs:
       with:
         lfs: ${{ inputs.lfs }}
     - name: Git Log
-      run: git log --oneline -n 5
+      run: git log
     - name: Install poetry
       run: pipx install poetry
     - name: Lock dependencies
