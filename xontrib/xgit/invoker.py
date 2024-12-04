@@ -2,12 +2,13 @@
 Utilities for invoking commands based on their signatures.
 '''
 
+from abc import abstractmethod
 from collections.abc import Sequence
 from itertools import chain
 import sys
 from types import MappingProxyType
 from typing import (
-    IO, Any, Callable, Literal, NamedTuple, Optional, abstractmethod,
+    IO, Any, Callable, Generic, Literal, NamedTuple, Optional, TypeVar,
 )
 from collections.abc import MutableMapping
 from inspect import Parameter, Signature
@@ -92,8 +93,8 @@ class Invoker:
             ):
                 raise ArgumentError(str(e)) from None
             raise
-        
-    
+
+
     _signature: Signature|None = None
     __signature__: Signature
     @property
@@ -107,26 +108,6 @@ class Invoker:
             self.__signature__ = self._signature
         return self._signature
 
-    def __repr__(self) -> str:
-        return f'<{type(self).__name__}({self.name})(...)>'
-    
-
-class BaseSessionInvoker(Invoker):
-    '''
-    An invoker that handles creating runners with session variables. This divides
-    into two types: `RunnerPerSessionInvoker` and `SharedSessionInvoker`.
-    
-    `RunnerPerSessionInvoker` creates a new runner for each session, and registers
-    it within the session. This is the preferred protocol, where there is not an
-    exclusive value for a global variable, such as `sys.displayhook`.displayhook
-    
-    The alternative, `SharedSessionInvoker`, creates a single runner that is shared
-    in all sessions. It retrieves the session variables from from inspecting its
-    context. This typically involves searching up the stack to find the session
-    variables.
-    '''
-    
-    
     __runner_signature: Signature|None = None
     @property
     def runner_signature(self) -> Signature:
@@ -141,31 +122,51 @@ class BaseSessionInvoker(Invoker):
     def _runner_signature(self) -> Signature:
         '''
         Compute the `Signature` of the `Runner` that is created by the `Invoker`.
-        
+
         The default is to use the `Invoker`'s signature, but this can be overridden.
         '''
         return self.signature
-    
-    
+
+
+    def __repr__(self) -> str:
+        return f'<{type(self).__name__}({self.name})(...)>'
+
+R = TypeVar('R', bound=run.BaseSessionRunner)
+
+class BaseSessionInvoker(Generic[R], Invoker):
+    '''
+    An invoker that handles creating runners with session variables. This divides
+    into two types: `RunnerPerSessionInvoker` and `SharedSessionInvoker`.
+
+    `RunnerPerSessionInvoker` creates a new runner for each session, and registers
+    it within the session. This is the preferred protocol, where there is not an
+    exclusive value for a global variable, such as `sys.displayhook`.displayhook
+
+    The alternative, `SharedSessionInvoker`, creates a single runner that is shared
+    in all sessions. It retrieves the session variables from from inspecting its
+    context. This typically involves searching up the stack to find the session
+    variables.
+    '''
+
     @abstractmethod
-    def create_runner(self, /, **kwargs) -> run.BaseSessionRunner:
+    def create_runner(self, /, **kwargs) -> R:
         '''
         Creates a `Runner` for this `Invoker`.
         '''
         ...
-        
-        
+
+
     @abstractmethod
-    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+    def _perform_injections(self, runner: R, /, **session_vars: Any):
         '''
         Injects session variables into the `Runner`. In subclasses where the
         `Invoker` is notified of the session variables, this method should be
         overridden to perform the injections.
-        
+
         In subclasses where the `Runner` is shared (cannot be per-session),
         the `Runner` is responsible for discovering the session variables,
         and this method should do nothing.
-        
+
         PARAMETERS
         ----------
         runner: run.Runner
@@ -174,8 +175,8 @@ class BaseSessionInvoker(Invoker):
             The session variables to be injected.
         '''
         ...
-        
-        
+
+
     def __call__(self, /, *args: Any,
                 stdout: Optional[IO[str]]=None,
                 stderr: Optional[IO[str]]=None,
@@ -183,7 +184,7 @@ class BaseSessionInvoker(Invoker):
                 **kwargs: Any) -> Any:
         '''
         Invokes the function with the given arguments and keyword arguments.
-        
+
         We supply `stdin`, `stdout`, and `stderr` as keyword arguments, if the
         underlying function accepts them explicitly.
 
@@ -199,29 +200,27 @@ class BaseSessionInvoker(Invoker):
             kwargs['stdin'] = stdin or sys.stdin
 
         return super().__call__(*args, **kwargs)
-    
+
     def _register_invoker(self, *args, **kwargs):
         '''
         Registers to be notified of the session.
-        
+
         Default is to do nothing, to simplify test fixtures.
         '''
         pass
-    
-    def _register_runner(self, runner: run.Runner, /, **session_vars: Any):
+
+    def _register_runner(self, runner: R, /, **session_vars: Any):
         '''
         Registers the `Runner` with the session.
-        
+
         Default is to do nothing, to simplify test fixtures.
         '''
         pass
-    
-
-class SharedSessionInvoker(BaseSessionInvoker):
+class SharedSessionInvoker(BaseSessionInvoker[run.SharedSessionRunner]):
     '''
     An invoker that handles creating runners with session variables.
     '''
-    
+
     @abstractmethod
     def create_runner(self, /, **kwargs) -> run.SharedSessionRunner:
         '''
@@ -239,7 +238,7 @@ class SharedSessionInvoker(BaseSessionInvoker):
         '''
         In `SharedSessionInvoker`, the `Runner` is responsible for discovering
         the session variables on the fly, so this method should do nothing.
-        
+
         PARAMETERS
         ----------
         runner: run.Runner
@@ -249,17 +248,17 @@ class SharedSessionInvoker(BaseSessionInvoker):
         '''
         pass
 
-    
-class RunnerPerSessionInvoker(BaseSessionInvoker):
+RPSR = TypeVar('RPSR', bound=run.RunnerPerSessionRunner)
+class RunnerPerSessionInvoker(BaseSessionInvoker[RPSR]):
     '''
     An invoker that creates a new runner for each session.
     '''
-    
+
     def __init__(self, cmd: Callable, name: Optional[str] = None, /, ** kwargs):
         super().__init__(cmd, name, **kwargs)
         self._register_invoker()
-    
-    
+
+
     def inject(self, /, **session_vars: Any):
         '''
         Injects session variables into the `Invoker`.  In subclasses of
@@ -272,17 +271,17 @@ class RunnerPerSessionInvoker(BaseSessionInvoker):
                                     **session_vars)
         self._perform_injections(runner, **session_vars)
         self._register_runner(runner, **session_vars)
-    
-    
-    def _perform_injections(self, runner: run.RunnerPerSessionRunner, /,
+
+
+    def _perform_injections(self, runner: RPSR, /,
                             **session_vars: Any):
         '''
         Injects session variables into the `Runner`. By default, this is
         delegated to the `Runner` itself.
         '''
         runner.inject(**session_vars)
-        
-        
+
+
     @abstractmethod
     def _register_invoker(self, *args, **kwargs):
         '''
@@ -293,17 +292,17 @@ class RunnerPerSessionInvoker(BaseSessionInvoker):
         def on_load(**session_args):
             self.inject(**session_args)
         events.on_xgit_load(on_load)
-    
-    
+
+
     @abstractmethod
-    def _register_runner(self, runner: run.Runner, /, **session_vars: Any):
+    def _register_runner(self, runner: RPSR, /, **session_vars: Any):
         '''
         Registers the `Runner` with the session.
         '''
         ...
 
 
-class EventInvoker(RunnerPerSessionInvoker):
+class EventInvoker(RunnerPerSessionInvoker[run.EventRunner]):
     __event: Event
     @property
     def event(self) -> Event:
@@ -311,22 +310,22 @@ class EventInvoker(RunnerPerSessionInvoker):
         The event that the invoker registers with.
         '''
         return self.__event
-        
+
     def create_runner(self, /, **kwargs) -> run.EventRunner:
         return run.EventRunner(self, event=self.event, **kwargs)
-        
-    def _perform_injections(self, runner: run.Runner, /, **session_vars: Any):
+
+    def _perform_injections(self, runner: run.EventRunner, /, **session_vars: Any):
         return super()._perform_injections(runner, **session_vars)
-    
-    def _register_runner(self, runner: run.Runner, /, **session_vars: Any):
-        self.__event(runner)     
-    
+
+    def _register_runner(self, runner: run.EventRunner, /, **session_vars: Any):
+        self.__event(runner)
+
     def __init__(self, event: Event, cmd: Callable,
                     name: Optional[str] = None, /,
                     **kwargs):
         self.__event = event
         super().__init__(cmd, name,  **kwargs)
-    
+
 
 class CommandInvoker(RunnerPerSessionInvoker):
     '''
@@ -356,7 +355,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
         Whether the invoker is used to return a value.
         '''
         return self.__for_value
-    
+
 
     def __init__(self, cmd: Callable,
                  name: Optional[str] = None, /, *,
@@ -368,7 +367,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
         self.__arg_transforms = {}
         self.__for_value = for_value
         self.__export = export
-        
+
         if flags is None:
             flags = {}
         def flag_tuple(k: str, v: str|KeywordInputSpec) -> KeywordSpec:
@@ -383,8 +382,8 @@ class CommandInvoker(RunnerPerSessionInvoker):
                     raise ValueError(f"Invalid flag value: {v!r}")
         self.__flags = {k:flag_tuple(k, s) for k, s in  flags.items()}
         self.__flags_with_signature = None
-        
-    
+
+
     __flags: KeywordSpecs
     __flags_with_signature: KeywordSpecs|None = None
     @property
@@ -439,7 +438,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
         self.__flags_with_signature = flags
         return flags
 
-        
+
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -451,7 +450,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
         split = self.extract_keywords(args)
         unified_kwargs = {**split.kwargs, **split.extra_kwargs, **kwargs}
         return super().__call__(*split.args, **unified_kwargs)
-    
+
 
     def _perform_injections(self, runner: run.Runner, /, *,
                             XSH: XonshSession,
@@ -474,7 +473,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
             if key not in sig.parameters:
                 s_vars.pop(key, None)
         runner.inject(value_handler=value_handler, **s_vars)
-        
+
     def _register_runner(self, runner: run.Runner, /, *,
                         XSH: XonshSession,
                         **session_vars: Any):
@@ -488,7 +487,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
         aliases = XSH.aliases
         assert isinstance(aliases, MutableMapping)
         aliases[self.name] = runner
-        
+
         unexport: Callable|None = None
         export = self.__export
         if export is not None:
@@ -503,7 +502,7 @@ class CommandInvoker(RunnerPerSessionInvoker):
     def _runner_signature(self) -> Signature:
         '''
         The signature of the `Runner` that is created by the `Invoker`.
-        
+
         For commands, the `Runner` signature is quite different from the `Invoker`.
         We do our best to capture the `Command`'s signature, including the parsed
         string arguments and the session variables.
@@ -698,12 +697,12 @@ class PrefixCommandInvoker(CommandInvoker):
             invoker._perform_injections(runner, **kwargs)
             # But don't register this runner
             return runner
-        
+
         subcommands = {
             k: create_and_inject(invoker)
             for k, invoker in self.subcommands.items()
         }
-    
+
         return run.PrefixCommand(self,
                                  subcommands=subcommands,
                                  **kwargs)
@@ -739,7 +738,7 @@ class PrefixCommandInvoker(CommandInvoker):
         super().__init__(cmd, prefix,
                          flags=flags,
                          **kwargs)
-    
+
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         '''

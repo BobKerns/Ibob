@@ -26,9 +26,9 @@ from xonsh.built_ins import XonshSession
 
 if TYPE_CHECKING:
     from xontrib.xgit.invoker import (
-        SharedSessionInvoker, EventInvoker,  # noqa: F401
+        Invoker, SharedSessionInvoker, EventInvoker,
         CommandInvoker, PrefixCommandInvoker,
-        BaseInvoker, BaseSessionInvoker, RunnerPerSessionInvoker,
+        BaseSessionInvoker, RunnerPerSessionInvoker,
     )
 
 from xontrib.xgit.types import (
@@ -43,7 +43,7 @@ def _h(s: str) -> str:
     return s.replace('_', '-')
 
 
-C = TypeVar('C', bound='BaseInvoker')
+C = TypeVar('C', bound='Invoker')
 
 class Runner(Generic[C]):
     '''
@@ -104,14 +104,14 @@ class Runner(Generic[C]):
         Removes the session variables from the command.
         '''
         pass
-    
 
-BSR = TypeVar('BSR', bound='BaseSessionInvoker')
-class BaseSessionRunner(Generic[BSR], Runner['BSR']):
+
+BSI = TypeVar('BSI', bound='BaseSessionInvoker')
+class BaseSessionRunner(Generic[BSI], Runner['BSI']):
     '''
     A runner that is used to run a command that requires a session.
     '''
-    def __init__(self, invoker: BSR, /,
+    def __init__(self, invoker: BSI, /,
                  **kwargs: Any):
         '''
         Initializes the runner with the given invoker.
@@ -137,9 +137,9 @@ class BaseSessionRunner(Generic[BSR], Runner['BSR']):
         __tracebackhide__ = True
         kwargs.update(self.session_args)
         return self.invoker(*args, **kwargs)
-    
 
-SSI = TypeVar('SSR', bound='SharedSessionInvoker')
+
+SSI = TypeVar('SSI', bound='SharedSessionInvoker')
 class SharedSessionRunner(Generic[SSI], BaseSessionRunner['SSI']):
     '''
     A runner that is used to run a command that requires a session.
@@ -174,7 +174,7 @@ class SharedSessionRunner(Generic[SSI], BaseSessionRunner['SSI']):
                     'XSH': xonsh,
                     'XGIT': frame.frame.f_globals['XGIT'],
                 }
-            if 'XGIT' in XSH.env:
+            if XSH.env is not None and 'XGIT' in XSH.env:
                 return {
                     'XSH': XSH,
                     'XGIT': XSH.env['XGIT'],
@@ -188,18 +188,18 @@ class SharedSessionRunner(Generic[SSI], BaseSessionRunner['SSI']):
         __tracebackhide__ = True
         kwargs.update(self.session_args)
         return self.invoker(*args, **kwargs)
-    
 
-RPSI = TypeVar('RPSR', bound='RunnerPerSessionInvoker')
 
-class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
+RPSI = TypeVar('RPSI', bound='RunnerPerSessionInvoker')
+
+class RunnerPerSessionRunner(BaseSessionRunner[RPSI]):
     '''
     A `Runner` that is used to run a function that requires a session, and which
     can be registered per session. It is created and registered when the `Invoker`
     is notified that the plugin has been loaded (which is when the session is
     available).
     '''
-    
+
     def __init__(self, invoker: RPSI, /, **kwargs: Any):
         '''
         Initializes the runner with the given invoker.
@@ -221,7 +221,7 @@ class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
         if self.__session_args is None:
             raise GitNoSessionException(self.__name__)
         return MappingProxyType(self.__session_args)
-    
+
     def inject(self, /,
                **session_args: Any) -> None:
         '''
@@ -236,7 +236,7 @@ class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
         Removes the session variables from the command.
         '''
         self.__session_args = None
-        
+
     def __call__(self, *args, **kwargs):
         '''
         Runs the command with the given arguments and session arguments.
@@ -244,19 +244,18 @@ class RunnerPerSessionRunner(SharedSessionRunner[RPSI]):
         __tracebackhide__ = True
         kwargs.update(self.session_args)
         return self.invoker(*args, **kwargs)
-    
+
 
 class EventRunner(RunnerPerSessionRunner['EventInvoker']):
     '''
     A runner that is used to run an event that requires a session.
     '''
-    
+
     def uninject(self) -> None:
         '''
         Removes the session variables from the command.
         '''
-        self.__session_args = None
-        self.__event.discard(self)
+        self.invoker.event.discard(self)
 
 
 
@@ -299,7 +298,7 @@ class Command(RunnerPerSessionRunner['CommandInvoker']):
         '''
         super().inject(**session_args)
         self.__value_handler = value_handler
-        
+
 
     def __call__(self, args: list[str|Any], **kwargs: Any) -> Any:
         '''
