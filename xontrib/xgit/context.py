@@ -357,12 +357,15 @@ class _GitContext(_GitCmd, GitContext):
                 self.__worktree = value
                 self.__path = value.path
                 try:
-                    with suppress(GitNoBranchException):
-                        self.branch = value.branch
-                except GitNoBranchException:
-                    pass
+                #    with suppress(GitNoBranchException):
+                        br = value.branch
+                #except GitNoBranchException:
+                #    pass
                 except Exception as e:
-                    raise GitValueError(f"SOME OTHER EXCEPTION: Error setting branch: {e}") from e
+                    import traceback
+                    traceback.print_exc()
+                    raise GitValueError(f"SOME OTHER EXCEPTION: Error setting branch: {e}") from  e
+                self.branch = br
                 self.commit = value.commit
             case str() | Path():
                 self.open_worktree(value)
