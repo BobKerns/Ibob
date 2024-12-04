@@ -10,10 +10,11 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 
+from abc import abstractmethod
 from pathlib import PurePosixPath
 from typing import (
     Optional, Protocol, overload, runtime_checkable, Any, Literal,
-    TypeAlias, IO, abstractmethod,
+    TypeAlias, IO,
 )
 from collections.abc import Iterator, Sequence, Mapping\
 
@@ -186,7 +187,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
     @overload
     def _git_entry(
         self,
-        hash_or_obj: 'ObjectId|et.O',
+        hash_or_obj: 'ObjectId|et.OBJ',
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -195,12 +196,12 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
         parent: Optional[GitObject] = None,
         parent_entry: Optional['et.GitEntryTree'] = None,
         path: Optional[PurePosixPath] = None,
-    ) -> tuple[str, 'et.GitEntry[et.O]']: ...
+    ) -> tuple[str, 'et.GitEntry[et.OBJ]']: ...
 
     # Implementation
     def _git_entry(
         self,
-        hash_or_obj: 'ObjectId|et.O',
+        hash_or_obj: 'ObjectId|et.OBJ',
         name: str,
         mode: GitEntryMode,
         type: GitObjectType,
@@ -209,7 +210,7 @@ class GitTree(GitObject, dict[str, 'et.GitEntry[EntryObject]']):
         parent: Optional[GitObject] = None,
         parent_entry: Optional['et.GitEntryTree'] = None,
         path: Optional[PurePosixPath] = None,
-    ) -> tuple[str, 'et.GitEntry[et.O]']:
+    ) -> tuple[str, 'et.GitEntry[et.OBJ]']:
         """
         Obtain or create a `GitObject` from a parsed entry line or equivalent.
         """

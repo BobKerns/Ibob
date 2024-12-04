@@ -83,7 +83,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         f"XSH.env is not a MutableMapping: {env!r}"
     # Set the context on loading.
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
-    
+
     @event_handler(events.on_chdir)
     def update_git_context(olddir, newdir,
                            XSH: XonshSession,
@@ -143,7 +143,7 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         XSH=xsh,
         XGIT=XGIT,
     )
-    
+
     update_git_context(olddir=None, newdir=Path.cwd(), XSH=xsh, XGIT=XGIT)
 
     if env.get("XGIT_TRACE_LOAD"):
@@ -176,7 +176,8 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
         print("Unloaded xontrib-xgit", file=sys.stderr)
     if 'xgit.version' in prompt_fields:
         del prompt_fields['xgit.version']
-        
+
+    assert xsh.env is not None
     events.on_xgit_unload.fire(XSH=xsh, XGIT=xsh.env['XGIT'])
 
     return dict()

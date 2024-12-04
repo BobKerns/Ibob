@@ -106,7 +106,7 @@ class TableView(MultiView[T,K,X,Rcv]):
     @property
     def _columns(self):
         '''
-        Get/set the columns. The columns will be updated to reflect 
+        Get/set the columns. The columns will be updated to reflect
         he target's current state.
 
         If the order is set and has keys not in the columns, they will
@@ -115,7 +115,7 @@ class TableView(MultiView[T,K,X,Rcv]):
         '''
         self.__collect_columns(self._target_value)
         return self.__columns
-    
+
     @_columns.setter
     def _columns(self, value):
         self.__columns = value

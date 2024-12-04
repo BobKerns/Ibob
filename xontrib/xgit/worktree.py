@@ -4,7 +4,7 @@ Worktree implementation.
 
 from pathlib import Path, PurePosixPath
 from typing import cast
-from contextlib import suppress
+#from contextlib import suppress
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -16,7 +16,7 @@ import xontrib.xgit.ref_types as rt
 from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
-from xontrib.xgit.utils import shorten_branch
+from xontrib.xgit.utils import shorten_branch, suppress
 
 ROOT = PurePosixPath(".")
 
@@ -164,7 +164,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 p.text(f"commit: {self.commit.hash[:14]}")
                 with p.indent(2):
                     p.break_()
-                    p.text(f'{self.commit.author.name} {self.commit.author.date}')
+                    p.text(f'{self.commit.author.person.name} {self.commit.author.date}')
                     with p.indent(2):
                         for line in self.commit.message.splitlines():
                             p.break_()

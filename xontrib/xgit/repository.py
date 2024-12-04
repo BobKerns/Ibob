@@ -248,7 +248,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
             commit: ot.GitCommit|None = None
             locked: str = ''
             prunable: str = ''
-            
+
             for line in self.git_lines('worktree', 'list', '--porcelain'):
                 match line.strip().split(' ', maxsplit=1):
                     case ['worktree', wt]:
@@ -360,7 +360,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 p.break_()
                 p.text(f".path: {relative_to_home(self.path)}")
                 p.break_()
-                p.text('.worktrees:') 
+                p.text('.worktrees:')
                 with p.indent(4):
                     wts = self.worktrees.values()
                     f1 = max(len(str(relative_to_home(wt.location)))

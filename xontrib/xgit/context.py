@@ -89,12 +89,12 @@ class _GitContext(_GitCmd, GitContext):
         """
         Open a repository at the given path. If the path is already open,
         return the existing repository.
-        
+
         If the path is a repository, return the repository. If the path
         is a worktree, return the repository associated with the worktree.
-        
+
         Raises `RepositoryNotFoundError` if the repository is not found.
-        
+
         PARAMETERS
         ----------
         path: Path | str | GitRepository
@@ -122,17 +122,17 @@ class _GitContext(_GitCmd, GitContext):
             ):
                 self.worktree = None
         return repository
-    
-    
-    def find_repository(self, path: Path, /) -> Path:
+
+
+    def find_repository(self, path: Path, /) -> tuple[Path, Path|None]:
         '''
         Find the repository associated with the given path.
-        
+
         Raises `RepositoryNotFoundError` if the repository is not found.
-        
+
         This is done by looking for a .git directory in the path or
         any of its parents.
-        
+
         PARAMETERS
         ----------
         path: Path
@@ -155,15 +155,15 @@ class _GitContext(_GitCmd, GitContext):
             if (gitpath := (loc / '.git')).exists():
                 return self._read_gitdir(gitpath)
         raise RepositoryNotFoundError(path)
-    
-    
-    def _read_gitdir(self, gitdir: Path, /) -> Path:
+
+
+    def _read_gitdir(self, gitdir: Path, /) -> tuple[Path, Path]:
         '''
         Read the .git file and return the path to the repository.
-        
+
         Raises `RepositoryNotFoundError` if the repository is not found
         or is not a repository.
-        
+
         PARAMETERS
         ----------
         gitdir: Path
@@ -185,24 +185,24 @@ class _GitContext(_GitCmd, GitContext):
                     if line.startswith('gitdir: '):
                         for_worktree = (gitdir.parent / line[8:])
                         return for_worktree.parent.parent, for_worktree
-        raise RepositoryNotFoundError(gitdir, 'file')
-    
+        raise RepositoryNotFoundError(gitdir)
 
-    def find_worktree(self, path: Path, /) -> tuple[Path, Path]:
+
+    def find_worktree(self, path: Path, /) -> tuple[Path, Path, Path]:
         '''
         Find the worktree associated with the given path.
-        
+
         Raises `WorktreeNotFoundError` if the worktree is not found.
 
         This is done by looking for a .git directory in the path or
         any of its parents.
-        
+
         Raises `WorktreeNotFoundError` if the worktree is not found.
-        
+
         PARAMETERS
         ----------
         path: Path
-        
+
         RETURNS
         -------
         worktree: Path
@@ -238,15 +238,15 @@ class _GitContext(_GitCmd, GitContext):
                     ) -> 'GitWorktree':
         '''
         Open a worktree associated with this repository.
-        
+
         If the worktree is already open, return the existing worktree.
-        
+
         If the location is not a directory, raise a `WorktreeNotFoundError`.
-        
+
         If the repository is not provided, the repository is found by
         looking for a .git directory. If the repository is not found,
         raise a `RepositoryNotFoundError`.
-        
+
         PARAMETERS
         ----------
         location: Path | str
@@ -263,10 +263,10 @@ class _GitContext(_GitCmd, GitContext):
         path: PurePosixPath
             The path within the worktree to use.
         select: bool
-            If `True`, select the worktree as the current worktree.            
+            If `True`, select the worktree as the current worktree.
         '''
-        given_location = location
-        location, _, _ = self.find_worktree(location)
+        given_location = Path(location)
+        location, _, _ = self.find_worktree(Path(location))
         for repo in self.repositories.values():
             if (wtree := repo.worktrees.get(location)) is not None:
                 if select:
@@ -299,7 +299,7 @@ class _GitContext(_GitCmd, GitContext):
         if path is None:
             p = given_location.relative_to(location)
             path = PurePosixPath(p)
-            
+
         worktree = wt._GitWorktree(
             location=location,
             repository=repository,
@@ -310,12 +310,12 @@ class _GitContext(_GitCmd, GitContext):
             locked='',
             prunable='',
         )
-        
+
         # If our table of worktrees is deferred, undefer it now.
         if callable(self.__worktrees):
             self.__worktrees = self.__worktrees(self)
         self.__worktrees[location] = worktree
-        
+
         # Make sure the repository knows about this worktree. (They can
         # become disconnected if moved.)
         repository._add_worktree(worktree)
@@ -334,13 +334,13 @@ class _GitContext(_GitCmd, GitContext):
     def worktree(self) -> GitWorktree:
         '''
         Get/Set/Unset the current worktree.
-        
+
         If the worktree is not set, raise a `GitNoWorktreeException`.
         '''
         if self.__worktree is None:
             raise GitNoWorktreeException("Worktree has not been set")
         return self.__worktree
-    
+
     @worktree.setter
     def worktree(self, value: GitWorktree|None):
         match value:
@@ -363,7 +363,7 @@ class _GitContext(_GitCmd, GitContext):
                 self.open_worktree(value)
             case _:
                 raise GitValueError(f"estInvalid worktree: {value}")
-            
+
 
     __repository: GitRepository|None
     # Set for bare repositories; otherwise we use the one from
@@ -377,7 +377,7 @@ class _GitContext(_GitCmd, GitContext):
             raise GitNoRepositoryException()
 
         return self.__repository
-    
+
     @repository.setter
     def repository(self, value: GitRepository):
         match value:
@@ -391,7 +391,7 @@ class _GitContext(_GitCmd, GitContext):
                 self.open_repository(value)
             case _:
                 raise GitValueError(f"Invalid repository: {value}")
-        
+
 
     __path: PurePosixPath
     @property
@@ -414,7 +414,7 @@ class _GitContext(_GitCmd, GitContext):
                 raise GitNoBranchException()
             return self.worktree.branch
         return self.__branch
-    
+
     @branch.setter
     def branch(self, value: 'str|rt.GitRef|None'):
         match value:
@@ -437,10 +437,12 @@ class _GitContext(_GitCmd, GitContext):
     def commit(self) -> ot.GitCommit:
         if self.__commit is None:
             self.commit = self.worktree.commit
+        if self.__commit is None:
+            raise GitValueError("Commit has not been set.")
         return self.__commit
 
     @commit.setter
-    def commit(self, value: 'ot.Commitish'):
+    def commit(self, value: 'ot.Commitish|None'):
         match value:
             case None:
                 commit = None
@@ -497,6 +499,7 @@ class _GitContext(_GitCmd, GitContext):
         obj_ref = cast(GitObjectReference, (repo, ref, t))
         self.__object_references[target].add(obj_ref)
 
+    __worktrees: dict[Path, GitWorktree]
 
     def __init__(self, session: XonshSession, /, *,
                  worktree: Optional[GitWorktree] = None,
@@ -526,7 +529,7 @@ class _GitContext(_GitCmd, GitContext):
         if commit is not None:
             self.commit = self.repository.get_object(commit, 'commit')
         else:
-            self.__commit = None
+            self.commit = None
         self.branch = branch
         self.__people = dict()
         self.__object_references = defaultdict(set)
@@ -545,7 +548,7 @@ class _GitContext(_GitCmd, GitContext):
             with suppress(GitNoBranchException):
                 return shorten_branch(obj.branch.name)
             return '(None)'
-        
+
         if cycle:
             p.text(f"GitContext({self.worktree} {self.path}")
         else:
@@ -572,11 +575,11 @@ class _GitContext(_GitCmd, GitContext):
                         if wt.repository_path != wt.repository.path:
                             with p.group(2):
                                 p.break_()
-                                p = relative_to_home(wt.repository_path)
-                                p.text(f".repository_path (private): {p}")
+                                pth = relative_to_home(wt.repository_path)
+                                p.text(f".repository_path (private): {pth}")
                                 p.break_()
-                                p = relative_to_home(wt.repository.path)
-                                p.text(f".repository.path (shared): {p}")
+                                pth = relative_to_home(wt.repository.path)
+                                p.text(f".repository.path (shared): {pth}")
                         p.break_()
                         p.text(f".branch: {bname(wt)}")
                         p.break_()

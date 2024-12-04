@@ -40,6 +40,7 @@ Processing begins with target object. The processing proceeds as follows:
     to display the object.
 '''
 
+from abc import abstractmethod
 from collections.abc import Mapping, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -49,7 +50,7 @@ from datetime import datetime, date, timedelta, timezone
 from itertools import count
 from typing import (
     Any, Callable, Generic, Optional, cast,
-    Protocol, abstractmethod
+    Protocol,
 )
 
 from xonsh.lib.pretty import RepresentationPrinter
