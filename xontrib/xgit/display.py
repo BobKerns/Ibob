@@ -83,7 +83,7 @@ def _xgit_displayhook(value: Any, /, *,
         print(ex, file=sys.stderr)
         sys.stderr.flush()
 
-_xgit_displayhook.original = _xonsh_displayhook
+_xgit_displayhook.original = _xonsh_displayhook # type: ignore
 
 @event_handler(events.on_xgit_predisplay)
 def _on_xgit_predisplay(value: Any, XSH: XonshSession, **_):
@@ -113,7 +113,7 @@ def _on_xgit_postdisplay(value: Any, XSH: XonshSession, **_):
     Update _, __, and ___ after displaying a value.
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
-        builtins._ = value
+        builtins._ = value # type: ignore
         XSH.ctx["__"] = XSH.ctx.get("+")
         XSH.ctx["___"] = XSH.ctx.get("++")
 

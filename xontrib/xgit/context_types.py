@@ -13,11 +13,12 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 
+from abc import abstractmethod
 from pathlib import Path, PurePosixPath
 from collections.abc import Mapping
 from typing import (
     Literal, Protocol, overload, runtime_checkable, Optional,
-    TypeAlias, TYPE_CHECKING, cast, abstractmethod,
+    TypeAlias, TYPE_CHECKING, cast,
 )
 
 from xonsh.built_ins import XonshSession
