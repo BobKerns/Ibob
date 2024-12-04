@@ -351,7 +351,7 @@ class _GitContext(_GitCmd, GitContext):
                 self.__path = PurePosixPath()
                 self.branch = None
                 self.commit = None
-            case GitWorktree():
+            case wt._GitWorktree():
                 if self.__worktree is not value:
                     events.on_xgit_worktree_change.fire(old=self.__worktree, new=value)
                 self.__worktree = value
