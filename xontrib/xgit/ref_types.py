@@ -1,14 +1,19 @@
 '''
 Types for xgit references.
 '''
+
 from abc import abstractmethod
-from typing import Protocol, TypeAlias, runtime_checkable, Sequence
-from pathlib import PurePosixPath
+from typing import (
+    Protocol, TypeAlias, runtime_checkable, TYPE_CHECKING,
+)
 
-from xontrib.xgit.types import GitHash
-import xontrib.xgit.object_types as ot
-import xontrib.xgit.context_types as ct
+from xontrib.xgit.types import ObjectId
 
+if TYPE_CHECKING:
+    import xontrib.xgit.context_types as ct
+    import xontrib.xgit.object_types as ot
+    from collections.abc import Sequence
+    from pathlib import PurePosixPath
 
 
 RefSpec: TypeAlias = 'PurePosixPath|str|Sequence[RefSpec]|GitRef'
@@ -77,7 +82,7 @@ class Replacement(GitRef, Protocol):
     """
     @property
     @abstractmethod
-    def replacement_name(self) -> GitHash:
+    def replacement_name(self) -> ObjectId:
         "The Sha1 hash of the object being replaced."
 
     @property

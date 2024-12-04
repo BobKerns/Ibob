@@ -2,12 +2,11 @@
 Any ref, usually a branch or tag, usually pointing to a commit.
 '''
 
-from tabnanny import check
 from typing import Any, Callable, Optional
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import GitHash
+from xontrib.xgit.types import ObjectId
 from xontrib.xgit.context_types import GitRepository
 from xontrib.xgit.to_json import JsonDescriber, JsonData
 import xontrib.xgit.object_types as ot
@@ -60,7 +59,7 @@ class _GitRef(rt.GitRef):
         # Validation will set the target if it's a symbolic ref.
         name = self.name
         if self.__target is None:
-            target = self.__repository.git_string('show-ref', '--hash', name)
+            target = ObjectId(self.__repository.git_string('show-ref', '--hash', name))
             if not target:
                 raise ValueError(f"Ref not found: {name!r}")
             self.__target = self.__repository.get_object(target)
@@ -104,13 +103,14 @@ class _GitRef(rt.GitRef):
             else:
                 result = repository.git_string('show-ref', '--verify', name)
                 if not result:
-                    result = repository.git_string('show-ref', '--verify', f'refs/heads/{name}')
+                    result = repository.git_string('show-ref', '--verify',
+                                                   f'refs/heads/{name}')
                 if not result:
                     raise ValueError(f"Ref not found: {name!r}")
                 target, name = result.split()
             if target is not None:
                 if isinstance(target, str):
-                    self.__target = repository.get_object(target)
+                    self.__target = repository.get_object(ObjectId(target))
                 else:
                     self.__target = target
 
@@ -197,24 +197,24 @@ class _Replacement(rt.Replacement, _GitRef):
         '''
         if self._replaced is None:
             repo = self.__repository
-            target = repo.git_string('show-ref', '--hash', self.name)
+            target = ObjectId(repo.git_string('show-ref', '--hash', self.name))
             if not target:
                 raise ValueError(f"Ref not found: {self.name!r}")
             self._replaced = repo.get_object(target)
         return self._replaced
 
     @property
-    def replacement_name(self) -> GitHash:
+    def replacement_name(self) -> ObjectId:
         '''
         The Sha1 hash of the object being replaced.
         '''
-        return super().name[13:]
+        return ObjectId(super().name[13:])
 
 class _Note(rt.Note, _GitRef):
     __attached_to: Optional['ot.GitObject']
     @property
-    def note_name(self) -> str:
-        return self.name[10:]
+    def note_name(self) -> ObjectId:
+        return ObjectId(self.name[10:])
 
     @property
     def target(self) -> 'ot.GitObject':

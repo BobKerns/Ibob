@@ -1,4 +1,6 @@
-from importlib import import_module
+'''
+Test that the xgit module loads successfully.
+'''
 
 def test_xgit_loads(modules):
     with modules('xontrib.xgit') as ((m_xgit,), vars):

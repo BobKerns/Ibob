@@ -15,18 +15,20 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
 from types import MappingProxyType
-from typing import Optional, TypeAlias, cast, Mapping, Iterator
+from typing import Optional, TypeAlias, cast
+from collections.abc import ItemsView, ValuesView, Mapping
 from pathlib import PurePosixPath
 
 
 from xonsh.lib.pretty import RepresentationPrinter
 from xontrib.xgit.context_types import GitRepository
+from xontrib.xgit.identity_set import IdentitySet
 import xontrib.xgit.objects as xo
 from xontrib.xgit.types import (
-    GitEntryMode, GitHash,
+    GitEntryMode, ObjectId,
 )
 from xontrib.xgit.entry_types import (
-    GitEntry, ParentObject, O,
+    GitEntry, ParentObject, OBJ,
     GitEntryBlob, GitEntryTree, GitEntryCommit,
 )
 import xontrib.xgit.object_types as ot
@@ -34,7 +36,7 @@ import xontrib.xgit.object_types as ot
 
 EntryObject: TypeAlias = 'ot.GitTree | ot.GitBlob | ot.GitCommit'
 
-class _GitEntry(GitEntry[O]):
+class _GitEntry(GitEntry[OBJ]):
     """
     An entry in a git tree. In addition to referencing a `GitObject`,
     it supplies the mode and name, and the tree, commit, or tag that
@@ -42,7 +44,7 @@ class _GitEntry(GitEntry[O]):
     """
 
     __name: str
-    __object: O
+    __object: OBJ
     __mode: GitEntryMode
     __path: PurePosixPath
     __parent_object: Optional[ParentObject]
@@ -54,7 +56,7 @@ class _GitEntry(GitEntry[O]):
         return self.__object.type
 
     @property
-    def hash(self) -> GitHash:
+    def hash(self) -> ObjectId:
         return self.__object.hash
 
     @property
@@ -66,7 +68,7 @@ class _GitEntry(GitEntry[O]):
         return self.__object.size
 
     @property
-    def object(self) -> O:
+    def object(self) -> OBJ:
         return self.__object
 
     @property
@@ -119,19 +121,19 @@ class _GitEntry(GitEntry[O]):
     def entry_long(self):
         size = str(self.size) if self.size >= 0 else '-'
         rw = self.prefix
-        return f"{rw} {self.type} {self.hash} {size:>8s}\t{self.name}"
+        return f"{rw} {self.type} {self.hash} {size!s:>8s}\t{self.name}"
 
     @property
     def path(self) -> PurePosixPath:
         return self.__path
 
     def __init__(self,
-                 object: O,
+                 object: OBJ,
                  name: str,
                  mode: GitEntryMode,
                  repository: GitRepository,
                  path: PurePosixPath,
-                 parent_object: Optional['ParentObject|GitHash']=None,
+                 parent_object: Optional['ParentObject|ObjectId']=None,
                  parent: Optional['GitEntryTree']=None,
             ):
         self.__object = object
@@ -181,10 +183,11 @@ class _GitEntry(GitEntry[O]):
 
 class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     @property
-    def hashes(self) -> Mapping[GitHash, GitEntry]:
+    def hashes(self) -> Mapping[ObjectId, IdentitySet[GitEntry, int]]:
         return MappingProxyType(self.object.hashes)
 
-    def __getitem__(self, name):# -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
+    def __getitem__(self, name):
+    #                   -> Self | Any | GitEntryTree | GitEntry[GitBlob | GitCommit ...:
         entry = self.get(name)
         if entry is None:
             raise KeyError(name)
@@ -215,25 +218,26 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
 
                     obj = loc.object[part]
                     path = path / part
-                    _, entry = obj._git_entry(obj.object, loc.name, loc.mode, loc.type, loc.size,
-                                repository=self.repository,
-                                path=path,
-                                parent_entry=loc,
-                                parent=loc.parent)
+                    _, entry = obj._git_entry(obj.object,
+                                            loc.name, loc.mode, loc.type, loc.size,
+                                            repository=self.repository,
+                                            path=path,
+                                            parent_entry=loc,
+                                            parent=loc.parent)
                     loc = entry
         return loc
 
     def __contains__(self, name):
         return name in self.object
 
-    def items(self) -> Iterator[tuple[str, EntryObject]]:
-        return self.object.items()
+    def items(self) -> ItemsView[str, EntryObject]:
+        return cast(ItemsView[str,EntryObject], self.object.items())
 
     def keys(self):
         return self.object.keys()
 
-    def values(self) -> Iterator[EntryObject]:
-        return self.object.values()
+    def values(self) -> ValuesView[EntryObject]:
+        return cast(ValuesView[EntryObject], self.object.values())
 
     def __iter__(self):
         return self.object.__iter__()

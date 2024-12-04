@@ -23,9 +23,13 @@ def cmp(result: Any, expected: Any):
         exceptions.append(ex)
 
     if exceptions:
+        # Fallback for 3.10
+        ExceptionGroup = globals().get('ExceptionGroup', Exception)
         raise ExceptionGroup("Could not understand the JSON", exceptions)
 
-    assert remapped_actual == remapped_expected, f"{remapped_actual} != {remapped_expected}"
+    assert remapped_actual == remapped_expected, (
+        f"{remapped_actual} != {remapped_expected}"
+    )
 
 def test_to_json_None(repository):
     cmp(to_json(None, repository=repository), None)
@@ -52,10 +56,14 @@ def test_to_json_dict(repository):
     cmp(to_json({'x': 42}, repository=repository), {'_id': 1, '_map': {'x': 42}})
 
 def test_to_json_nested(repository):
-    cmp(to_json({'x': [1, 2, 3]}, repository=repository), {'_id': 1, '_map': {'x': {'_id': 2, '_list': [1, 2, 3]}}})
+    cmp(to_json({'x': [1, 2, 3]}, repository=repository), {
+        '_id': 1, '_map': {'x': {'_id': 2, '_list': [1, 2, 3]}}
+    })
 
 def test_to_json_nested2(repository):
-    cmp(to_json({'x': {'y': 42}}, repository=repository), {'_id': 1, '_map': {'x': {'_id': 2, '_map': {'y': 42}}}})
+    cmp(to_json({'x': {'y': 42}}, repository=repository), {
+        '_id': 1, '_map': {'x': {'_id': 2, '_map': {'y': 42}}}
+    })
 
 def test_to_json_nested3(repository):
     a1 = to_json({'x': {'y': [1, 2, 3]}}, repository=repository)

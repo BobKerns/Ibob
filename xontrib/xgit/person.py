@@ -9,8 +9,11 @@ import re
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-import xontrib.xgit.context_types as ct
 from xontrib.xgit.types import GitLoader, InitFn
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import xontrib.xgit.context_types as ct
 
 class Person:
     '''

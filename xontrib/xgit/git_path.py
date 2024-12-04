@@ -75,11 +75,15 @@ class GitPath(PurePath):
 
     def __bytes__(self):
         t = self.__object.type
-        return bytes(self.__base.repository.git_binary('cat-file', t, self.__object.hash).read())
+        repo = self.__base.repository
+        return bytes(repo.git_binary('cat-file', t, self.__object.hash).read())
 
     def __eq__(self, other):
         if isinstance(other, GitPath):
-            return self.__object.hash == other.__object.hash and PurePath.__eq__(self, other)
+            return (
+                self.__object.hash == other.__object.hash
+                and PurePath.__eq__(self, other)
+            )
         return False
 
     def __hash__(self):
@@ -106,4 +110,6 @@ class GitPath(PurePath):
             p.text(')')
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.__base.repository.path.parent.name!r}, {self!r}, {self.__object!r})'
+        repo = self.__base.repository
+        cls = self.__class__.__name__
+        return f'{cls}({repo.path.parent.name!r}, {self!r}, {self.__object!r})'

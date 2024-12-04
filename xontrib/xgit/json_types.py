@@ -3,12 +3,13 @@ Types related to JSON serialization and deserialization.
 '''
 from typing import (
     TypeAlias, TypeVar, Optional, TypedDict, Protocol, Generic, Any,
+TYPE_CHECKING,
 )
 
-from xontrib.xgit.types import (
-    JsonData, JsonAtomic,
-)
-import xontrib.xgit.context_types as ct
+from xontrib.xgit.types import JsonData, JsonAtomic
+
+if TYPE_CHECKING:
+    import xontrib.xgit.context_types as ct
 
 class JsonRepresentation(TypedDict):
     '''
@@ -112,6 +113,7 @@ class ToJsonOverride(Protocol):
 class FromJsonOverride(Protocol):
     def __call__(self, x: JsonData, describer: 'JsonDescriber', /) -> Any: ...
 
+
 class JsonDescriber(Protocol):
     objects_by_id: dict[int,Any]
     overrides_by_id: dict[int,JsonData]
@@ -130,10 +132,12 @@ class JsonDescriber(Protocol):
         """
         Perform the conversion to JSON.
 
-        You probably don't want to call this directly, but use the `to_json` function instead.
+        You probably don't want to call this directly, but use the `to_json`
+        function instead.
 
         You probably don' want to override this method, but instead add a handler to the
-        `special_types` dictionary, or override the `valid_key` or `valid_value` methods.
+        `special_types` dictionary, or override the `valid_key` or `valid_value`
+        methods.
 
         PARAMETERS:
         - obj: Any
@@ -143,8 +147,8 @@ class JsonDescriber(Protocol):
                     cls: Optional[type|str] = None, /, *,
               repository: 'ct.GitRepository', # a refractory circular reference
               describer: Optional['JsonDescriber'] = None,
-              references: dict[int,Any] = dict(),
-              class_map: dict[str,type] = dict(),
+              references: Optional[dict[int, Any]] = None,
+              class_map: Optional[dict[str, type]] = None,
             )  -> Any:
         '''
         Get the python representation of a `JsonReturn` object.

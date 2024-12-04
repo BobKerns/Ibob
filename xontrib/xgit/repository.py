@@ -5,23 +5,27 @@ Implementation of the `GitRepository` class.
 from contextlib import suppress
 from pathlib import Path, PurePosixPath
 import re
-from typing import Literal, Mapping, Optional, Sequence, cast, overload
+from typing import Literal, Optional, cast, overload
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from operator import xor
 from functools import reduce
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import InitFn, GitObjectType, GitHash
+from xontrib.xgit.types import (
+    InitFn, GitObjectType, ObjectId, GitRepositoryId,
+    TreeId, BlobId, TagId, CommitId,
+)
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.context_types as ct
 import xontrib.xgit.worktree as wtree
 import xontrib.xgit.objects as obj
-import xontrib.xgit.context as ctx
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.git_cmd import _GitCmd
 from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.utils import shorten_branch, relative_to_home
 
 
 DEFAULT_BRANCH=(
@@ -34,6 +38,7 @@ DEFAULT_BRANCH=(
 The intent is to identify a default branch by examining the repository and/or worktree.
 '''
 
+
 RE_HEX = re.compile(r'^[0-9a-f]{6,}$')
 
 class _GitRepository(_GitCmd, ct.GitRepository):
@@ -41,9 +46,9 @@ class _GitRepository(_GitCmd, ct.GitRepository):
     A git repository.
     """
 
-    __id: GitHash|InitFn['_GitRepository', GitHash]
+    __id: GitRepositoryId|InitFn['_GitRepository', GitRepositoryId]
     @property
-    def id(self) -> str:
+    def id(self) -> GitRepositoryId:
         if callable(self.__id):
             self.__id = self.__id(self)
         return self.__id
@@ -56,13 +61,16 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         '''
         return self.__context
 
+
     __path: Path
     @property
     def path(self) -> Path:
         """
-        The path to the common part of the repository. This is the same for all worktrees.
+        The path to the common part of the repository.
+        This directory is the same for all worktrees on this repository.
         """
         return self.__path
+
 
     __worktrees: 'ct.WorktreeMap|InitFn[_GitRepository,ct.WorktreeMap]'
     @property
@@ -99,7 +107,21 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 return worktree
         raise ValueError("No worktrees found for repository")
 
+
     def get_worktree(self, key: Path|str) -> 'ct.GitWorktree|None':
+        '''
+        Get a worktree associated with this repository, located at `key`.
+
+        PARAMETERS
+        ----------
+        key: Path|str
+            The location of the worktree.
+
+        RETURNS
+        -------
+        ct.GitWorktree|None
+            The worktree associated with the repository at `key`.
+        '''
         if callable(self.__worktrees):
             self.__worktrees = self.__worktrees(self)
         path = Path(key).resolve()
@@ -130,9 +152,16 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         self.__worktrees[self.path.parent] = worktree
         return cast('ct.GitWorktree', worktree)
 
-    __objects: dict['ot.GitHash', 'ot.GitObject']
+    __objects: dict[ObjectId, 'ot.GitObject']
+
 
     def get_ref(self, ref: 'rt.RefSpec|None' = None) -> 'rt.GitRef|None':
+        '''
+        Get a reference to a commit (or other object) in the repository.
+        i.e. a branch, tag, or other named reference.
+
+        Conceptually, a ref is named by a path beginning with `refs/`.
+        '''
         if ref is None:
             ref = DEFAULT_BRANCH
         def check_ref(ref: 'rt.RefSpec') -> 'rt.GitRef|None':
@@ -155,17 +184,21 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         return check_ref(ref)
 
     @overload
-    def get_object(self, hash: 'ot.Commitish', type: Literal['commit']) -> 'ot.GitCommit':
+    def get_object(self, hash: 'ot.Commitish',
+                   type: Literal['commit']) -> 'ot.GitCommit':
         ...
     @overload
-    def get_object(self, hash: 'ot.Treeish', type: Literal['tree']) -> 'ot.GitTree':
+    def get_object(self, hash: 'ot.Treeish',
+                    type: Literal['tree']) -> 'ot.GitTree':
         ...
     @overload
-    def get_object(self, hash: 'ot.Blobish', type: Literal['blob'],
+    def get_object(self, hash: 'ot.Blobish',
+                   type: Literal['blob'],
                    size: int=-1) -> 'ot.GitBlob':
         ...
     @overload
-    def get_object(self, hash: 'ot.Tagish', type: Literal['tag']) -> 'ot.GitTagObject':
+    def get_object(self, hash: 'ot.Tagish',
+                   type: Literal['tag']) -> 'ot.GitTagObject':
         ...
     @overload
     def get_object(self, hash: 'ot.Objectish',
@@ -182,30 +215,30 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 return hash
             case rt.GitRef():
                 hash = self.rev_parse(hash.name)
-            case str():
-                hash = hash.strip()
-                if not hash:
-                    raise ValueError(f"Invalid hash: {hash!r}")
-                if RE_HEX.match(hash):
+            case str(h):
+                h = h.strip()
+                if not h:
+                    raise ValueError(f"Invalid hash: {h!r}")
+                if RE_HEX.match(h):
                     try:
                         hash = self.rev_parse(hash)
                     except ValueError:
                         hash = self.rev_parse(f'refs/heads/{hash}')
                 else:
-                    if not hash.startswith('refs/'):
-                        hash = f'refs/heads/{hash}'
-                    hash = self.rev_parse(hash)
+                    if not h.startswith('refs/'):
+                        h = f'refs/heads/{hash}'
+                    hash = self.rev_parse(h)
             case _:
                 raise ValueError(f"Invalid hash: {hash!r}")
         match type:
             case 'commit':
                 return obj._GitCommit(hash, repository=self)
             case 'tree':
-                return obj._GitTree(hash, repository=self)
+                return obj._GitTree(TreeId(hash), repository=self)
             case 'blob':
-                return obj._GitBlob(hash, size, repository=self)
+                return obj._GitBlob(BlobId(hash), size, repository=self)
             case 'tag':
-                return obj._GitTagObject(hash, repository=self)
+                return obj._GitTagObject(TagId(hash), repository=self)
             case None:
                 type = cast(GitObjectType, self.git_string('cat-file', '-t', hash))
         return self.get_object(hash, type, size)
@@ -217,41 +250,42 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         super().__init__(path.parent)
         self.__context = context
         self.__path = path
-        def init_id(self: '_GitRepository') -> str:
+        def init_id(self: '_GitRepository') -> GitRepositoryId:
             # This is a simple way to get a unique id for the repository.
             # This xor's the hashes of all commits with no parents.
             # It is careful to do so in the positive domain `f'0{x}'`,
             # and it uses xor to ensure order independence.
 
             # Any repo with the same ID will be clones of each other.
-            return hex(reduce(xor, (
+            id = hex(reduce(xor, (
                 int(f'0{x}', 16)
                 for x in self.git_lines('log', '--format=%H', '--max-parents=0')),
                 0))
+            return GitRepositoryId(id[2:])
         self.__id = init_id
+        self.__preferred_worktree = None
         def init_worktrees(self: '_GitRepository') -> 'ct.WorktreeMap':
             bare: bool = False
-            result: dict[Path, 'ct.GitWorktree'] = {}
+            result: dict[Path, ct.GitWorktree] = {}
             worktree: Path = path.parent.resolve()
-            branch: 'rt.GitRef|None' = None
-            commit: 'ot.GitCommit|None' = None
+            branch: rt.GitRef|None = None
+            commit: ot.GitCommit|None = None
             locked: str = ''
             prunable: str = ''
-            for l in self.git_lines('worktree', 'list', '--porcelain'):
-                match l.strip().split(' ', maxsplit=1):
+
+            for line in self.git_lines('worktree', 'list', '--porcelain'):
+                match line.strip().split(' ', maxsplit=1):
                     case ['worktree', wt]:
                         worktree = Path(wt).resolve()
                     case ['HEAD', c]:
-                        commit = self.get_object(c, 'commit')
+                        id = CommitId(ObjectId(c))
+                        commit = self.get_object(id, 'commit')
                         self.__objects[commit.hash] = commit
                     case ['branch', b]:
                         b = b.strip()
-                        if b:
-                            branch = _GitRef(b, repository=self)
-                        else:
-                            branch = None
-                    case ['locked', l]:
-                        locked = l.strip('"')
+                        branch = _GitRef(b, repository=self) if b else None
+                    case ['locked', line]:
+                        locked = line.strip('"')
                         locked = locked.replace('\\n', '\n')
                         locked = locked.replace('\\"', '"')
                         locked =locked.replace('\\\\', '\\')
@@ -267,9 +301,10 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                     case ['detached']:
                         branch = None
                     case ['bare']:
-                        bare = True
-                    case _ if l.strip() == '':
-                        repository_path = Path(self.git_string('rev-parse', '--absolute-git-dir'))
+                        bare = True  # noqa: F841
+                    case _ if line.strip() == '':
+                        repository_path = Path(self.git_string('rev-parse',
+                                                               '--absolute-git-dir'))
                         repository_path = repository_path.resolve()
                         assert commit is not None, "Commit has not been set."
                         result[worktree] = wtree._GitWorktree(
@@ -290,7 +325,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         self.__worktrees = init_worktrees
         self.__objects = {}
 
-    def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
+    def add_reference(self, target: ObjectId, source: 'ot.GitObject|rt.GitRef'):
         '''
         Add a reference to an object.
         '''
@@ -307,7 +342,8 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                         raise ValueError(f"Invalid object type: {source.type}")
                 self.context.add_reference(target, self.id, source.hash, type)
             case rt.GitRef():
-                self.context.add_reference(target, self.id, PurePosixPath(source.name), 'ref')
+                src_path = PurePosixPath(source.name)
+                self.context.add_reference(target, self.id, src_path, 'ref')
             case _:
                 return
 
@@ -346,24 +382,32 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         else:
             with p.group(4, "Repository:"):
                 p.break_()
-                p.text(f"path: {ctx._relative_to_home(self.path)}")
+                p.text(f".path: {relative_to_home(self.path)}")
                 p.break_()
-                with p.group(4, "worktrees:", "\n"):
+                p.text('.worktrees:')
+                with p.indent(4):
                     wts = self.worktrees.values()
-                    f1 = max(len(str(ctx._relative_to_home(wt.location)))
+                    f1 = max(len(str(relative_to_home(wt.location)))
                              for wt in wts)
-                    def shorten_branch(branch: str):
-                        branch = branch.replace('refs/heads/', '')
-                        branch = branch.replace('refs/remotes/', '')
-                        branch = branch.replace('refs/tags/', 'tag:')
-                        return branch
-                    f2 = max(len(shorten_branch(wt.branch.name if wt.branch else '-')) for wt in wts)
-                    f4 = max(len(wt.commit.author.person.name) for wt in wts)
+                    f2 = max(len(shorten_branch(wt.branch.name if wt.branch else '-'))
+                             for wt in wts)
+                    f4 = max(len(wt.commit.author.person.name)
+                             for wt in wts)
                     for wt in self.worktrees.values():
                         p.breakable()
                         branch = shorten_branch(wt.branch.name if wt.branch else '-')
-                        p.text(f"{str(ctx._relative_to_home(wt.location)):{f1}s}: {branch:{f2}s} {wt.commit.hash} {wt.commit.author.person.name:{f4}s} {wt.commit.author.date}")
+                        author = wt.commit.author
+                        rel_location = relative_to_home(wt.location)
+                        line = (
+                            f"{rel_location!s:{f1}s}: "
+                            f"{branch:{f2}s} "
+                            f"{wt.commit.hash[:14]} "
+                            f"{author.person.name:{f4}s} "
+                            f"{author.date}"
+                        )
+                        p.text(line)
                 p.breakable()
-                p.text(f"preferred_worktree: {ctx._relative_to_home(self.worktree.location)}")
+                pref = self.worktree
+                p.text(f".preferred_worktree: {relative_to_home(pref.location)}")
                 p.break_()
-                p.text(f"objects: {len(self.__objects)}")
+                p.text(f".objects: {len(self.__objects)}")

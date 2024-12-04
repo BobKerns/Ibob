@@ -14,9 +14,9 @@ In addition, it extends the displayhook to provide the following variables:
 """
 
 from contextlib import suppress
-from pathlib import Path, PurePosixPath
-from typing import MutableMapping, Any, cast
-from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+from collections.abc import MutableMapping
 import sys
 
 from xonsh.built_ins import XonshSession
@@ -26,23 +26,19 @@ from xonsh.execer import Execer
 from xontrib.xgit.decorators import (
     _exports,
     _export,
-    _unload_actions,
-    _do_unload_actions,
-    _do_load_actions,
-    _add_unload_action,
-    _aliases,
-    session,
-)
-from xontrib.xgit.display import (
-    _xgit_on_predisplay,
-    _xgit_on_postdisplay,
-    _on_precommand,
+    event_handler,
 )
 from xontrib.xgit.display import (
     _xonsh_displayhook,
     _xgit_displayhook,
 )
 import xontrib.xgit.context as ct
+from xontrib.xgit.types import (
+    GitNoWorktreeException, GitNoRepositoryException,
+    WorktreeNotFoundError, RepositoryNotFoundError,
+)
+from xontrib.xgit.utils import print_if
+
 # Export the functions and values we want to make available.
 
 _export(None, "+")
@@ -54,7 +50,7 @@ _export(None, "___")
 _export("_xgit_counter")
 
 _xgit_version: str = ""
-def xgit_version():
+def     xgit_version():
     """
     Return the version of xgit.
     """
@@ -64,6 +60,9 @@ def xgit_version():
     from importlib.metadata import version
     _xgit_version = version("xontrib-xgit")
     return _xgit_version
+
+events.doc('on_xgit_load', 'Runs when the xgit xontrib is loaded.')
+events.doc('on_xgit_unload', 'Runs when the xgit xontrib is unloaded.')
 
 def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     """
@@ -78,69 +77,33 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     Returns:
         dict: this will get loaded into the current execution context
     """
-    from xontrib.xgit.context import _GitContext
+
     env =  xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
-    env['XGIT'] = ct._GitContext(xsh)
+    # Set the context on loading.
     env["XGIT_TRACE_LOAD"] = env.get("XGIT_TRACE_LOAD", False)
-    def set_unload(
-        ns: MutableMapping[str, Any],
-        name: str,
-        value=None,
-    ):
-        old_value = None
-        if name in ns:
-            old_value = ns[name]
 
-            def restore_item():
-                ns[name] = old_value
-
-            _unload_actions[xsh].append(restore_item)
-        else:
-
-            def del_item():
-                with suppress(KeyError):
-                    del ns[name]
-
-            _unload_actions[xsh].append(del_item)
-
-
-    @events.on_chdir
-    @session()
-    def update_git_context(olddir, newdir):
+    @event_handler(events.on_chdir)
+    def update_git_context(olddir, newdir,
+                           XSH: XonshSession,
+                           XGIT: ct.GitContext,
+                           **_):
         """
         Update the git context when changing directories.
         """
-        assert xsh.env is not None, "XSH.env is None"
-        XGIT = xsh.env.get("XGIT")
-        XGIT = cast(_GitContext, XGIT)
-        if not XGIT:
-            # Not set at all so start from scratch
-            xsh.env['XGIT'] = ct._GitContext(xsh)
+        pr = print_if('CD_CHANGE', XSH=xsh)
+        newdir = Path(newdir)
+        with suppress(GitNoWorktreeException, WorktreeNotFoundError):
+            XGIT.open_worktree(newdir)
+            pr(f"XGIT: Opened worktree {newdir}")
             return
-        newpath = Path(newdir)
-
-        if XGIT.worktree.path == newpath:
-            # Going back to the worktree root
-            XGIT.path = PurePosixPath(".")
-        if XGIT.worktree.path not in newpath.parents:
-            # Not in the current worktree, so recompute the context.
-            XGIT.open_worktree(newpath)
-        else:
-            # Fast move within the same worktree.
-            XGIT.path = PurePosixPath(newdir.resolve()).relative_to(XGIT.worktree.path)
-
-
-    _do_load_actions(xsh)
-    
-    for name, value in _exports.items():
-        set_unload(xsh.ctx, name, value)
-    for name, value in _aliases.items():
-        aliases = xsh.aliases
-        assert aliases is not None, "XSH.aliases is None"
-        set_unload(aliases, name, value)
-        aliases[name] = value
+        with suppress(GitNoRepositoryException, RepositoryNotFoundError):
+            XGIT.open_repository(newdir)
+            pr(f"XGIT: Opened repository {newdir}")
+            return
+        XGIT.repository = None
+        pr(f"XGIT: Closed repository {olddir}")
 
     # Assertions are to flag bad test
     env = xsh.env
@@ -151,21 +114,19 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     assert isinstance(ctx, MutableMapping),\
         f"XSH.ctx is not a MutableMapping: {ctx!r}"
 
-    # Set the context on loading.
-    env['XGIT'] = ct._GitContext(xsh)
-    if "_XGIT_RETURN" in xsh.ctx:
-        del env["_XGIT_RETURN"]
+    if "$" in xsh.ctx:
+        del env["$"]
 
     # Install our displayhook
     global _xonsh_displayhook
     hook = _xonsh_displayhook
 
     ctx['-']  = None
-    def unhook_display():
+    def unhook_display(**_):
         sys.displayhook = hook
 
     _xonsh_displayhook = hook
-    _add_unload_action(xsh, unhook_display)
+    events.on_xgit_unload(unhook_display)
     sys.displayhook = _xgit_displayhook
 
     prompt_fields = env['PROMPT_FIELDS']
@@ -176,8 +137,17 @@ def _load_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     if "XGIT_ENABLE_NOTEBOOK_HISTORY" not in env:
         env["XGIT_ENABLE_NOTEBOOK_HISTORY"] = True
 
+    XGIT = ct._GitContext(xsh)
+    env['XGIT'] = XGIT
+    events.on_xgit_load.fire(
+        XSH=xsh,
+        XGIT=XGIT,
+    )
+
+    update_git_context(olddir=None, newdir=Path.cwd(), XSH=xsh, XGIT=XGIT)
+
     if env.get("XGIT_TRACE_LOAD"):
-        print("Loaded xontrib-xgit", file=sys.stderr)
+        print("Load ed xontrib-xgit", file=sys.stderr)
     return _exports
 
 
@@ -189,24 +159,12 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
 
     if env.get("XGIT_TRACE_LOAD"):
         print("Unloading xontrib-xgit", file=sys.stderr)
-    _do_unload_actions(xsh)
 
     if "_XGIT_RETURN" in xsh.ctx:
         del xsh.ctx["_XGIT_RETURN"]
 
     sys.displayhook = _xonsh_displayhook
 
-    def remove(event: str, func: Callable):
-        try:
-            getattr(events, event).remove(func)
-        except ValueError:
-            pass
-        except KeyError:
-            pass
-
-    remove("on_precommand", _on_precommand)
-    remove("xgit_on_predisplay", _xgit_on_predisplay)
-    remove("xgit_on_postdisplay", _xgit_on_postdisplay)
     env = xsh.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env is not a MutableMapping: {env!r}"
@@ -219,11 +177,12 @@ def _unload_xontrib_(xsh: XonshSession, **kwargs) -> dict:
     if 'xgit.version' in prompt_fields:
         del prompt_fields['xgit.version']
 
-    for m in [m for m in sys.modules if m.startswith("xontrib.xgit.")]:
-        del sys.modules[m]
+    assert xsh.env is not None
+    events.on_xgit_unload.fire(XSH=xsh, XGIT=xsh.env['XGIT'])
+
     return dict()
 
-if __name__ == "__main__" and False:
+if __name__ == "__main__" and False:  # noqa: SIM223
     print("This is a xontrib module for xonsh, it is not meant to be executed.")
     print("But we'll do it anyway.")
 

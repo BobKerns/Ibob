@@ -49,17 +49,15 @@ from fractions import Fraction
 from datetime import datetime, date, timedelta, timezone
 from itertools import count
 from typing import (
-    Any, Callable, Generic, Optional, Tuple, TypeVar, Union, cast,
-    Protocol, Iterable, Mapping, Sequence
+    Any, Callable, Generic, Optional, cast,
+    Protocol,
 )
 
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue
 from xontrib.xgit.view import (
-    View, ViewConfig,
-    DisplayFn, PrettyFn,
-    T, Tcv, Txv, K, Kcv, Kxv, X, Xcv, Xxv, R, Rxv, Rcv
+    View, T, Txv, K, Kcv, Kxv, X, Xcv, Xxv, Rxv, Rcv
 )
 
 class ConverterFnMulti(Generic[Kxv, Txv, Rcv], Protocol):
@@ -68,35 +66,36 @@ class ConverterFnMulti(Generic[Kxv, Txv, Rcv], Protocol):
     '''
     @abstractmethod
     def __call__(self, k: Kxv, x: Txv) -> Rcv: ...
-    
+
 class DisplayFnMulti(Generic[Kxv, Rxv], Protocol):
     '''
     A display function from `K`, `R` to `str`.
     '''
     @abstractmethod
     def __call__(self, k: Kxv, x: Rxv) -> str: ...
-    
+
 class PrettyFnMulti(Generic[Kxv, Rxv], Protocol):
     '''
     A pretty function from `K`, `R` to `str`.
     '''
     @abstractmethod
-    def __call__(self, k: Kxv, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...  
-    
+    def __call__(self, k: Kxv, x: Rxv,
+                 p: RepresentationPrinter, cycle: bool) -> None: ...
+
 class ExtractorFnMulti(Generic[Txv, Kcv, Xcv], Protocol):
     '''
     An extractor function from `T` to `Iterable[tuple[K, X]]`.
     '''
     @abstractmethod
     def __call__(self, x: Txv) -> Iterable[tuple[Kcv, Xcv]]: ...
-    
+
 class FilterFnMulti(Generic[Kxv, Xxv], Protocol):
     '''
     A filter function from `K`, `X` to `bool`.
     '''
     @abstractmethod
     def __call__(self, k: Kxv, x: Xxv) -> bool: ...
-    
+
 
 class SortFnMulti(Generic[Kxv, Xxv], Protocol):
     '''
@@ -118,7 +117,8 @@ The types that are considered atomic, and do not need to be converted.
 def default_extractor(x: T) -> Iterable[tuple[int|str, T]]:
     '''
     The default extractor for a `MultiView`. This assumes that the target
-    object can be converted to an iterable of tuples, where the first element is the key.
+    object can be converted to an iterable of tuples, where the first element
+    is the key.
     '''
     if isinstance(x, ATOMIC):
         return [(type(x).__name__, x)]
@@ -167,7 +167,7 @@ class MultiViewConfig(Generic[Txv, Kxv, Xxv, Rcv]):
     str_method: Optional[DisplayFnMulti[Kxv, Rcv]] = None
     repr_method: Optional[DisplayFnMulti[Kxv, Rcv]] = None
     pretty_method: Optional[PrettyFnMulti[Kxv, Rcv]] = None
-        
+
 
 class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
     '''
@@ -257,28 +257,30 @@ class MultiView(Generic[T, K, X, Rcv], View[T, Iterable[tuple[K, Rcv]]]):
             str_method = str_method or config.str_method
             repr_method = repr_method or config.repr_method
             pretty_method = pretty_method or config.pretty_method
-            
+
         if str_method is not None:
             def _str_method(t: tuple[K, Rcv]) -> str:
                 return str_method(*t)
             kwargs['str_method'] = _str_method
-    
+
         if repr_method is not None:
             def _repr_method(t: tuple[K, Rcv]) -> str:
                 return repr_method(*t)
             kwargs['repr_method'] = _repr_method
-        
+
         if pretty_method is not None:
-            def _pretty_method(t: tuple[K, Rcv], p: RepresentationPrinter, cycle: bool) -> None:
+            def _pretty_method(t: tuple[K, Rcv],
+                               p: RepresentationPrinter,
+                               cycle: bool) -> None:
                 return pretty_method(*t, p, cycle)
             kwargs['pretty_method'] = _pretty_method
-        
+
         self.__extractor = extractor
         self.__multi_converter = converter
         self.__prefilter = prefilter
         self.__postfilter = postfilter
         self.__sort = sort
-    
+
         super().__init__(target, **kwargs)
 
     __extractor: Optional[Callable[[T], Iterable[tuple[K, X]]]] = None

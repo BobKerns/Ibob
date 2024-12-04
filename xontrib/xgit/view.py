@@ -71,13 +71,14 @@ return the target object, converted to the intermediate representation.
 The previous target object is saved and restored. (This is not thread-safe).
 '''
 
-from abc import abstractmethod
-from dataclasses import dataclass
 
+from dataclasses import dataclass
+from abc import abstractmethod
 from typing import (
-    Any, Callable, Iterable,
+    Any, Callable,
     Optional, Protocol, TypeVar, Generic, cast,
 )
+from collections.abc import Iterable
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -129,21 +130,21 @@ class ConverterFn(Generic[Txv,Rcv], Protocol):
     '''
     @abstractmethod
     def __call__(self, x: Txv) -> Rcv: ...
-    
+
 class DisplayFn(Generic[Rxv], Protocol):
     '''
     A display function from `R` to `str`.
     '''
     @abstractmethod
     def __call__(self, x: Rxv) -> str: ...
-    
+
 class PrettyFn(Generic[Rxv], Protocol):
     '''
     A pretty function from `R` to `str`.
     '''
     @abstractmethod
-    def __call__(self, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...  
-    
+    def __call__(self, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...
+
 
 @dataclass
 class ViewConfig(Generic[Txv, Rcv]):
@@ -302,15 +303,29 @@ class View(Generic[T, Rcv]):
         t = type(self)
         if hasattr(t, name):
             p = getattr(t, name, None)
-            if p is not None:
-                if hasattr(p, '__get__'):
-                    return p.__get__(self)
+            if p is not None and hasattr(p, '__get__'):
+                return p.__get__(self)
+        if (
+            name.startswith('_')
+            and not name.endswith('_')
+            and '__' not in name
+        ):
+            # This is a private attribute of the view
+            # That we got here means the attribute was not found.
+            raise AttributeError(f'Attribute {name} not found on view {t.__name__}')
         return getattr(self._target, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if hasattr(self.__class__, name):
             super().__setattr__(name, value)
             return
+        if (
+            name.startswith('_')
+            and not name.endswith('__')
+            and '__' in name
+        ):
+            # This is a private attribute of the view
+            return super().__setattr__(name, value)
         setattr(self._target, name, value)
 
     def __getitem__(self, key: Any) -> Any:

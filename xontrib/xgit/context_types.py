@@ -15,9 +15,9 @@ classes are complex. It is very easy to end up with circular imports.
 
 from abc import abstractmethod
 from pathlib import Path, PurePosixPath
-from tkinter import E
+from collections.abc import Mapping
 from typing import (
-    Literal, Mapping, Protocol, overload, runtime_checkable, Optional,
+    Literal, Protocol, overload, runtime_checkable, Optional,
     TypeAlias, TYPE_CHECKING, cast,
 )
 
@@ -25,7 +25,7 @@ from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.types import (
     GitObjectReference, GitObjectType, GitException,
-    GitHash, GitRepositoryId, GitReferenceType, CleanupAction,
+    ObjectId, GitRepositoryId, GitReferenceType,
 )
 from xontrib.xgit.json_types import Jsonable
 import xontrib.xgit.person as people
@@ -75,8 +75,8 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
     @abstractmethod
     def path(self) -> Path:
         """
-        The path to the common part of the repository. This is the same for all worktrees
-        associated with a repository.
+        The path to the common part of the repository. This is the same for all
+        worktrees associated with a repository.
         """
         ...
 
@@ -108,17 +108,21 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @overload
-    def get_object(self, hash: 'ot.Commitish', type: Literal['commit']) -> 'ot.GitCommit':
+    def get_object(self, hash: 'ot.Commitish',
+                   type: Literal['commit']) -> 'ot.GitCommit':
         ...
     @overload
-    def get_object(self, hash: 'ot.Treeish', type: Literal['tree']) -> 'ot.GitTree':
+    def get_object(self, hash: 'ot.Treeish',
+                   type: Literal['tree']) -> 'ot.GitTree':
         ...
     @overload
-    def get_object(self, hash: 'ot.Blobish', type: Literal['blob'],
+    def get_object(self, hash: 'ot.Blobish',
+                   type: Literal['blob'],
                    size: int=-1) -> 'ot.GitBlob':
         ...
     @overload
-    def get_object(self, hash: 'ot.Tagish', type: Literal['tag']) -> 'ot.GitTagObject':
+    def get_object(self, hash: 'ot.Tagish',
+                   type: Literal['tag']) -> 'ot.GitTagObject':
         ...
     @overload
     def get_object(self, hash: 'ot.Objectish',
@@ -129,12 +133,12 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
                    type: Optional[GitObjectType]=None,
                    size: int=-1) -> 'ot.GitObject':
         '''
-        Get an object by its hash. If the type is given, the object is checked and
-        cast to the appropriate type. If the type is not given, the object is
-        returned as `GitObject`.
+        Get an object by its hash. If the type is given, the object is checked
+        and cast to the appropriate type. If the type is not given, the object
+        is returned as `GitObject`.
 
-        It will, however, be converted to the appropriate type when the object is
-        dereferenced.
+        It will, however, be converted to the appropriate type when the object
+        is dereferenced.
         '''
         ...
 
@@ -146,7 +150,9 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
         ...
 
     @abstractmethod
-    def add_reference(self, target: GitHash, source: 'ot.GitObject|rt.GitRef'):
+    def add_reference(self,
+                      target: ObjectId,
+                      source: 'ot.GitObject|rt.GitRef'):
         '''
         Add a reference to an object.
         '''
@@ -172,7 +178,8 @@ class GitRepository(Jsonable, gc.GitCmd, Protocol):
 @runtime_checkable
 class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     """
-    A git worktree. This is the root directory of where the files are checked out.
+    A git worktree. This is the root directory of where the files
+    are checked out.
     """
     @property
     @abstractmethod
@@ -192,7 +199,7 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
     @path.setter
     @abstractmethod
     def path(self, value: PurePosixPath|str): ...
-    
+
     @property
     @abstractmethod
     def location(self) -> Path:
@@ -200,28 +207,39 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
         The location of the worktree.
         '''
         ...
-        
+
     @property
     @abstractmethod
     def branch(self) -> 'rt.GitRef':
         '''
         The current branch checked out in the worktree.
-        
+
         If no branch is checked out, a `GitNoBranchException` is raised.
         '''
         ...
     @branch.setter
     @abstractmethod
-    def branch(self, value: 'rt.GitRef|str|None'): ...
-    
-    
+    def branch(self, value: 'rt.GitRef|str|None'):
+        '''
+        The branch of the worktree. If the worktree is not on a branch,
+        set to None.
+        '''
+        ...
+
+
     @property
     @abstractmethod
-    def commit(self) -> 'ot.GitCommit': ...
+    def commit(self) -> 'ot.GitCommit':
+        '''
+        The current commit checked out in the worktree.
+
+        When no commit is checked out, a `GitNoCheckoutException` is raised.
+        '''
+        ...
     @commit.setter
     @abstractmethod
     def commit(self, value: 'ot.Commitish'): ...
-    
+
 
     locked: str
     prunable: str
@@ -247,7 +265,7 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def objects(self) -> 'Mapping[ot.GitHash, ot.GitObject]':
+    def objects(self) -> 'Mapping[ot.ObjectId, ot.GitObject]':
         '''
         The objects in the repositories.
         '''
@@ -296,6 +314,11 @@ class GitContext(Jsonable, Protocol):
         '''
         ...
 
+    @worktree.setter
+    @abstractmethod
+    def worktree(self, value: 'GitWorktree|None|str|Path'): ...
+
+
     @property
     @abstractmethod
     def repository(self) -> GitRepository:
@@ -308,6 +331,12 @@ class GitContext(Jsonable, Protocol):
             The repository object.
         '''
         ...
+
+
+    @repository.setter
+    @abstractmethod
+    def repository(self, value: 'GitRepository|None|str|Path'): ...
+
 
     @property
     @abstractmethod
@@ -362,30 +391,32 @@ class GitContext(Jsonable, Protocol):
 
     @property
     @abstractmethod
-    def object_references(self) -> Mapping[GitHash, set[GitObjectReference]]:
+    def object_references(self) -> Mapping[ObjectId, set[GitObjectReference]]:
         '''
         The references associated with the repository.
         '''
         ...
 
-    @abstractmethod
-    def add_reference(self, target: GitHash, repo: GitRepositoryId, ref: GitHash|PurePosixPath, type: GitReferenceType, /) -> None:
-        '''
-        Add a reference to an object.
-        '''
-        ...
 
-    @abstractmethod
-    def add_unload_action(self, action: CleanupAction) -> None:
+    def add_reference(self,
+                      target: ObjectId,
+                      repo: GitRepositoryId,
+                      ref: ObjectId|PurePosixPath,
+                      t: GitReferenceType,
+                      /) -> None:
         '''
-        Add an action to be performed when the context is unloaded.
-        '''
-        ...
+        Add a reference to an object, so we can find where it is used.
 
-
-    def _do_unload_actions(self):
-        '''
-        Perform the unload actions.
+        PARAMETERS
+        ----------
+        target : ObjectId
+            The object being referenced.
+        repo : GitRepositoryId
+            The repository where the reference is.
+        ref : ObjectId | PurePosixPath
+            The reference to the object.
+        t : GitReferenceType
+            The type of reference.
         '''
         ...
 

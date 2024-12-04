@@ -1,13 +1,13 @@
 """
 A module to create description of an object for debugging or tests.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import (
-    Any, Iterable, Mapping, Optional,
-    Sequence, cast
+    Any, Optional, cast
 )
+from collections.abc import Iterable, Mapping, Sequence
 from types import GenericAlias
 
 from xontrib.xgit.context_types import GitRepository
@@ -149,10 +149,8 @@ class _JsonDescriber(JsonDescriber):
         Get the valid attributes for an object.
         """
         keys = []
-        try:
+        with suppress(TypeError):
             keys = vars(x)
-        except TypeError:
-            pass
         return ((k, self._attr(x,k)) for k  in keys if self.valid_key(k))
 
     def _instance(self, x: Any, handler: JsonHandler[JsonKV]) -> JsonReturn:
@@ -258,10 +256,7 @@ class _JsonDescriber(JsonDescriber):
     def instantiate_from_json(self, _id: int, cls: type|str, json: JsonData) -> Any:
         if _id in self.objects_by_id:
             return self.objects_by_id[_id]
-        if isinstance(cls, str):
-           cls_obj = self.find_class(_id, cls)
-        else:
-            cls_obj = cls
+        cls_obj = self.find_class(_id, cls) if isinstance(cls, str) else cls
         override = self.find_from_override(cls_obj)
         if override:
             return override(json, self)
@@ -306,10 +301,12 @@ class _JsonDescriber(JsonDescriber):
         """
         Perform the conversion to JSON.
 
-        You probably don't want to call this directly, but use the `to_json` function instead.
+        You probably don't want to call this directly, but use the
+        `to_json` function instead.
 
-        You probably don' want to override this method, but instead add a handler to the
-        `special_types` dictionary, or override the `valid_key` or `valid_value` methods.
+        You probably don' want to override this method, but instead
+        add a handler to the `special_types` dictionary, or override
+        the `valid_key` or `valid_value` methods.
 
         PARAMETERS:
         - obj: Any
@@ -391,8 +388,8 @@ class _JsonDescriber(JsonDescriber):
     def from_json(self, obj: Any, cls: Optional[type|str] = None, /, *,
                 repository: GitRepository,
                 describer: Optional['JsonDescriber'] = None,
-                references: dict[int,Any] = dict(),
-                class_map: dict[str,type] = dict(),
+                references: Optional[dict[int, Any]] = None,
+                class_map: Optional[dict[str, type]] = None,
             )  -> Any:
         '''
         Get the python representation of a `JsonReturn` object.
@@ -409,6 +406,10 @@ class _JsonDescriber(JsonDescriber):
         - class_map: Optional[dict,type] = None
             A mapping of class names to types, for use in instantiating instances.
         '''
+        if class_map is None:
+            class_map = dict()
+        if references is None:
+            references = dict()
         if cls is not None:
             return self.instantiate_from_json(0, cls, obj)
         match obj:
@@ -468,11 +469,11 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
             repository: GitRepository,
             describer: Optional[JsonDescriber] = None,
             max_levels: int = 100,
-            special_types: dict[type,JsonHandler] = {},
-            override_types: dict[type,ToJsonOverride] = {},
+            special_types: Optional[dict[type, JsonHandler]] = None,
+            override_types: Optional[dict[type, ToJsonOverride]] = None,
             include_private: bool = False,
-            class_map: dict[str,type] = dict(),
-            objects_by_id: dict[int,Any] = dict(),
+            class_map: Optional[dict[str, type]] = None,
+            objects_by_id: Optional[dict[int, Any]] = None,
         ) -> JsonReturn:
     """
     Create a JSON representation of an object.
@@ -499,6 +500,14 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
     - objects_by_id: dict[int,Any]
         A dictionary of objects that have already been described, indexed by their ID.
     """
+    if override_types is None:
+        override_types = {}
+    if objects_by_id is None:
+        objects_by_id = dict()
+    if class_map is None:
+        class_map = dict()
+    if special_types is None:
+        special_types = {}
     if describer is None:
         describer = _JsonDescriber(
             repository=repository,
@@ -515,8 +524,8 @@ def to_json(obj: Any, cls: Optional[type|str] = None, /, *,
 def from_json(obj: JsonData, cls: Optional[type|str] = None, /, *,
               repository: GitRepository,
             describer: Optional['JsonDescriber'] = None,
-            references: dict[int,Any] = dict(),
-            class_map: dict[str,type] = dict(),
+            references: Optional[dict[int, Any]] = None,
+            class_map: Optional[dict[str, type]] = None,
             )  -> Any:
     '''
     Get the python representation of a `JsonReturn` object.
@@ -533,6 +542,10 @@ def from_json(obj: JsonData, cls: Optional[type|str] = None, /, *,
     - class_map: Optional[dict,type] = None
         A mapping of class names to types, for use in instantiating instances.
     '''
+    if class_map is None:
+        class_map = dict()
+    if references is None:
+        references = dict()
     if describer is None:
         describer = _JsonDescriber(
             repository=repository,

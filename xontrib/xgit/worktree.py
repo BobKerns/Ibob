@@ -4,10 +4,14 @@ Worktree implementation.
 
 from pathlib import Path, PurePosixPath
 from typing import cast
+from contextlib import suppress
 
 from xonsh.lib.pretty import RepresentationPrinter
 
-from xontrib.xgit.types import GitNoBranchException, JsonData
+from xontrib.xgit.types import (
+    GitNoBranchException, GitNoCheckoutException,
+    JsonData, ObjectId, CommitId,
+)
 from xontrib.xgit.context_types import GitWorktree, GitRepository
 from xontrib.xgit.git_cmd import _GitCmd
 import xontrib.xgit.ref as ref
@@ -15,12 +19,24 @@ import xontrib.xgit.ref_types as rt
 from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.utils import shorten_branch
 
+ROOT = PurePosixPath(".")
+'''
+Root of the git worktree. The directory with the .git directory or .git file.
+'''
 
 class _GitWorktree(_GitCmd, GitWorktree):
     """
-    A git worktree. xThis is the root directory of where the files are checked out.
+    A git worktree. This is the root directory of where the files are checked out.
+    It will contain a .git directory, or a .git pointer file that points into the
+    git repository.
+
+    Except for when initially created, a commit's tree will be checked out into
+    this directory.
     """
+
+
     __repository: GitRepository
     @property
     def repository(self) -> GitRepository:
@@ -36,25 +52,34 @@ class _GitWorktree(_GitCmd, GitWorktree):
         """
         return self.__repository_path
 
+
     __path: PurePosixPath = PurePosixPath(".")
     @property
     def path(self) -> PurePosixPath:
         return self.__path
+
     @path.setter
     def path(self, value: PurePosixPath|str):
         self.__path = PurePosixPath(value)
+
 
     __location: Path
     @property
     def location(self):
         return self.__location
 
+
     __branch: 'rt.GitRef|None'
     @property
     def branch(self) -> 'rt.GitRef':
+        '''
+        The branch of the worktree. If the worktree is not on a branch,
+        this raises a `GitNoBranchException`.
+        '''
         if self.__branch is None:
             raise GitNoBranchException()
         return self.__branch
+
     @branch.setter
     def branch(self, value: 'rt.GitRef|str|None'):
         match value:
@@ -63,29 +88,36 @@ class _GitWorktree(_GitCmd, GitWorktree):
             case str():
                 value = value.strip()
                 if value:
-                    self.__branch =ref. _GitRef(value, repository=self.__repository)
+                    self.__branch = ref._GitRef(value,
+                                                repository=self.__repository)
                 else:
                     self.__branch = None
             case None:
                 self.__branch = None
             case _:
                 raise ValueError(f"Invalid branch: {value!r}")
+
+
     __commit: GitCommit|None
     @property
     def commit(self) -> GitCommit:
-        assert self.__commit is not None, "Commit has not been set."
+        if self.__commit is None:
+            raise GitNoCheckoutException()
         return self.__commit
+
     @commit.setter
     def commit(self, value: Commitish):
         match value:
             case str() | PurePosixPath():
-                value = str(value).strip()
-                hash = self.rev_parse(value)
-                self.__commit = self.repository.get_object(hash, 'commit')
+                v = str(value).strip()
+                id = self.rev_parse(v)
+                self.__commit = self.repository.get_object(id, 'commit')
             case GitCommit():
                 self.__commit = value
             case _:
                 raise ValueError(f'Not a commit: {value}')
+
+
     locked: str
     prunable: str
 
@@ -95,7 +127,7 @@ class _GitWorktree(_GitCmd, GitWorktree):
                 repository_path: Path,
                 branch: 'rt.GitRef|str|None',
                 commit: 'Commitish',
-                path: PurePosixPath = PurePosixPath("."),
+                path: PurePosixPath = ROOT,
                 locked: str = '',
                 prunable: str = '',
                 **kwargs
@@ -110,8 +142,11 @@ class _GitWorktree(_GitCmd, GitWorktree):
             self.locked = locked
             self.prunable = prunable
 
+
     def to_json(self, describer: JsonDescriber):
-        branch = self.branch.name if self.branch else None
+        branch = None
+        with suppress(GitNoBranchException):
+            branch = self.branch.name
         return cast(JsonData,{
             "repository": str(self.repository.path),
             "repository_path": str(self.repository_path),
@@ -122,22 +157,25 @@ class _GitWorktree(_GitCmd, GitWorktree):
             "prunable": self.prunable,
         })
 
+
     @staticmethod
     def from_json(data: dict, describer: JsonDescriber):
         repository = repo._GitRepository(Path(data['repository']),
                                          context=describer.context)
-        j: str = data["commit"]
+        j: str = CommitId(ObjectId(data["commit"]))
         commit,=repository.get_object(j, 'commit'),
 
         return _GitWorktree(
             repository=repository,
             repository_path=Path(data["repository_path"]),
             location=Path(data["path"]),
-            branch=ref._GitRef(data["branch"], repository=describer.repository),
+            branch=ref._GitRef(data["branch"],
+                               repository=describer.repository),
             commit=commit,
             locked=data["locked"],
             prunable=data["prunable"],
         )
+
 
     def _repr_pretty_(self, p: RepresentationPrinter, cycle: bool):
         if cycle:
@@ -145,21 +183,26 @@ class _GitWorktree(_GitCmd, GitWorktree):
         else:
             with p.group(4, "Worktree:"):
                 p.break_()
-                p.text(f"repository: {self.repository.path}")
+                p.text(f".repository: {self.repository.path}")
                 p.break_()
-                p.text(f"repository_path: {self.repository_path}")
+                p.text(f".repository_path: {self.repository_path}")
                 p.break_()
-                p.text(f"path: {self.path}")
+                p.text(f".path: {self.path}")
                 p.break_()
-                p.text(f"branch: {self.branch}")
+                branch = '(None)'
+                with suppress(GitNoBranchException):
+                    branch = self.branch.name
+                p.text(f".branch: {shorten_branch(branch)}")
                 p.break_()
-                p.text(f"commit: {self.commit.hash}")
-                with p.group(2):
+                p.text(f"commit: {self.commit.hash[:14]}")
+                with p.indent(2):
                     p.break_()
-                    p.text(f'{self.commit.author} {self.commit.author.date}')
-                    for line in self.commit.message.splitlines():
-                        p.break_()
-                        p.text(line)
+                    p.text(f'{self.commit.author.person.name} '
+                           f'{self.commit.author.date}')
+                    with p.indent(2):
+                        for line in self.commit.message.splitlines():
+                            p.break_()
+                            p.text(line)
                 p.break_()
                 p.text(f"locked: {self.locked}")
                 p.break_()

@@ -6,7 +6,7 @@ https://stackoverflow.com/questions/16994307/identityset-in-python
 '''
 
 from collections.abc import MutableSet
-from typing import Any, Callable, Generic, TypeVar
+from typing import Callable, Generic, TypeVar
 
 
 E = TypeVar('E')
@@ -42,5 +42,5 @@ class IdentitySet(Generic[E, K], MutableSet):
 
     def __repr__(self):
         if not self:
-            return '%s()' % (self.__class__.__name__,)
-        return '%s(%r)' % (self.__class__.__name__, list(self))
+            return f'{self.__class__.__name__}()'
+        return f'{self.__class__.__name__}({list(self)!r})'

@@ -5,7 +5,9 @@ allows display of python values returned from commands.
 """
 
 from threading import Lock
-from typing import Any, MutableMapping
+from typing import Any
+from collections.abc import MutableMapping
+from contextlib import suppress
 import sys
 import builtins
 
@@ -14,10 +16,9 @@ from xonsh.events import events
 from xonsh.built_ins import XonshSession
 
 from xontrib.xgit.context_types import GitContext
-from xontrib.xgit.decorators import session
+from xontrib.xgit.decorators import session, event_handler
 
 # Our events:
-
 
 events.doc(
     "on_xgit_predisplay",
@@ -42,7 +43,9 @@ Xonsh's original displayhook.
 """
 
 @session()
-def _xgit_displayhook(value: Any, /, *, XSH: XonshSession, **_):
+def _xgit_displayhook(value: Any, /, *,
+                      XSH: XonshSession,
+                      **_):
     """
     Add handling for value-returning commands, pre- and post-display events,
     and exception protection.
@@ -52,23 +55,23 @@ def _xgit_displayhook(value: Any, /, *, XSH: XonshSession, **_):
     assert isinstance(env, MutableMapping), \
         f"XSH.env not a MutableMapping: {env!r}"
     if isinstance(value, HiddenCommandPipeline):
-        value = XSH.ctx.get("_XGIT_RETURN", value)
-        if "_XGIT_RETURN" in XSH.ctx:
+        value = XSH.ctx.get("$", value)
+        if "$" in XSH.ctx:
             if env.get("XGIT_TRACE_DISPLAY"):
-                print("clearing _XGIT_RETURN in XSH.ctx", file=sys.stderr)
-            del XSH.ctx["_XGIT_RETURN"]
+                print("clearing $ in XSH.ctx", file=sys.stderr)
+            del XSH.ctx["$"]
         else:
             if env.get("XGIT_TRACE_DISPLAY"):
                 msg = (
-                    "No _XGIT_RETURN, "
-                    + "result has been displayed with str() and suppressed"
+                    "No $; result has been displayed with str() and suppressed"
                 )
                 print(msg, file=sys.stderr)
 
     if env.get("XGIT_TRACE_DISPLAY") and ovalue is not value:
         sys.stdout.flush()
         print(
-            f"DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}", sys.stderr
+            f"DISPLAY: {ovalue=!r} {value=!r} type={type(ovalue).__name__}",
+            file=sys.stderr
         )
         sys.stderr.flush()
     try:
@@ -80,11 +83,10 @@ def _xgit_displayhook(value: Any, /, *, XSH: XonshSession, **_):
         print(ex, file=sys.stderr)
         sys.stderr.flush()
 
-setattr(_xgit_displayhook, "original", _xonsh_displayhook)
+_xgit_displayhook.original = _xonsh_displayhook # type: ignore
 
-@events.on_xgit_predisplay
-@session()
-def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
+@event_handler(events.on_xgit_predisplay)
+def _on_xgit_predisplay(value: Any, XSH: XonshSession, **_):
     """
     Update the notebook-style convenience history variables before displaying a value.
     """
@@ -105,14 +107,13 @@ def _xgit_on_predisplay(value: Any, XSH: XonshSession, **_):
         print(f"{ovar}: ", end="")
 
 
-@events.on_xgit_postdisplay
-@session()
-def _xgit_on_postdisplay(value: Any, XSH: XonshSession, **_):
+@event_handler(events.on_xgit_postdisplay)
+def _on_xgit_postdisplay(value: Any, XSH: XonshSession, **_):
     """
     Update _, __, and ___ after displaying a value.
     """
     if value is not None and not isinstance(value, HiddenCommandPipeline):
-        setattr(builtins, ",", value)
+        builtins._ = value # type: ignore
         XSH.ctx["__"] = XSH.ctx.get("+")
         XSH.ctx["___"] = XSH.ctx.get("++")
 
@@ -132,8 +133,7 @@ def _xgit_count(*, XGIT: GitContext, **_):
         return next(counter)
 
 
-@events.on_precommand
-@session()
+@event_handler(events.on_precommand)
 def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     """
     Before running a command, save our temporary variables.
@@ -148,12 +148,12 @@ def _on_precommand(cmd: str,  XSH: XonshSession, **_):
     env = XSH.env
     assert isinstance(env, MutableMapping),\
         f"XSH.env not a MutableMapping: {env!r}"
-    if "_XGIT_RETURN" in XSH.ctx:
+    if "$" in XSH.ctx:
         if env.get("XGIT_TRACE_DISPLAY"):
-            print("Clearing _XGIT_RETURN before command", file=sys.stderr)
-        del XSH.ctx["_XGIT_RETURN"]
+            print("Clearing $ before command", file=sys.stderr)
+        del XSH.ctx["$"]
     XSH.ctx["-"] = cmd.strip()
-    XSH.ctx["+"] = builtins._  # type: ignore # noqa
+    with suppress(AttributeError):
+        XSH.ctx["+"] = builtins._  # type: ignore
     XSH.ctx["++"] = XSH.ctx.get("__")
     XSH.ctx["+++"] = XSH.ctx.get("___")
-
