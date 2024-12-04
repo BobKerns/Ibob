@@ -29,8 +29,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         lfs: ${{ inputs.lfs }}
-    - name: Git Log
-      run: git log
     - name: Install poetry
       run: pipx install poetry
     - name: Lock dependencies
@@ -46,4 +44,4 @@ jobs:
     - name: Run tests
       run: |
         poetry run xonsh -c "xontrib load ${{ inputs.xontrib_name }}"
-        poetry run pytest -v
+        poetry run pytest

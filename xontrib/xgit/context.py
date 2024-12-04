@@ -356,15 +356,8 @@ class _GitContext(_GitCmd, GitContext):
                     events.on_xgit_worktree_change.fire(old=self.__worktree, new=value)
                 self.__worktree = value
                 self.__path = value.path
-                try:
-                    with suppress(GitNoBranchException):
-                        self.branch = value.branch
-                #except GitNoBranchException:
-                #    pass
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    raise GitValueError(f"SOME OTHER EXCEPTION: Error setting branch: {e}") from  e
+                with suppress(GitNoBranchException):
+                    self.branch = value.branch
                 self.commit = value.commit
             case str() | Path():
                 self.open_worktree(value)
