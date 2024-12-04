@@ -2,7 +2,7 @@
 Miscellaneous utility functions.
 '''
 
-from typing import TypeVar
+from typing import MutableMapping, TypeVar
 from collections.abc import Iterable
 from pathlib import Path
 from contextlib import contextmanager
@@ -23,15 +23,15 @@ def pre(v0: T, vx:  Iterable[T]) -> Iterable[T]:
     Prepend an element to an iterable.
     """
     yield v0
-    yield from vx  
-    
+    yield from vx
+
 def post(vx:  Iterable[T], vn: T) -> Iterable[T]:
     """
     Append an element to an iterable.
     """
     yield from vx
-    yield vn 
-    
+    yield vn
+
 def prepost(v0: T, vx:  Iterable[T], vn: T) -> Iterable[T]:
     """
     Prepend and append an element to an iterable.
@@ -45,14 +45,14 @@ def print_if(var: str, XSH: XonshSession):
     Returns a print function that is enabled if the variable `var` is in the
     environment. If the variable does not begin with `XGIT_`, then it is
     prefixed with `XGIT_SHOW_`.
-    
+
     The variable is checked once on each call of this function and used
     to determine if the returned print function should be enabled or
     disabled.
-    
+
     Output (if any) is to `sys.stderr`. Messages will be prefixed with
     the `var` without `XGIT_SHOW_`.
-    
+
     PARAMETERS
     ----------
     var: str
@@ -66,7 +66,10 @@ def print_if(var: str, XSH: XonshSession):
     '''
     if not var.startswith('XGIT_'):
         var = f'XGIT_SHOW_{var}'
-    enable = XSH.env.get(var, False)
+    env = XSH.env
+    if not isinstance(env, MutableMapping):
+        raise ValueError('XSH.env is not a MutableMapping')
+    enable = env.get(var, False)
     def _print(*args):
         if enable:
             print(*args, file=sys.stderr)
@@ -113,3 +116,4 @@ def suppress(*exceptions: type[Exception]):
             if any((type(x).__name__ == ename) for x in exceptions):
                 raise Exception(f'Suppressed exception missed: {e!r}') from e
             raise
+        

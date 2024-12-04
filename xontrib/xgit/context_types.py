@@ -219,12 +219,23 @@ class GitWorktree(Jsonable, gc.GitCmd, Protocol):
         ...
     @branch.setter
     @abstractmethod
-    def branch(self, value: 'rt.GitRef|str|None'): ...
+    def branch(self, value: 'rt.GitRef|str|None'):
+        '''
+        The branch of the worktree. If the worktree is not on a branch,
+        set to None. 
+        '''
+        ...
 
 
     @property
     @abstractmethod
-    def commit(self) -> 'ot.GitCommit': ...
+    def commit(self) -> 'ot.GitCommit':
+        '''
+        The current commit checked out in the worktree. 
+        
+        When no commit is checked out, a `GitNoCheckoutException` is raised.
+        '''
+        ...
     @commit.setter
     @abstractmethod
     def commit(self, value: 'ot.Commitish'): ...

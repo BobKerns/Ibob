@@ -38,6 +38,7 @@ DEFAULT_BRANCH=(
 The intent is to identify a default branch by examining the repository and/or worktree.
 '''
 
+
 RE_HEX = re.compile(r'^[0-9a-f]{6,}$')
 
 class _GitRepository(_GitCmd, ct.GitRepository):
@@ -60,6 +61,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         '''
         return self.__context
 
+
     __path: Path
     @property
     def path(self) -> Path:
@@ -68,6 +70,7 @@ class _GitRepository(_GitCmd, ct.GitRepository):
         This directory is the same for all worktrees on this repository.
         """
         return self.__path
+
 
     __worktrees: 'ct.WorktreeMap|InitFn[_GitRepository,ct.WorktreeMap]'
     @property
@@ -104,7 +107,21 @@ class _GitRepository(_GitCmd, ct.GitRepository):
                 return worktree
         raise ValueError("No worktrees found for repository")
 
+
     def get_worktree(self, key: Path|str) -> 'ct.GitWorktree|None':
+        '''
+        Get a worktree associated with this repository, located at `key`.
+
+        PARAMETERS
+        ----------
+        key: Path|str
+            The location of the worktree.
+
+        RETURNS
+        -------
+        ct.GitWorktree|None
+            The worktree associated with the repository at `key`.
+        '''
         if callable(self.__worktrees):
             self.__worktrees = self.__worktrees(self)
         path = Path(key).resolve()
@@ -137,7 +154,14 @@ class _GitRepository(_GitCmd, ct.GitRepository):
 
     __objects: dict[ObjectId, 'ot.GitObject']
 
+
     def get_ref(self, ref: 'rt.RefSpec|None' = None) -> 'rt.GitRef|None':
+        '''
+        Get a reference to a commit (or other object) in the repository.
+        i.e. a branch, tag, or other named reference.
+
+        Conceptually, a ref is named by a path beginning with `refs/`.
+        '''
         if ref is None:
             ref = DEFAULT_BRANCH
         def check_ref(ref: 'rt.RefSpec') -> 'rt.GitRef|None':

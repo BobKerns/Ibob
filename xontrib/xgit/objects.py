@@ -9,6 +9,20 @@ These are the four types that live in a git object database:
 - `GitCommit`: A commit object, representing a snapshot of a submodule.
 - `GitTagObject`: A signed tag object. These do not appear in trees,
     but are used to tag commits. (Unsigned tags are just references.)
+
+`GitObject` objects do _not_ contain a reference to the repository they
+came from. This is because they are not tied to a single repository.
+
+However, any lazy loaders set to load the content will have a reference
+to the repository they came from, as a known place where the object data
+can be found, and (except for shallow clones), will have all the
+referenced objects, transitively, as well.
+
+We could deal with shallow repositories by performing a search of the
+repositories we know, or by performing a fetch, which we could even do
+with a separate special-purpose private clone. But that is not implemented
+and unlikely to be worth the effort, as the expected use is to explore
+repositories deeply.
 '''
 
 from typing import (
@@ -116,7 +130,8 @@ class _GitObject(_GitId, GitObject):
 
     def _size_loader(self, repository: 'gc.GitCmd') -> InitFn['_GitObject',int]:
         '''
-        Subclasses can call this when they don't know the size of the object
+        Subclasses can call this when they don't know the size of the object.
+        It returns a function that lazily loads the size from the repository.
         '''
         def loader(self: _GitObject):
             size = repository.git_string("cat-file", "-s", self.hash)
@@ -148,7 +163,11 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
 
     @property
     def hash(self) -> TreeId:
+        '''
+        The hash of the tree, typed as `TreeId`.
+        '''
         return TreeId(super().hash)
+
 
     __hashes: defaultdict[ObjectId, IdentitySet[GitEntry,int]]
     @property
@@ -162,6 +181,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
         if self.__lazy_loader is not None:
             self._expand()
         return MappingProxyType(self.__hashes)
+
 
     def __init__(
         self,
@@ -280,8 +300,10 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
             path = path / p
         return loc
 
+
     def __str__(self):
         return f"D {self.hash} {len(self._expand()):>8d}"
+
 
     def __format__(self, fmt: str):
         """
@@ -324,6 +346,7 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                     suffix = '/' if e.type == 'tree' else ''
                     tree_len = f'{rw} {e.hash} {size:>8d} {e.name}{suffix}'
                     p.text(tree_len)
+
 
     def _parse_git_entry(
         self,
@@ -414,6 +437,27 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
     ) -> tuple[str, GitEntry[OBJ]]:
         """
         Obtain or create a `GitObject` from a parsed entry line or equivalent.
+
+        This is a helper function for `_parse_git_entry` and `_expand`.
+
+        PARAMETERS
+        ----------
+        hash_or_obj: ObjectId | OBJ
+            The hash of the object or the object itself.
+        name: str
+            The name of the object.
+        mode: GitEntryMode
+            The mode of the object.
+        type: GitObjectType
+            The type of the object.
+        size: int
+            The size of the object.
+        repository: GitRepository
+            The repository that contains the object.
+        parent: Optional[GitObject]
+            The parent object of the object.
+        parent_entry: Optional[GitEntryTree]
+            The parent entry of the object, where it was found.
         """
         assert isinstance(XSH.env, MutableMapping),\
             f"XSH.env not a MutableMapping: {XSH.env!r}"
@@ -478,7 +522,11 @@ class _GitBlob(_GitObject, GitBlob):
 
     @property
     def hash(self) -> BlobId:
+        '''
+        The hash of the blob, typed as `BlobId`.
+        '''
         return BlobId(super().hash)
+
 
     def __init__(
         self,
@@ -497,14 +545,18 @@ class _GitBlob(_GitObject, GitBlob):
         )
         self.__repository = repository
 
+
     def __str__(self):
         return f"{self.type} {self.hash} {self.size:>8d}"
+
 
     def __repr__(self):
         return f"GitFile({self.hash!r})"
 
+
     def __len__(self):
         return self.size
+
 
     def __format__(self, fmt: str):
         """
@@ -525,8 +577,10 @@ class _GitBlob(_GitObject, GitBlob):
             return f"{hash} {self.size:>8d}"
         return hash
 
+
     def _repr_pretty_(self, p, cycle):
         p.text(f"GitBlob({self.hash!r}, {self.size})")
+
 
     @property
     def data(self) -> bytes:
@@ -535,6 +589,7 @@ class _GitBlob(_GitObject, GitBlob):
         """
         return self.__repository.git_binary("cat-file", "blob", self.hash).read()
 
+
     @property
     def stream(self):
         """
@@ -542,15 +597,18 @@ class _GitBlob(_GitObject, GitBlob):
         """
         return self.__repository.git_stream("cat-file", "blob", self.hash)
 
+
     @property
     def lines(self):
         return self.__repository.git_lines("cat-file", "blob", self.hash)
+
 
     @property
     def text(self):
         return self.__repository.git_stream("cat-file", "blob", self.hash,
                                             text=True,
                                             ).read()
+
 
 class _GitCommit(_GitObject, GitCommit):
     """
@@ -563,7 +621,11 @@ class _GitCommit(_GitObject, GitCommit):
 
     @property
     def hash(self) -> CommitId:
+        '''
+        The hash of the commit, typed as `CommitId`.
+        '''
         return CommitId(super().hash)
+
 
     __tree: GitTree|InitFn[GitCommit, GitTree]
     @property
@@ -574,12 +636,17 @@ class _GitCommit(_GitObject, GitCommit):
             self.__tree = self.__tree(self)
         return self.__tree
 
+
     __parents: Sequence[GitCommit]
     @property
     def parents(self) -> Sequence[GitCommit]:
+        '''
+        The parent commits of this commit.
+        '''
         if self.__loader:
             self.__loader()
         return self.__parents
+
 
     __message: str
     @property
@@ -590,23 +657,36 @@ class _GitCommit(_GitObject, GitCommit):
 
     __author: CommittedBy
     __committer: CommittedBy
+
     @property
     def author(self):
+        '''
+        The person who authored the commit and the date.
+        '''
         if self.__loader:
             self.__loader()
         return self.__author
+
     @property
     def committer(self):
+        '''
+        The person who committed the commit and the date.
+        '''
         if self.__loader:
             self.__loader()
         return self.__committer
 
+
     __signature: str
     @property
     def signature(self) -> str:
+        '''
+        The GPG signature of the commit, if any.
+        '''
         if self.__loader:
             self.__loader()
         return self.__signature
+
 
     def __init__(self, hash: str, /, *, repository: GitRepository):
         def loader():
@@ -701,10 +781,16 @@ class _GitTagObject(_GitObject, GitTagObject):
 
     @property
     def type(self) -> Literal["tag"]:
+        '''
+        The type of the object, always 'tag'.
+        '''
         return "tag"
 
     @property
     def hash(self) -> TagId:
+        '''
+        The hash of the tag, typed as `TagId`.
+        '''
         return TagId(super().hash)
 
     __object: GitObject|InitFn[GitTagObject, GitObject]
@@ -716,12 +802,17 @@ class _GitTagObject(_GitObject, GitTagObject):
             self.__object = self.__object(self)
         return self.__object
 
+
     __tagger: CommittedBy
     @property
     def tagger(self) -> CommittedBy:
+        '''
+        The person who created the tag and the date.
+        '''
         if self.__loader:
             self.__loader()
         return self.__tagger
+
 
     __tag_type: GitObjectType
     @property
@@ -730,12 +821,14 @@ class _GitTagObject(_GitObject, GitTagObject):
             self.__loader()
         return self.__tag_type
 
+
     __tag_name: str
     @property
     def tag_name(self) -> str:
         if self.__loader:
             self.__loader()
         return self.__tag_name
+
 
     __message: str
     @property
@@ -744,16 +837,30 @@ class _GitTagObject(_GitObject, GitTagObject):
             self.__loader()
         return self.__message
 
+
     __signature: str
     @property
     def signature(self) -> str:
+        '''
+        The GPG signature of the tag, if any.
+        '''
         if self.__loader:
             self.__loader()
         return self.__signature
 
+
     def __init__(self, hash: TagId, /, *,
                  repository: GitRepository):
+        '''
+        Initialize a tag object from a hash.
+
+        This will load the tag object from the repository lazily, i.e.
+        when one of the properties is accessed.
+        '''
         def loader():
+            '''
+            Load the tag object from the repository in response to a property access.
+            '''
             lines = repository.git_lines("cat-file", "tag", hash)
             for line in lines:
                 if line.startswith("object"):

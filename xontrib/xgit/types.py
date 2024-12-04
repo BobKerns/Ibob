@@ -187,3 +187,9 @@ class RepositoryNotFoundError(GitDirNotFoundError):
     def __init__(self, path: Path):
         super().__init__(path, 'repository')
 
+class GitNoCheckoutException(GitException):
+    '''
+    Thrown when a checkout is required, but the worktree is not checked out.
+    '''
+    def __init__(self):
+        super().__init__('The worktree is not checked out.')

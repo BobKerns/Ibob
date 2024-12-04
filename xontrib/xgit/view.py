@@ -71,10 +71,11 @@ return the target object, converted to the intermediate representation.
 The previous target object is saved and restored. (This is not thread-safe).
 '''
 
-from dataclasses import dataclass
 
+from dataclasses import dataclass
+from abc import abstractmethod
 from typing import (
-    Any, Callable, abstractmethod,
+    Any, Callable,
     Optional, Protocol, TypeVar, Generic, cast,
 )
 from collections.abc import Iterable
@@ -129,21 +130,21 @@ class ConverterFn(Generic[Txv,Rcv], Protocol):
     '''
     @abstractmethod
     def __call__(self, x: Txv) -> Rcv: ...
-    
+
 class DisplayFn(Generic[Rxv], Protocol):
     '''
     A display function from `R` to `str`.
     '''
     @abstractmethod
     def __call__(self, x: Rxv) -> str: ...
-    
+
 class PrettyFn(Generic[Rxv], Protocol):
     '''
     A pretty function from `R` to `str`.
     '''
     @abstractmethod
-    def __call__(self, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...  
-    
+    def __call__(self, x: Rxv, p: RepresentationPrinter, cycle: bool) -> None: ...
+
 
 @dataclass
 class ViewConfig(Generic[Txv, Rcv]):

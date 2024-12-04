@@ -2,9 +2,9 @@
 Types for xgit references.
 '''
 
+from abc import abstractmethod
 from typing import (
     Protocol, TypeAlias, runtime_checkable, TYPE_CHECKING,
-    abstractmethod,
 )
 
 from xontrib.xgit.types import ObjectId

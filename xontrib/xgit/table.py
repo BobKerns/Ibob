@@ -85,7 +85,7 @@ class Column:
         ]
         return ', '.join(a for a in args if a is not None)
 
-ColumnDict: TypeAlias = dict[str|int, Column]|dict[str, Column]|dict[int, Column]
+ColumnDict: TypeAlias = dict[str|int, Column]
 
 class TableView(MultiView[T,K,X,Rcv]):
     '''
@@ -102,7 +102,7 @@ class TableView(MultiView[T,K,X,Rcv]):
     A header name can be assigned.
     '''
 
-    __columns: dict[str|int, Column]
+    __columns: ColumnDict
     @property
     def _columns(self):
         '''
@@ -126,9 +126,9 @@ class TableView(MultiView[T,K,X,Rcv]):
         else:
             self.__order = list(self.__columns.keys())
 
-    __order: list[str|int]
+    __order: ColumnKeys
     @property
-    def _order(self) -> list[str|int]:
+    def _order(self) -> ColumnKeys:
         '''
         Get/set the order of the columns.
         '''

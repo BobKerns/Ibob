@@ -24,6 +24,8 @@ deinitialized
 Deinitializer
 deinitializers
 dfmt
+docstring
+docstrings
 downrev
 dpath
 dunder

@@ -2,6 +2,7 @@
 A mixin class for git commands on a repository or worktree.
 '''
 
+from abc import abstractmethod
 from pathlib import Path
 from subprocess import (
     run, PIPE, Popen, CompletedProcess,
@@ -9,7 +10,7 @@ from subprocess import (
 import shutil
 from typing import (
     Optional, runtime_checkable, Protocol,
-    IO, cast, abstractmethod,
+    IO, cast,
     TYPE_CHECKING,
 )
 from collections.abc import Sequence, Iterator

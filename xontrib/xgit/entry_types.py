@@ -15,9 +15,9 @@ BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 '''
 
+from abc import abstractmethod
 from typing import (
     Protocol, Optional, TypeVar, Generic, TypeAlias, runtime_checkable,
-    abstractmethod,
     TYPE_CHECKING,
 )
 from pathlib import PurePosixPath
