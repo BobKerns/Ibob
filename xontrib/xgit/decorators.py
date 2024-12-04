@@ -108,9 +108,9 @@ def complete_ref(prefix: str = "") -> ContextualCompleter:
     '''
     Returns a completer for git references.
     '''
-    
-    @session()
+
     @contextual_completer
+    @session()
     def completer(context: CompletionContext, /, XGIT: GitContext) -> set[str]:
         worktree = XGIT.worktree
         refs = worktree.git_lines("for-each-ref", "--format=%(refname)", prefix)
