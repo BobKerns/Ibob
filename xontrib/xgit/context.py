@@ -25,7 +25,7 @@ from typing import (
     Optional, cast
 )
 from pathlib import Path, PurePosixPath
-#from contextlib import suppress
+from contextlib import suppress
 
 from xonsh.built_ins import XonshSession
 from xonsh.tools import chdir
@@ -53,7 +53,7 @@ from xontrib.xgit.context_types import (
 )
 import xontrib.xgit.repository as rr
 import xontrib.xgit.worktree as wt
-from xontrib.xgit.utils import path_and_parents, relative_to_home, shorten_branch, suppress
+from xontrib.xgit.utils import path_and_parents, relative_to_home, shorten_branch
 
 ROOT_REPO_PATH = PurePosixPath()
 

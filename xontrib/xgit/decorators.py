@@ -3,7 +3,7 @@ Various decorators for xgit commands and functions.
 
 """
 
-#from contextlib import suppress
+from contextlib import suppress
 from collections.abc import Callable, MutableMapping, Sequence
 from typing import (
     Any, NamedTuple, Optional, Union,
@@ -32,7 +32,6 @@ from xontrib.xgit.invoker import (
     CommandInvoker, PrefixCommandInvoker, SharedSessionInvoker,
     EventInvoker,
 )
-from xontrib.xgit.utils import suppress
 
 _exports: dict[str, Any] = {}
 """

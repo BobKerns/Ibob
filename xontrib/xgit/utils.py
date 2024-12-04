@@ -5,10 +5,10 @@ Miscellaneous utility functions.
 from typing import MutableMapping, TypeVar
 from collections.abc import Iterable
 from pathlib import Path
-from contextlib import contextmanager
 import sys
 
 from xonsh.built_ins import XonshSession
+
 
 def path_and_parents(path: Path):
     """
@@ -16,6 +16,7 @@ def path_and_parents(path: Path):
     """
     yield path
     yield from path.parents
+
 
 T = TypeVar('T')
 def pre(v0: T, vx:  Iterable[T]) -> Iterable[T]:
@@ -25,12 +26,14 @@ def pre(v0: T, vx:  Iterable[T]) -> Iterable[T]:
     yield v0
     yield from vx
 
+
 def post(vx:  Iterable[T], vn: T) -> Iterable[T]:
     """
     Append an element to an iterable.
     """
     yield from vx
     yield vn
+
 
 def prepost(v0: T, vx:  Iterable[T], vn: T) -> Iterable[T]:
     """
@@ -39,6 +42,7 @@ def prepost(v0: T, vx:  Iterable[T], vn: T) -> Iterable[T]:
     yield v0
     yield from vx
     yield vn
+
 
 def print_if(var: str, XSH: XonshSession):
     '''
@@ -101,19 +105,3 @@ def relative_to_home(path: Path) -> Path:
         return Path("~") / path.relative_to(home)
     except ValueError:
         return path
-
-
-@contextmanager
-def suppress(*exceptions: type[Exception]):
-    '''
-    Test alternate implementation of suppress.
-    '''
-    try:
-        yield
-    except Exception as e:
-        ename = type(e).__name__
-        if not isinstance(e, exceptions):
-            if any((type(x).__name__ == ename) for x in exceptions):
-                raise Exception(f'Suppressed exception missed: {e!r}') from e
-            raise
-        

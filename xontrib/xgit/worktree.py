@@ -4,7 +4,7 @@ Worktree implementation.
 
 from pathlib import Path, PurePosixPath
 from typing import cast
-#from contextlib import suppress
+from contextlib import suppress
 
 from xonsh.lib.pretty import RepresentationPrinter
 
@@ -19,7 +19,7 @@ import xontrib.xgit.ref_types as rt
 from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
 from xontrib.xgit.to_json import JsonDescriber
-from xontrib.xgit.utils import shorten_branch, suppress
+from xontrib.xgit.utils import shorten_branch
 
 ROOT = PurePosixPath(".")
 '''
