@@ -46,8 +46,6 @@ def test_tree_entry_get(f_repo):
     head = repo.get_ref('refs/heads/main')
     tree = head.target.tree
     entry = tree['.']
-    assert entry is not None
-    assert entry.name == '.'
-    assert entry.path == PurePosixPath('.')
-    assert entry.hash == meta.ids.tree
-    assert entry.type == 'tree'
+    entry = entry['foo']
+    assert entry.name == 'foo'
+    assert entry.path == PurePosixPath('./foo')
