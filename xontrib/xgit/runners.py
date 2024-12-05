@@ -26,7 +26,7 @@ from xonsh.built_ins import XonshSession
 
 if TYPE_CHECKING:
     from xontrib.xgit.invoker import (
-        Invoker, SharedSessionInvoker, EventInvoker,
+        Invoker, SharedSessionInvoker,
         CommandInvoker, PrefixCommandInvoker,
         BaseSessionInvoker, RunnerPerSessionInvoker,
     )

@@ -44,17 +44,10 @@ def git_ls(path: Path | str = Path('.'), *,
         tree = cast(GitTree, tree)
         return tree.get(path.name)
     try:
-        try:
-            worktree = XGIT.worktree
-            dir = worktree.path / XGIT.path / Path(path)
-            git_path = PurePosixPath(dir.relative_to(worktree.path))
-            val = do_ls(git_path)
-
-        except Exception as e:
-            # Workaround for a test case bug
-            if type(e).__name__ == 'GitNoWorktreeException':
-                raise GitNoWorktreeException() from e
-            raise e
+        worktree = XGIT.worktree
+        dir = worktree.path / XGIT.path / Path(path)
+        git_path = PurePosixPath(dir.relative_to(worktree.path))
+        val = do_ls(git_path)
     except GitNoWorktreeException:
         git_path = XGIT.path
         val = do_ls(git_path)

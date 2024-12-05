@@ -14,6 +14,7 @@ The objects which can occur in Git trees are
 BEWARE: The interrelationships between the entry, object, and context
 classes are complex. It is very easy to end up with circular imports.
 """
+
 from types import MappingProxyType
 from typing import Optional, TypeAlias, cast
 from collections.abc import ItemsView, ValuesView, Mapping
