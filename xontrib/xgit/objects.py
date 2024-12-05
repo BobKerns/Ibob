@@ -49,7 +49,6 @@ from xontrib.xgit.types import (
     GitEntryMode,
     GitObjectType,
     InitFn,
-    _NO_VALUE,
 )
 from xontrib.xgit.object_types import (
     GitId,
@@ -238,19 +237,10 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
 
 
     def __getitem__(self, key: str) -> GitEntry[EntryObject]:
-        path = key.split("/")
-        loc = self
-        ent = self['.']
-        for p in path:
-            match p:
-                case '' | '.':
-                    pass
-                case '..':
-                    raise KeyError("Cannot use '..' in a path")
-                case _:
-                    ent = dict.__getitem__(loc, p)
-                    loc = ent.object
-        return ent
+        entry = self.get(key)
+        if entry is None:
+            raise KeyError(key)
+        return entry
 
     def __setitem__(self, key: str, value: GitEntry[EntryObject]):
         raise NotImplementedError("Cannot set items in a GitTree")
@@ -294,8 +284,10 @@ class _GitTree(_GitObject, GitTree, dict[str, GitEntry[EntryObject]]):
                 continue
             if p == '..':
                 raise ValueError("Cannot use '..' in a path")
-            loc = dict.get(loc.object, p, _NO_VALUE)
-            if loc is _NO_VALUE:
+            loc.object._expand()
+            try:
+                loc = dict.__getitem__(loc.object, p)
+            except KeyError:
                 return default
             path = path / p
         return loc
