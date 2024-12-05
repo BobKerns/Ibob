@@ -464,7 +464,8 @@ class CommandInvoker(RunnerPerSessionInvoker):
         def value_handler(result: Any):
             if for_value:
                 ctx['$'] = result
-            return result
+            # Suppress xonsh's default output.
+            return (None, None, 0, result)
 
         sig = self.signature
         # Copy so we can modify while iterating.

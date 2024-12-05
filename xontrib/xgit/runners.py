@@ -258,7 +258,6 @@ class EventRunner(RunnerPerSessionRunner['EventInvoker']):
         self.invoker.event.discard(self)
 
 
-
 class Command(RunnerPerSessionRunner['CommandInvoker']):
     '''
     A command that can be invoked with the command-line calling sequence rather than
@@ -271,6 +270,13 @@ class Command(RunnerPerSessionRunner['CommandInvoker']):
     '''
 
     __for_value: bool
+    @property
+    def for_value(self) -> bool:
+        '''
+        Whether the command is for a value.
+        '''
+        return self.__for_value
+    
 
     def __init__(self, invoker : 'CommandInvoker', /, *,
                 export: Callable|None = None,

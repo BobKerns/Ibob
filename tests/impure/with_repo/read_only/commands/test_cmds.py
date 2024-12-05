@@ -33,6 +33,6 @@ def test_ls_cmd(f_XGIT, xonsh_session, f_worktree):
     tree = f_worktree.metadata.ids.tree
     assert isinstance(value, _GitEntry)
     assert value.hash == tree # '4d5fcadc293a348e88f777dc0920f11e7d71441c'
-    assert value.type == 'tree'''
+    assert value.type == 'tree'
     assert value.name == '.'
     assert value.path == PurePosixPath('.')

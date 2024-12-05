@@ -252,9 +252,7 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
     def __bool__(self):
         return bool(self.object)
 
-    @property
-    def path(self):
-        return self.__path
+
 
 class _GitEntryCommit(_GitEntry[ot.GitCommit], GitEntryCommit):
     @property
