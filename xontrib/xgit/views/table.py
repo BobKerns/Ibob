@@ -16,8 +16,8 @@ from xontrib.xgit.types import (
     _NO_VALUE, _NoValue,
     HeadingStrategy, ColumnKeys,
 )
-from xontrib.xgit.view import T, K, X, Rcv
-from xontrib.xgit.multiview import MultiView, default_extractor
+from xontrib.xgit.views.view import T, K, X, Rcv
+from xontrib.xgit.views.multiview import MultiView, default_extractor
 
 class ExtractorFnMulti(Generic[T,K,Rcv]):
     '''

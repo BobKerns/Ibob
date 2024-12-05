@@ -25,7 +25,7 @@ def test_context_json(with_xgit,
                       f_git,
                       sysdisplayhook,
                       ):
-    from xontrib.xgit.to_json import to_json
+    from xontrib.xgit.views.to_json import to_json
     worktree = f_worktree.worktree
     head = worktree.rev_parse('HEAD')
     branch = worktree.symbolic_ref('HEAD')

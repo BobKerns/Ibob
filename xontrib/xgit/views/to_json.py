@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from types import GenericAlias
 
 from xontrib.xgit.context_types import GitRepository
-from xontrib.xgit.json_types import (
+from xontrib.xgit.views.json_types import (
    JsonData,
    SequenceJson, MappingJson, InstanceJson, TypeJson, MaxDepthJson,
    JsonJson, CircularRefJson, ErrorJson, ErrorMessageJson,

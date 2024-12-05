@@ -18,7 +18,7 @@ import xontrib.xgit.ref as ref
 import xontrib.xgit.ref_types as rt
 from xontrib.xgit.object_types import GitCommit, Commitish
 import xontrib.xgit.repository as repo
-from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.views import JsonDescriber
 from xontrib.xgit.utils import shorten_branch
 
 ROOT = PurePosixPath(".")
