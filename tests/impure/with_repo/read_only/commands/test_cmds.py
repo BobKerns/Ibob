@@ -9,7 +9,7 @@ def test_ls(f_XGIT, f_repo, f_chdir):
     '''
     Test the xgit ls command.
     '''
-    from xontrib.xgit.xgit_ls import git_ls
+    from xontrib.xgit.cmds import git_ls
     f_chdir(f_repo.repository_path.parent)
 
     with raises(Exception) as exc:
@@ -20,7 +20,7 @@ def test_ls_cmd(f_XGIT, xonsh_session, f_worktree):
     '''
     Test the xgit ls command.
 '''
-    from xontrib.xgit.xgit_ls import git_ls
+    from xontrib.xgit.cmds import git_ls
     from xontrib.xgit.entries import _GitEntry
 
     f_XGIT.worktree = f_worktree.worktree

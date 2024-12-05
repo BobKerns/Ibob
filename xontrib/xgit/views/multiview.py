@@ -56,7 +56,7 @@ from typing import (
 from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import _NO_VALUE, _NoValue
-from xontrib.xgit.view import (
+from xontrib.xgit.views.view import (
     View, T, Txv, K, Kcv, Kxv, X, Xcv, Xxv, Rxv, Rcv
 )
 
