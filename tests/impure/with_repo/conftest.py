@@ -83,12 +83,12 @@ def f_home(tmp_path) -> Generator[Path, None, None]:
 
 
 @pytest.fixture()
-def f_testdir(f_home) -> Path:
+def f_testdir(f_home) -> Generator[Path, None, None]:
     '''
     Fixture to create a temporary directory.
     '''
     from secrets import token_hex
-    test_path = f_home / token_hex(8)
+    test_path: Path = f_home / token_hex(8)
     test_path.mkdir(parents=False, exist_ok=False)
     yield test_path
 
@@ -157,13 +157,13 @@ def f_repo(f_XGIT,
     repo = f_XGIT.open_repository(repository_path)
     yield RepositoryFixture(
         metadata=unzipped.metadata,
-        home=unzipped.home,    
+        home=unzipped.home,
         gitconfig=unzipped.gitconfig,
         repository_path=repository_path,
         worktree_path=unzipped.worktree_path,
         repository=repo,
     )
-    
+
 
 @dataclass
 class WorktreeFixture(RepositoryFixture):

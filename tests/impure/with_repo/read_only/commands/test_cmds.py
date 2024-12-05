@@ -3,8 +3,11 @@ Test the XGit commands.
 '''
 
 from pathlib import PurePosixPath
+from typing import cast
 
 from pytest import raises
+
+from xontrib.xgit.invoker import CommandInvoker
 def test_ls(f_XGIT, f_repo, f_chdir):
     '''
     Test the xgit ls command.
@@ -24,7 +27,7 @@ def test_ls_cmd(f_XGIT, xonsh_session, f_worktree):
     from xontrib.xgit.entries import _GitEntry
 
     f_XGIT.worktree = f_worktree.worktree
-    runner = git_ls.create_runner(
+    runner = cast(CommandInvoker, git_ls).create_runner(
         _export=lambda func, name: None,
         _exports={},
     )

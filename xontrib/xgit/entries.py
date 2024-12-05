@@ -195,13 +195,14 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
         return entry
 
     def get(self, name, default=None):
+        
         path = self.path
         loc = self
         if path is None:
             path = PurePosixPath(name)
 
-        parts = name.split('/')
-        for part in parts:
+        last = len(path.parts) - 1
+        for i, part in enumerate(path.parts):
             match part:
                 case '.' | '':
                     continue
@@ -211,13 +212,13 @@ class _GitEntryTree(_GitEntry[ot.GitTree], GitEntryTree):
                     loc = loc.parent
                     path = path.parent
                 case _:
-                    #if not isinstance(loc,GitEntryTree):
-                    #    return default
-                    if loc.type != "tree":
+                    if loc.type != "tree" and i != last:
                         return default
                     loc = cast(GitEntryTree, loc)
 
-                    obj = loc.object[part]
+                    obj = loc.object.get(part)
+                    if obj is None:
+                        return default
                     path = path / part
                     _, entry = obj._git_entry(obj.object,
                                             loc.name, loc.mode, loc.type, loc.size,
