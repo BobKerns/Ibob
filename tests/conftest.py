@@ -18,7 +18,7 @@ def run_stdout(args, **kwargs):
 
 
 @pytest.fixture()
-def sysdisplayhook(with_events):
+def sysdisplayhook(f_events):
     """
     Fixture to capture the current sys.displayhook and restore it afterwards.
     """
@@ -35,7 +35,7 @@ class LoadedModules(NamedTuple):
 
 modules_lock = RLock()
 @pytest.fixture()
-def modules():
+def f_modules():
     """
     Fixture to load a module or modules for testing.
 
@@ -72,7 +72,7 @@ def modules():
             pass
 
 @pytest.fixture(autouse=True)
-def debug_env(monkeypatch  ):
+def f_debug_env(monkeypatch  ):
     monkeypatch.setenv("XGIT_TRACE_LOAD", "1")
     monkeypatch.setenv("XGIT_TRACE_DISPLAY", "1")
     monkeypatch.setenv("XGIT_TRACE_COMMANDS", "1")
@@ -118,17 +118,15 @@ def session_active(module, xonsh_session,
         _unload(xonsh_session)
 
 @pytest.fixture()
-def with_xgit(xonsh_session, modules, sysdisplayhook):
-    with (
-        modules('xontrib.xgit') as ((module,), kwargs),
-        session_active(module, xonsh_session) as xontrib_module,
-    ):
+def with_xgit(xonsh_session, f_modules, sysdisplayhook):
+    import xontrib.xgit as xgit
+    with session_active(xgit, xonsh_session) as xontrib_module:
             yield xontrib_module
 
 
 CWD_LOCK = RLock()
 @pytest.fixture()
-def chdir():
+def f_chdir():
     '''
     Change the working directory for the duration of the test.
     Locks to prevent simultaneous changes.
@@ -148,7 +146,7 @@ def chdir():
             os.chdir(old)
 
 @pytest.fixture()
-def with_events():
+def f_events():
     from xonsh.events import events
     existing = {
         k: set(getattr(events, k))
@@ -165,22 +163,6 @@ def with_events():
             and k not in existing
         ):
             delattr(events, k)
-
-@pytest.fixture()
-def test_branch(modules):
-    '''
-    Fixture to create a test branch.
-    '''
-    from subprocess import run
-    from secrets import token_hex
-    name = f'test/{token_hex(8)}'
-    with modules('xontrib.xgit.context') as ((m_ctx,), vars):
-        try:
-            run(['git', 'branch', name])
-            m_ctx.__dict__['DEFAULT_BRANCH'] = name
-            yield name
-        finally:
-            run(['git', 'branch', '-D', name])
 
 
 _test_lock: Lock = Lock()

@@ -3,3 +3,4 @@ prompt-toolkit>=3.0.48
 xonsh>=0.18.4
 colorama>=0.4.6
 pyreadline3>=3.5.4
+pyyaml>=6.0.2

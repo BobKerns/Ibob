@@ -22,14 +22,14 @@ def lock_out_impure(test_lock):
 R = TypeVar('R')
 
 @pytest.fixture()
-def run_command(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
+def f_run(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
     '''
     Create a command.
     '''
     from xontrib.xgit.invoker import (
         SharedSessionInvoker, CommandInvoker, _u, _h, KeywordInputSpecs,
     )
-    from xontrib.xgit.runners import Runner
+    from xontrib.xgit.runners import Runner, Command
     from xontrib.xgit.context import _GitContext
     class CommandSetup(NamedTuple):
         function: Callable[...,Any]
@@ -40,7 +40,7 @@ def run_command(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
         session_args: dict|None
         result: Any
     @contextmanager
-    def run_command_(function: Callable[...,Any], /, *args,
+    def f_run_(function: Callable[...,Any], /, *args,
                      expected: tuple,
                      session_args: dict[str,Any]|None = None,
                      invoker_class: type[SharedSessionInvoker] = CommandInvoker,
@@ -85,6 +85,17 @@ def run_command(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
                 return
         #events.on_xgit_loaded.fire(XSH=XSH)
         result = runner(*args, **kwargs)
+        # Commands must wrap their returns to suppress xonsh output.
+        if isinstance(runner, Command):
+            assert isinstance(result, tuple)
+            assert len(result) == 4
+            assert result[0] is None
+            assert result[1] is None
+            assert result[2] == 0
+            result = result[3]
+            if runner.for_value:
+                assert result == XSH.ctx['$']
+                del XSH.ctx['$']
         yield CommandSetup(
                            function=function,
                            invoker=invoker,
@@ -103,4 +114,4 @@ def run_command(xonsh_session) -> Callable[..., AbstractContextManager[tuple]]:
                 assert _u(function.__name__) in exports
             events.on_xgit_unload.fire(XSH=XSH)
             assert name not in aliases, 'Cleanup failed: alias not removed'
-    return run_command_
+    return f_run_

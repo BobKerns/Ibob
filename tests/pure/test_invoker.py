@@ -331,25 +331,25 @@ def test_invoker_cmdline_keyword_1():
     assert s.args == [1, True, 3, 4]
     assert s.kwargs == {'e': 5}
     assert s.extra_kwargs == {}
-    assert invoker(1, True, 3, 4, '--e', 5) == (1, True, 3, 5, (4,))
+    assert invoker(1, True, 3, 4, '--e', 5) == (1, True, 3, 5, (4,))        
 
-def test_command_empty(run_command):
+def test_command_empty(f_run):
     def f() -> int:
         return 1
-    with run_command(f, [],
+    with f_run(f, [],
                      expected=1,
                      expect_no_session_exception=False,
                      ):
         pass
 
 
-def test_command_positional(run_command):
+def test_command_positional(f_run):
     def f(a:int, b:bool, c:str) -> int:
         return 1
-    with run_command(f, [1, True, '3'],
-                     expected=1,
-                     expect_no_session_exception=False,
-                     ) as cmd_info:
+    with f_run(f, [1, True, '3'],
+                expected=1,
+                expect_no_session_exception=False,
+            ) as cmd_info:
         assert cmd_info.invoker.signature.parameters['a'].annotation is int
         assert cmd_info.invoker.signature.parameters['b'].annotation is bool
         assert cmd_info.invoker.signature.parameters['c'].annotation is str
@@ -358,43 +358,45 @@ def test_command_positional(run_command):
             # cmd_info.command.signature.parameters.values())).annotation is list
         # It's more complex than just list.
 
-def test_command_positional_extra(run_command):
+def test_command_positional_extra(f_run):
     def f(a:int, b:bool, c:str, /, *args) -> int:
         return 1
-    with run_command(f, [1, True, '3', 4],
-                     expected=1,
-                     expect_no_session_exception=False,
-                     ) as cmd_info:
+    with f_run(f, [1, True, '3', 4],
+                expected=1,
+                expect_no_session_exception=False,
+            ) as cmd_info:
         assert cmd_info.invoker.signature.parameters['a'].annotation is int
         assert cmd_info.invoker.signature.parameters['b'].annotation is bool
         assert cmd_info.invoker.signature.parameters['c'].annotation is str
         assert cmd_info.invoker.signature.return_annotation is int
 
-def test_command_positional_extra_kw(run_command):
+def test_command_positional_extra_kw(f_run):
     def f(a:int, b:bool, c:str, /, *args, **kwargs):
         return  a, b, c, args, kwargs.keys()
-    with run_command(f,[1,True, '3', 4, '--d', 5],
-                     expect_no_session_exception=False,
-                     flags={'d': 1},
-                     expected=(1, True, '3', (4,), {'d'})):
+    with f_run(f,[1,True, '3', 4, '--d', 5],
+                expect_no_session_exception=False,
+                flags={'d': 1},
+                expected=(1, True, '3', (4,), {'d'})
+                ):
         pass
 
-def test_command_positional_decl_extra_kw(run_command):
+def test_command_positional_decl_extra_kw(f_run):
     def f(a:int, b:bool, c:str, /, *args, d: bool, **kwargs):
         return  a, b, c, args, d, kwargs.keys()
-    with run_command(f, [1, True, '3', 4, '--d', 5],
-                     flags={'d': True},
-                     expected=(1, True, '3', (4,5), True, set()),
-                     expect_no_session_exception=False,):
+    with f_run(f, [1, True, '3', 4, '--d', 5],
+                flags={'d': True},
+                expected=(1, True, '3', (4,5), True, set()),
+                expect_no_session_exception=False,
+            ):
         pass
 
-def test_command_kw_equals(run_command ):
+def test_command_kw_equals(f_run ):
     def f(a:int, b:bool, c:str, /, *args, d: str, **kwargs):
         return  a, b, c, args, d, kwargs.keys()
-    with run_command(f, [1, True, '3', 4, '--d=30'],
+    with f_run(f, [1, True, '3', 4, '--d=30'],
                 expected=(1, True, '3', (4,), '30', set()),
                 expect_no_session_exception=False,
-                ):
+            ):
         pass
 
 def test_session_invoker():
@@ -434,7 +436,7 @@ def test_session_invoker_clear_session(xonsh_session):
     command.inject(XSH=xonsh_session)
     command([1, True, 3, 4])
 
-def test_command_invoker(run_command, xonsh_session):
+def test_command_invoker(f_run, xonsh_session):
     def f(a:int, b:bool, c:str, /, *args,
           XSH,
           XGIT,
@@ -444,12 +446,13 @@ def test_command_invoker(run_command, xonsh_session):
           **kwargs):
         return  a, b, c, args, type(XSH), kwargs
 
-    with run_command(f, [1, True, '3', 4],
-                     expected=(1, True, '3', (4,), type(xonsh_session), {}),
-                     expect_no_session_exception=False):
+    with f_run(f, [1, True, '3', 4],
+                expected=(1, True, '3', (4,), type(xonsh_session), {}),
+                expect_no_session_exception=False
+            ):
         pass
 
-def test_command_invoker_extra_kw(run_command, xonsh_session):
+def test_command_invoker_extra_kw(f_run, xonsh_session):
     def f(a:int, b:bool, c:str, /, *args,
           XSH: XonshSession,
           stderr: IO[str],
@@ -457,10 +460,10 @@ def test_command_invoker_extra_kw(run_command, xonsh_session):
           stdin: IO[str],
           **kwargs):
         return  a, b, c, args, type(XSH), kwargs.keys()
-    with run_command(f, [1, True, '3', 4, '--extra', 'fun'],
-                     expected=(1, True, '3', (4,), type(xonsh_session), {'extra'}),
-                     expect_no_session_exception=False,
-                     flags={'extra': 1}):
+    with f_run(f, [1, True, '3', 4, '--extra', 'fun'],
+                expected=(1, True, '3', (4,), type(xonsh_session), {'extra'}),
+                expect_no_session_exception=False,
+                flags={'extra': 1}):
         pass
 
 def test_invoker_repr():

@@ -9,25 +9,27 @@ to_json: Any
 from_json: Any
 
 
-def test_context_loads(modules, sysdisplayhook):
-    with modules('xontrib.xgit.context') as ((m_ctx), vars):
-        assert m_ctx is not None
+def test_context_loads(sysdisplayhook):
+    from xontrib.xgit.context import _GitContext
+    assert _GitContext is not None
 
-def test_context_simple(with_xgit, worktree, sysdisplayhook):
+def test_context_simple(with_xgit, f_worktree, sysdisplayhook):
     import xontrib.xgit.context as ctx
+    worktree = f_worktree.worktree
     ctx = ctx._GitContext(worktree.repository.context.session, worktree=worktree)
     assert ctx is not NonCallableMock
 
 def test_context_json(with_xgit,
-                      worktree,
-                      git_context,
-                      git,
+                      f_worktree,
+                      f_XGIT,
+                      f_git,
                       sysdisplayhook,
-                      test_branch):
+                      ):
     from xontrib.xgit.to_json import to_json
+    worktree = f_worktree.worktree
     head = worktree.rev_parse('HEAD')
     branch = worktree.symbolic_ref('HEAD')
-    ctx = git_context
+    ctx = f_XGIT
     ctx.worktree=worktree
     ctx.branch = branch
     ctx.commit = head
