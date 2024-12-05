@@ -4,7 +4,7 @@ Test the table module.
 
 from xonsh.lib.pretty import pretty
 
-from xontrib.xgit.table import TableView, Column
+from xontrib.xgit.views import TableView, Column
 
 def test_table_view():
     '''

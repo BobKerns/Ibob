@@ -24,7 +24,7 @@ import xontrib.xgit.worktree as wtree
 import xontrib.xgit.objects as obj
 from xontrib.xgit.ref import _GitRef
 from xontrib.xgit.git_cmd import _GitCmd
-from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.views.json_types import JsonDescriber
 from xontrib.xgit.utils import shorten_branch, relative_to_home
 
 

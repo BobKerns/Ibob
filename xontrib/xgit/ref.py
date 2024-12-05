@@ -8,7 +8,7 @@ from xonsh.lib.pretty import RepresentationPrinter
 
 from xontrib.xgit.types import ObjectId
 from xontrib.xgit.context_types import GitRepository
-from xontrib.xgit.to_json import JsonDescriber, JsonData
+from xontrib.xgit.views import JsonDescriber, JsonData
 import xontrib.xgit.object_types as ot
 import xontrib.xgit.ref_types as rt
 

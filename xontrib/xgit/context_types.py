@@ -27,7 +27,7 @@ from xontrib.xgit.types import (
     GitObjectReference, GitObjectType, GitException,
     ObjectId, GitRepositoryId, GitReferenceType,
 )
-from xontrib.xgit.json_types import Jsonable
+from xontrib.xgit.views.json_types import Jsonable
 import xontrib.xgit.person as people
 import xontrib.xgit.git_cmd as gc
 import xontrib.xgit.object_types as ot

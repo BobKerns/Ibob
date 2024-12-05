@@ -70,11 +70,9 @@ from xontrib.xgit.main import (
     _load_xontrib_,
     _unload_xontrib_,
 )
-from xontrib.xgit.view import (
+from xontrib.xgit.views import (
     View,
     ViewConfig,
-)
-from xontrib.xgit.table import (
     MultiView,
     TableView,
     Column,
@@ -103,9 +101,9 @@ from xontrib.xgit.decorators import (
     command,
     prefix_command,
 )
-from xontrib.xgit.xgit_cd import git_cd
-from xontrib.xgit.xgit_pwd import git_pwd
-from xontrib.xgit.xgit_ls import git_ls
+from xontrib.xgit.cmds import (
+    git_cd, git_pwd, git_ls,
+)
 
 __all__ = (  # noqa: RUF022
     "_load_xontrib_",
