@@ -5,7 +5,7 @@ Tests of the to_json module.
 from pathlib import Path
 from typing import Any
 
-from xontrib.xgit.to_json import to_json, JsonReturn, remap_ids
+from xontrib.xgit.views.to_json import to_json, JsonReturn, remap_ids
 
 _id = remap_ids
 

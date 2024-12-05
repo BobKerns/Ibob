@@ -44,7 +44,7 @@ from xontrib.xgit.types import (
 )
 import xontrib.xgit.ref_types as rt
 import xontrib.xgit.object_types as ot
-from xontrib.xgit.to_json import JsonDescriber
+from xontrib.xgit.views import JsonDescriber
 from xontrib.xgit.entry_types import GitEntryTree
 from xontrib.xgit.context_types import (
     GitContext,
