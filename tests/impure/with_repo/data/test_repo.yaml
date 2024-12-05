@@ -1,0 +1,18 @@
+# Interesting IDs for test_repo.zip
+# This happens to be all three for this hyper-simple repo.
+repo: test_repo.zip
+
+ids:
+  commit: 144f071635af803e35839cd729aa5e47832c1a85
+  tree: 4d5fcadc293a348e88f777dc0920f11e7d71441c
+  blob: e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+
+refs:
+  refs/heads/main: 144f071635af803e35839cd729aa5e47832c1a85
+
+trees:
+  refs/heads/main: 4d5fcadc293a348e88f777dc0920f11e7d71441c
+
+
+blobs:
+  refs/heads/main>foo: e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
