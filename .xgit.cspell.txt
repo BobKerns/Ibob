@@ -35,6 +35,7 @@ extracontext
 filtfunc
 frozendict
 fspath
+ftype
 gctx
 gitdir
 gitpath
