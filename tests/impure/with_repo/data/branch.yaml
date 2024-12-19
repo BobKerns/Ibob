@@ -1,0 +1,17 @@
+
+repo: branch.zip
+# Just to document the history.
+parent: base.zip
+
+ids:
+  initial: 144f071635af803e35839cd729aa5e47832c1a85
+
+refs:
+  refs/heads/main: 599b3aebc55daa29c8490c8f35f93d5174dfc1d1
+
+trees:
+  refs/heads/main: a07caa004293c0fa3d09578509f0c3e397089bd5
+
+blobs:
+  refs/heads/main>foo: 626799f0f85326a8c1fc522db584e86cdfccd51f
+  refs/heads/main>bar1: 13ceda207b642cbbbdc409ae0bc8eefd1c2bd573 

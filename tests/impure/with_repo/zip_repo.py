@@ -35,7 +35,7 @@ def unzip_repo(frm: Path, to: Path):
         raise ValueError(f'Target parent not empty: {worktree}')
     with zipfile.ZipFile(frm, 'r') as zipf:
         zipf.extractall(worktree)
-        
+
 def zip_repo(frm: Path, to: Path):
     to = to.resolve()
     frm = frm.resolve()
@@ -50,23 +50,39 @@ def zip_repo(frm: Path, to: Path):
             p = p.relative_to(frm.parent)
             print(p)
             zipf.write(p)
-                    
 
-def main(frm: Path, to: Path):  
-    match frm.suffix, frm.is_file(), to.suffix, to.is_file():
-        case '.zip', True, '', False:
+
+def main(frm: Path, to: Path):
+    def ftype(f):
+        if f.is_file():
+            return 'file'
+        if f.is_dir():
+            return 'dir'
+        return None
+    
+    def suffix(f):
+        return f.name if f.name.startswith('.') else f.suffix
+    
+    match suffix(frm), ftype(frm), suffix(to), ftype(to):
+        case '.zip', 'file', '', None:
             unzip_repo(frm, to)
-        case '', False, '.zip', _:
+        case '.zip', None, _, _:
+            raise FileNotFoundError(f'Zip file not found: {frm}')
+        case '.git', 'dir', '.zip', _:
             zip_repo(frm, to)
+        case '', 'dir', '.zip', _:
+            main(frm / '.git', to)
+        case '.git', None, _, _:
+            raise FileNotFoundError(f'.git directory not found: {frm}')
         case _, _, _, _:
             raise ValueError(
                 f'Invalid arguments: '
-                f'{frm.suffix!r} '
-                f'{frm.is_file()!r} '
-                f'{to.suffix!r} '
-                f'{to.is_file()!r}'
+                f'{suffix!r} '
+                f'{ftype(frm)!r} '
+                f'{suffix(to)!r} '
+                f'{ftype(to)!r}'
             )
-    
+
 if __name__ == '__main__':
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     parser = ArgumentParser(
@@ -82,6 +98,5 @@ if __name__ == '__main__':
                         help='Path to zip or directory to zip or unzip')
     args = parser.parse_args()
     main(args.frm, args.to)
-    
-    
-        
+
+
