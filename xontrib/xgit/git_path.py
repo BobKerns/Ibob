@@ -35,7 +35,7 @@ class GitPath(PurePath):
 
     __base: PathBase
     __object: 'xo.GitObject'
-    _flavour = PurePosixPath._flavour # type: ignore
+    _flavour = PurePosixPath._flavour if hasattr(PurePosixPath, '_flavour') else None # type: ignore
 
     def __init__(self, *args,
                 object: 'xo.GitObject',
