@@ -6,7 +6,7 @@ This file contains fixtures that work with an actual repository.
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING, cast
 from collections.abc import Generator, Callable
 from yaml import safe_load
 from dataclasses import dataclass
@@ -59,8 +59,7 @@ def f_XGIT(with_xgit) -> '_GitContext':
     Fixture to create a test context.
     '''
     if (xgit := with_xgit.XSH.env.get('XGIT')) is not None:
-        yield xgit
-        return
+        return xgit
     context = with_xgit.module._GitContext(with_xgit.XSH)
     with_xgit.XSH.env['XGIT'] = context
     return context
@@ -73,7 +72,7 @@ def f_home(tmp_path) -> Generator[Path, None, None]:
     import os
     from secrets import token_hex
 
-    old_home = os.environ.get('HOME') or str(Path.home())
+    old_home: str = os.environ.get('HOME') or str(Path.home())
     home_dir = tmp_path / token_hex(8)
     home_dir.mkdir(parents=False, exist_ok=False)
     os.environ['HOME'] = str(home_dir)
@@ -131,7 +130,7 @@ def f_repo_paths(
         gitconfig=f_gitconfig,
         worktree_path=worktree,
     )
-    
+
 
 @dataclass
 class MetadataFixture(RepositoryPathFixture):
@@ -159,9 +158,9 @@ def expanded_repo(repo: str, paths: RepositoryPathFixture):
 @dataclass
 class RepositoryFixture(MetadataFixture):
     repository: '_GitRepository'
-    
+
 @pytest.fixture()
-def f_mk_repo(f_XGIT,
+def f_mk_repo(f_XGIT: '_GitContext',
               f_repo_paths,
               ) -> Callable[[str], RepositoryFixture]:
     '''
@@ -173,14 +172,14 @@ def f_mk_repo(f_XGIT,
         worktree_path = worktree_path.resolve() / repo
         worktree_path.mkdir(parents=False, exist_ok=False)
         repository_path = worktree_path / '.git'
-        repo = f_XGIT.open_repository(repository_path)
+        repository = cast('_GitRepository',f_XGIT.open_repository(repository_path))
         return RepositoryFixture(
             metadata=unzipped.metadata,
             home=unzipped.home,
             gitconfig=unzipped.gitconfig,
             repository_path=repository_path,
             worktree_path=worktree_path,
-            repository=repo,
+            repository=repository,
         )
     return mk_repo
 
@@ -232,7 +231,7 @@ def f_worktree(f_mk_worktree) -> WorktreeFixture:
     Fixture to create a test worktree.
     '''
     return f_mk_worktree('base')
-    
+
 @pytest.fixture()
 def f_worktree_branch(f_mk_worktree) -> WorktreeFixture:
     '''
