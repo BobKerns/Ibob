@@ -33,7 +33,7 @@ Code = "https://github.com/BobKerns/xontrib-xgit"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-xonsh = ">=0.18.4"
+xonsh = ">=0.19.0"
 prompt_toolkit = ">=3.0.48"
 ipython = ">=8.30.0"
 colorama = ">=0.4.6"
